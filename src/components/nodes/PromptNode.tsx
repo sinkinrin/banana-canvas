@@ -198,30 +198,43 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
   return (
     <div
-      className="w-80 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden transition-all hover:shadow-2xl focus-within:ring-2 focus-within:ring-blue-500/20"
-      style={data.color ? { borderColor: data.color, borderWidth: 2 } : undefined}
+      className="w-80 rounded-2xl overflow-hidden transition-all"
+      style={{
+        background: '#1D1A14',
+        border: `1px solid ${data.color || 'rgba(242,193,78,0.2)'}`,
+        boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 0 0 rgba(242,193,78,0)',
+        transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(242,193,78,0.35)';
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(0,0,0,0.5), 0 0 0 0 rgba(242,193,78,0)';
+      }}
     >
-      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 border-2 border-white" />
+      <Handle type="target" position={Position.Left} className="w-3 h-3 border-2" style={{background: '#9B70D0', borderColor: '#1D1A14'}} />
 
       <div className="p-5">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-gray-800 font-bold">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-sm">
+          <div className="flex items-center gap-2 font-bold">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-yellow-500 to-orange-500 flex items-center justify-center text-white shadow-sm">
               <Sparkles size={16} />
             </div>
-            <span>香蕉画图</span>
+            <span style={{color: '#EEE4CE'}}>香蕉画图</span>
           </div>
-          <div className="flex items-center gap-1 bg-gray-900/80 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-sm">
+          <div className="flex items-center gap-1 p-1 rounded-xl shadow-sm" style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)'}}>
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              className="p-1.5 rounded-lg transition-colors hover:bg-[rgba(242,193,78,0.1)]"
+              style={{color: '#96836F'}}
               title="设置"
             >
               <Settings2 size={16} />
             </button>
             <button
               onClick={handleDelete}
-              className="p-1.5 text-white/80 hover:text-red-400 hover:bg-red-900/40 rounded-lg transition-colors"
+              className="p-1.5 rounded-lg transition-colors hover:text-red-400 hover:bg-[rgba(239,68,68,0.15)]"
+              style={{color: '#96836F'}}
               title="删除节点"
             >
               <Trash2 size={16} />
@@ -245,12 +258,16 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 }
               }}
               placeholder="描述你想生成的画面... (支持 Ctrl+V 粘贴图片，Ctrl+Enter 生成)"
-              className="nodrag w-full h-32 p-3 pb-10 bg-gray-50/50 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm text-gray-700 placeholder-gray-400"
+              className="nodrag w-full h-32 p-3 pb-10 rounded-xl resize-none outline-none text-sm transition-all placeholder-[#5C4E3E]"
+              style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)', color: '#EEE4CE', caretColor: '#F2C14E'}}
+              onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
+              onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.15)'}
             />
             <button
               onClick={handleOptimizePrompt}
               disabled={isOptimizing || !prompt.trim()}
-              className="absolute bottom-2 right-2 p-1.5 bg-purple-100 text-purple-600 hover:bg-purple-200 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute bottom-2 right-2 p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[rgba(242,193,78,0.2)]"
+              style={{background: 'rgba(242,193,78,0.12)', color: '#F2C14E', border: '1px solid rgba(242,193,78,0.2)'}}
               title="使用 Gemini 3.1 Pro 优化提示词"
             >
               {isOptimizing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
@@ -264,7 +281,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   {referenceImages.map((img, index) => (
-                    <div key={index} className="relative w-full aspect-square bg-gray-100 rounded-lg border border-gray-200 overflow-hidden">
+                    <div key={index} className="relative w-full aspect-square rounded-lg overflow-hidden" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)'}}>
                       <img src={img.url} alt={`参考图 ${index + 1}`} className="w-full h-full object-cover opacity-80" />
                       <button
                         onClick={(e) => {
@@ -276,7 +293,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                       >
                         <X size={10} />
                       </button>
-                      <div className="absolute bottom-1 left-1 text-[9px] font-medium text-white bg-black/50 px-1 py-0.5 rounded">
+                      <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded" style={{background: 'rgba(22,19,15,0.8)', color: '#F2C14E', fontSize: '10px', fontWeight: 500}}>
                         {index + 1}/{referenceImages.length}
                       </div>
                     </div>
@@ -286,7 +303,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isReadingFile}
-                    className="w-full py-1.5 border border-dashed border-gray-300 rounded-xl text-gray-500 text-xs flex items-center justify-center gap-1.5 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50"
+                    className="w-full py-1.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                    style={{border: '1px dashed rgba(242,193,78,0.2)', color: '#5C4E3E'}}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.4)'; (e.currentTarget as HTMLElement).style.color = '#96836F'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.2)'; (e.currentTarget as HTMLElement).style.color = '#5C4E3E'; }}
                   >
                     {isReadingFile ? (
                       <>
@@ -306,7 +326,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isReadingFile}
-                className="w-full py-2 border border-dashed border-gray-300 rounded-xl text-gray-500 text-xs flex items-center justify-center gap-1.5 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50"
+                className="w-full py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                style={{border: '1px dashed rgba(242,193,78,0.2)', color: '#5C4E3E'}}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.4)'; (e.currentTarget as HTMLElement).style.color = '#96836F'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.2)'; (e.currentTarget as HTMLElement).style.color = '#5C4E3E'; }}
               >
                 {isReadingFile ? (
                   <>
@@ -331,16 +354,19 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           </div>
 
           {showSettings && (
-            <div className="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
+            <div className="p-4 rounded-xl space-y-4" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.1)'}}>
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">画面比例</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>画面比例</label>
                 <select
                   value={aspectRatio}
                   onChange={(e) => {
                     setAspectRatio(e.target.value);
                     updateNodeData(id, { aspectRatio: e.target.value });
                   }}
-                  className="w-full p-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  className="w-full p-2 rounded-lg text-sm outline-none"
+                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
+                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
                   <option value="1:1">1:1 (正方形)</option>
                   <option value="4:3">4:3 (标准)</option>
@@ -353,14 +379,17 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">分辨率</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>分辨率</label>
                 <select
                   value={imageSize}
                   onChange={(e) => {
                     setImageSize(e.target.value);
                     updateNodeData(id, { imageSize: e.target.value });
                   }}
-                  className="w-full p-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  className="w-full p-2 rounded-lg text-sm outline-none"
+                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
+                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
                   <option value="512px">512px (快速)</option>
                   <option value="1K">1K (标准)</option>
@@ -370,7 +399,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">生成数量</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>生成数量</label>
                 <div className="flex gap-2">
                   {[1, 2, 4].map(count => (
                     <button
@@ -379,12 +408,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                         setBatchCount(count);
                         updateNodeData(id, { batchCount: count });
                       }}
-                      className={cn(
-                        "flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                        batchCount === count
-                          ? "bg-blue-600 text-white"
-                          : "bg-white border border-gray-200 text-gray-600 hover:border-blue-400"
-                      )}
+                      className="flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                      style={batchCount === count
+                        ? {background: '#F2C14E', color: '#16130F'}
+                        : {background: 'transparent', border: '1px solid rgba(242,193,78,0.2)', color: '#96836F'}}
+                      onMouseEnter={e => { if (batchCount !== count) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.5)'; }}
+                      onMouseLeave={e => { if (batchCount !== count) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.2)'; }}
                     >
                       {count}
                     </button>
@@ -393,7 +422,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">节点颜色</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>节点颜色</label>
                 <div className="flex gap-2 flex-wrap">
                   {['', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444'].map(color => (
                     <button
@@ -403,9 +432,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                       }}
                       className={cn(
                         "w-6 h-6 rounded-full border-2 transition-all",
-                        (data.color || '') === color ? "border-gray-800 scale-110" : "border-transparent"
+                        (data.color || '') === color ? "scale-110" : "border-transparent"
                       )}
-                      style={{ backgroundColor: color || '#e5e7eb' }}
+                      style={{
+                        backgroundColor: color || '#2A2620',
+                        borderColor: (data.color || '') === color ? '#F2C14E' : 'transparent'
+                      }}
                       title={color ? color : '默认'}
                     />
                   ))}
@@ -415,7 +447,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           )}
 
           {data.error && (
-            <div className="p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100">
+            <div className="p-3 text-xs rounded-lg" style={{background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#F87171'}}>
               {data.error}
             </div>
           )}
@@ -423,21 +455,21 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           <button
             onClick={handleGenerate}
             disabled={data.isLoading || !prompt.trim()}
-            className={cn(
-              "w-full py-3 px-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all",
-              data.isLoading
-                ? "bg-blue-400 cursor-not-allowed"
-                : !prompt.trim()
-                ? "bg-blue-300 cursor-not-allowed shadow-none"
-                : "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40 active:scale-[0.98]"
-            )}
+            className="w-full py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            style={{
+              background: data.isLoading || !prompt.trim()
+                ? 'rgba(242,193,78,0.15)'
+                : 'linear-gradient(135deg, #F2C14E 0%, #D97B3A 100%)',
+              color: data.isLoading || !prompt.trim() ? '#5C4E3E' : '#16130F',
+              boxShadow: data.isLoading || !prompt.trim()
+                ? 'none'
+                : '0 4px 20px rgba(242,193,78,0.3)',
+            }}
           >
             {data.isLoading ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                <span>
-                  {batchCount > 1 ? `生成中 ${generatedCount}/${batchCount}` : '生成中...'}
-                </span>
+                <span>{batchCount > 1 ? `生成中 ${generatedCount}/${batchCount}` : '生成中...'}</span>
               </>
             ) : (
               <>
@@ -453,7 +485,8 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 abortControllerRef.current?.abort();
                 updateNodeData(id, { isLoading: false });
               }}
-              className="w-full py-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-full py-1 text-[10px] transition-colors hover:text-[#96836F]"
+              style={{color: '#5C4E3E'}}
             >
               如果长时间无响应，点击此处重置状态
             </button>
@@ -461,7 +494,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         </div>
       </div>
 
-      <Handle type="source" position={Position.Right} className="w-3 h-3 bg-purple-500 border-2 border-white" />
+      <Handle type="source" position={Position.Right} className="w-3 h-3 border-2" style={{background: '#5B9BD5', borderColor: '#1D1A14'}} />
     </div>
   );
 }

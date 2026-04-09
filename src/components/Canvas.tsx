@@ -145,7 +145,7 @@ function CanvasInner() {
   }, []);
 
   return (
-    <div className="w-full h-screen bg-[#f8f9fa]">
+    <div className="w-full h-screen" style={{background: '#16130F'}}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -155,44 +155,46 @@ function CanvasInner() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        className="bg-[#f8f9fa]"
+        className=""
         minZoom={0.1}
         maxZoom={2}
         deleteKeyCode={['Backspace', 'Delete']}
         onPaneContextMenu={handlePaneContextMenu}
         onPaneClick={handlePaneClick}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={2} color="#e2e8f0" />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={2} color="rgba(242,193,78,0.08)" />
         <Controls className="bg-white shadow-lg border-none rounded-xl overflow-hidden" />
         <MiniMap
           className="bg-white shadow-lg rounded-xl overflow-hidden border-none"
-          maskColor="rgba(248, 249, 250, 0.7)"
+          maskColor="rgba(22, 19, 15, 0.8)"
         />
 
         <Panel position="top-left" className="m-6 flex flex-col gap-4">
-          <div className="bg-gray-900/80 backdrop-blur-md p-4 rounded-2xl shadow-lg border border-white/10 flex items-center gap-3">
+          <div className="p-4 rounded-2xl shadow-lg flex items-center gap-3" style={{background: 'rgba(29,26,20,0.92)', backdropFilter: 'blur(16px)', border: '1px solid rgba(242,193,78,0.2)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)'}}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white shadow-inner">
               <Sparkles size={20} />
             </div>
             <div>
               <h1 className="font-bold text-white text-lg tracking-tight">香蕉画图</h1>
-              <p className="text-xs text-gray-300 font-medium">无限画布 AI 创作工具</p>
+              <p className="text-xs font-medium" style={{color: '#96836F'}}>无限画布 AI 创作工具</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handleClear}
-              className={`bg-gray-900/80 backdrop-blur-md px-4 py-2 rounded-xl shadow-sm border border-white/10 text-xs font-medium transition-colors w-fit ${confirmClear ? 'text-red-300 bg-red-900/60 border-red-500/30' : 'text-red-400 hover:bg-red-900/40'}`}
+              className={`backdrop-blur-md px-4 py-2 rounded-xl shadow-sm text-xs font-medium transition-colors w-fit ${confirmClear ? 'text-red-300 bg-red-900/60 border-red-500/30 border' : 'text-red-400 hover:bg-red-900/40'}`}
+              style={confirmClear ? undefined : {background: 'rgba(29,26,20,0.92)', border: '1px solid rgba(242,193,78,0.15)'}}
             >
               {confirmClear ? '确认清空?' : '清空画布'}
             </button>
 
-            <div className="bg-gray-900/80 backdrop-blur-md p-1 rounded-xl shadow-sm border border-white/10 flex items-center gap-1">
+            <div className="p-1 rounded-xl shadow-sm flex items-center gap-1" style={{background: 'rgba(29,26,20,0.92)', backdropFilter: 'blur(16px)', border: '1px solid rgba(242,193,78,0.15)'}}>
               <button
                 onClick={() => undo()}
                 disabled={pastStates.length === 0}
-                className="p-1.5 text-white hover:bg-white/20 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="p-1.5 hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                style={{color: '#EEE4CE'}}
                 title="撤销 (Undo)"
               >
                 <Undo2 size={16} />
@@ -200,14 +202,16 @@ function CanvasInner() {
               <button
                 onClick={() => redo()}
                 disabled={futureStates.length === 0}
-                className="p-1.5 text-white hover:bg-white/20 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="p-1.5 hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                style={{color: '#EEE4CE'}}
                 title="重做 (Redo)"
               >
                 <Redo2 size={16} />
               </button>
               <button
                 onClick={handleAutoLayout}
-                className="p-1.5 text-white hover:bg-white/20 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors"
+                style={{color: '#EEE4CE'}}
                 title="自动整理布局"
               >
                 <LayoutGrid size={16} />
@@ -219,25 +223,27 @@ function CanvasInner() {
         <Panel position="bottom-center" className="mb-8">
           <button
             onClick={handleAddPromptNode}
-            className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl transition-all hover:scale-105 hover:-translate-y-1 active:scale-95"
+            className="flex items-center gap-2 px-6 py-3 rounded-full transition-all hover:scale-105 hover:-translate-y-1 active:scale-95"
+            style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(242,193,78,0.1)'}}
           >
-            <Plus size={20} />
-            <span className="font-medium">新建创作节点</span>
+            <Plus size={20} style={{color: '#EEE4CE'}} />
+            <span className="font-medium" style={{color: '#EEE4CE'}}>新建创作节点</span>
           </button>
         </Panel>
       </ReactFlow>
 
       {contextMenu && (
         <div
-          className="fixed z-50 bg-gray-900/90 backdrop-blur-md rounded-xl border border-white/10 shadow-2xl p-1.5 min-w-[160px]"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          className="fixed z-50 rounded-xl shadow-2xl p-1.5 min-w-[160px]"
+          style={{ left: contextMenu.x, top: contextMenu.y, background: 'rgba(22,19,15,0.97)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(16px)' }}
         >
           <button
             onClick={() => {
               addNode('promptNode', { x: contextMenu.flowX - 160, y: contextMenu.flowY - 100 }, { prompt: '' });
               setContextMenu(null);
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-white text-sm hover:bg-white/10 rounded-lg transition-colors text-left"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors text-left"
+            style={{color: '#EEE4CE'}}
           >
             <Plus size={15} />
             新建创作节点
@@ -247,18 +253,20 @@ function CanvasInner() {
               fitView({ padding: 0.1, duration: 300 });
               setContextMenu(null);
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-white text-sm hover:bg-white/10 rounded-lg transition-colors text-left"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors text-left"
+            style={{color: '#EEE4CE'}}
           >
             <Maximize2 size={15} />
             适应视口 (F)
           </button>
-          <div className="my-1 border-t border-white/10" />
+          <div className="my-1 border-t" style={{borderColor: 'rgba(242,193,78,0.1)'}} />
           <button
             onClick={() => {
               handleAutoLayout();
               setContextMenu(null);
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-white text-sm hover:bg-white/10 rounded-lg transition-colors text-left"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors text-left"
+            style={{color: '#EEE4CE'}}
           >
             <LayoutGrid size={15} />
             自动整理布局

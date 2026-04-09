@@ -92,48 +92,49 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center overflow-hidden"
+        className="fixed inset-0 z-[9999] bg-[#16130F]/95 backdrop-blur-md flex flex-col items-center justify-center overflow-hidden"
         onMouseUp={handleMouseUp}
         onDoubleClick={onClose}
       >
         {/* Toolbar */}
-        <div 
-          className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/80 backdrop-blur-xl p-2 rounded-2xl border border-white/10 shadow-2xl z-10"
+        <div
+          className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 rounded-2xl shadow-2xl z-10"
+          style={{background: 'rgba(22,19,15,0.9)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(20px)'}}
           onDoubleClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={() => setScale(prev => Math.max(0.5, prev - 0.2))}
-            className="p-2 text-white hover:bg-white/10 rounded-xl transition-colors"
+            className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
             title="缩小"
           >
             <ZoomOut size={20} />
           </button>
-          <div className="px-2 text-white font-bold font-mono text-sm w-16 text-center">
+          <div className="px-2 font-bold font-mono text-sm w-16 text-center" style={{color: '#F2C14E'}}>
             {Math.round(scale * 100)}%
           </div>
           <button
             onClick={() => setScale(prev => Math.min(5, prev + 0.2))}
-            className="p-2 text-white hover:bg-white/10 rounded-xl transition-colors"
+            className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
             title="放大"
           >
             <ZoomIn size={20} />
           </button>
-          <div className="w-px h-6 bg-white/10 mx-1" />
+          <div className="w-px h-6 mx-1" style={{background: 'rgba(242,193,78,0.15)'}} />
           <button
             onClick={handleCopy}
-            className="p-2 text-white hover:bg-white/10 rounded-xl transition-colors flex items-center gap-2"
+            className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors flex items-center gap-2"
             title="复制图片"
           >
             {copied ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}
           </button>
           <button
             onClick={handleDownload}
-            className="p-2 text-white hover:bg-white/10 rounded-xl transition-colors"
+            className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
             title="下载图片"
           >
             <Download size={20} />
           </button>
-          <div className="w-px h-6 bg-white/10 mx-1" />
+          <div className="w-px h-6 mx-1" style={{background: 'rgba(242,193,78,0.15)'}} />
           <button
             onClick={onClose}
             className="p-2 text-red-400 hover:bg-red-900/40 rounded-xl transition-colors"
@@ -170,8 +171,8 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
 
         {/* Prompt Info */}
         {prompt && (
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 max-w-2xl w-[90%] bg-white/10 backdrop-blur-xl p-4 rounded-2xl border border-white/10 text-white text-center">
-            <p className="text-sm opacity-80 line-clamp-3">{prompt}</p>
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 max-w-2xl w-[90%] backdrop-blur-xl p-4 rounded-2xl text-center" style={{background: 'rgba(29,26,20,0.9)', border: '1px solid rgba(242,193,78,0.15)'}}>
+            <p className="text-sm line-clamp-3" style={{color: '#96836F'}}>{prompt}</p>
           </div>
         )}
       </motion.div>

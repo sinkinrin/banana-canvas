@@ -91,14 +91,26 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
   return (
     <div
-      className="bg-white p-2 rounded-2xl shadow-xl border border-gray-200 group transition-all hover:shadow-2xl"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      className="rounded-2xl overflow-hidden transition-all group"
+      style={{
+        background: '#1D1A14',
+        border: '1px solid rgba(242,193,78,0.15)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+        padding: '6px',
+      }}
+      onMouseEnter={e => {
+        setIsHovered(true);
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(242,193,78,0.35)';
+      }}
+      onMouseLeave={e => {
+        setIsHovered(false);
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
+      }}
       onDoubleClick={() => setShowViewer(true)}
     >
-      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-purple-500 border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity" />
+      <Handle type="target" position={Position.Left} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#9B70D0', borderColor: '#1D1A14'}} />
 
-      <div className="relative rounded-xl overflow-hidden bg-gray-50 min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in">
+      <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{background: '#141210', borderRadius: '10px', overflow: 'hidden'}}>
         {data.imageUrl ? (
           <>
             <img
@@ -109,23 +121,23 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
             {/* Hover overlay controls */}
             <div className={`absolute inset-0 bg-black/5 flex items-center justify-center transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="flex items-center gap-2 bg-gray-900/60 backdrop-blur-md p-2 rounded-2xl border border-white/10 shadow-2xl">
+              <div className="flex items-center gap-2 p-2 rounded-2xl shadow-2xl" style={{background: 'rgba(22,19,15,0.85)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(8px)'}}>
                 <button
                   onClick={handleCopyImage}
-                  className="p-2.5 text-white hover:bg-white/20 rounded-xl transition-all"
+                  className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="复制图片"
                 >
                   {copiedImage ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
                 </button>
                 <button
                   onClick={handleDownload}
-                  className="p-2.5 text-white hover:bg-white/20 rounded-xl transition-all"
+                  className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="下载"
                 >
                   <Download size={18} />
                 </button>
                 <button
-                  className="p-2.5 text-white hover:bg-white/20 rounded-xl transition-all"
+                  className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="全屏查看"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -136,7 +148,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 </button>
                 <button
                   onClick={handleRerun}
-                  className="p-2.5 text-white hover:bg-white/20 rounded-xl transition-all"
+                  className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="重新生成"
                   disabled={isRegenerating}
                 >
@@ -144,14 +156,14 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 </button>
                 <button
                   onClick={handleUseAsReference}
-                  className="p-2.5 text-white hover:bg-white/20 rounded-xl transition-all"
+                  className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="以此为参考新建节点"
                 >
                   <Wand2 size={18} />
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="p-2.5 text-white hover:bg-red-500/40 rounded-xl transition-all"
+                  className="p-2.5 text-white hover:bg-[rgba(239,68,68,0.15)] rounded-xl transition-all"
                   title="删除"
                 >
                   <Trash2 size={18} />
@@ -160,18 +172,21 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
             </div>
           </>
         ) : (
-          <div className="text-gray-400 text-sm">无图像数据</div>
+          <div className="text-sm" style={{color: '#5C4E3E'}}>无图像数据</div>
         )}
       </div>
 
       {data.prompt && (
         <div className="mt-3 px-2 pb-1 max-w-[512px] flex items-start justify-between gap-2">
-          <p className="text-xs text-gray-500 line-clamp-2 flex-1 leading-relaxed" title={data.prompt}>
+          <p className="text-xs line-clamp-2 flex-1 leading-relaxed" style={{color: '#5C4E3E'}} title={data.prompt}>
             {data.prompt}
           </p>
           <button
             onClick={handleCopyPrompt}
-            className="p-1.5 bg-gray-900/80 text-white/80 hover:text-white hover:bg-gray-800 rounded-lg transition-all shrink-0 border border-white/10 shadow-sm"
+            className="p-1.5 rounded-lg transition-all shrink-0 shadow-sm"
+            style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)', color: '#96836F'}}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#F2C14E'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.35)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#96836F'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.15)'; }}
             title="复制提示词"
           >
             {copiedPrompt ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
@@ -179,7 +194,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} className="w-3 h-3 bg-blue-500 border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity" />
+      <Handle type="source" position={Position.Right} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#5B9BD5', borderColor: '#1D1A14'}} />
 
       {showViewer && data.imageUrl && (
         <ImageViewer

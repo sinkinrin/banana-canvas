@@ -1,1 +1,96 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;800&display=swap');
+
+:root {
+  --canvas-bg: #16130F;
+  --card-bg: #1D1A14;
+  --card-hover: #252119;
+  --accent: #F2C14E;
+  --accent-hover: #F5CB5E;
+  --accent-dim: rgba(242, 193, 78, 0.12);
+  --accent-secondary: #D97B3A;
+  --text-primary: #EEE4CE;
+  --text-secondary: #96836F;
+  --text-muted: #5C4E3E;
+  --border-subtle: rgba(242, 193, 78, 0.1);
+  --border-default: rgba(242, 193, 78, 0.2);
+  --border-hover: rgba(242, 193, 78, 0.45);
+}
+
+/* ReactFlow canvas */
+.react-flow__renderer,
+.react-flow__background,
+.react-flow__pane {
+  background: var(--canvas-bg) !important;
+}
+
+/* ReactFlow edges — golden amber */
+.react-flow__edge-path {
+  stroke: rgba(242, 193, 78, 0.35) !important;
+  stroke-width: 1.5 !important;
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: rgba(242, 193, 78, 0.7) !important;
+}
+.react-flow__connection-path {
+  stroke: #F2C14E !important;
+}
+.react-flow__connection-line {
+  stroke: #F2C14E !important;
+}
+
+/* ReactFlow controls */
+.react-flow__controls {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+.react-flow__controls button {
+  background: transparent !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+.react-flow__controls button:hover {
+  background: var(--accent-dim) !important;
+  color: var(--accent) !important;
+}
+.react-flow__controls button svg {
+  fill: currentColor !important;
+}
+
+/* ReactFlow minimap */
+.react-flow__minimap {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+.react-flow__minimap-mask {
+  fill: rgba(22, 19, 15, 0.7) !important;
+}
+
+/* Selection box */
+.react-flow__selection {
+  background: rgba(242, 193, 78, 0.05) !important;
+  border: 1px solid rgba(242, 193, 78, 0.4) !important;
+}
+.react-flow__nodesselection-rect {
+  background: rgba(242, 193, 78, 0.05) !important;
+  border: 1px dashed rgba(242, 193, 78, 0.4) !important;
+}
+
+/* Handle dots */
+.react-flow__handle {
+  border-width: 2px !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--canvas-bg); }
+::-webkit-scrollbar-thumb { background: rgba(242,193,78,0.2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(242,193,78,0.4); }
