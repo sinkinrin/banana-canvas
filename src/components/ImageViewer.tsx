@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ZoomIn, ZoomOut, Download, Copy, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 interface ImageViewerProps {
   imageUrl: string;
@@ -87,15 +87,14 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
   };
 
   return createPortal(
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] bg-[#16130F]/95 backdrop-blur-md flex flex-col items-center justify-center overflow-hidden"
-        onMouseUp={handleMouseUp}
-        onDoubleClick={onClose}
-      >
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[9999] bg-[#16130F]/95 backdrop-blur-md flex flex-col items-center justify-center overflow-hidden"
+      onMouseUp={handleMouseUp}
+      onDoubleClick={onClose}
+    >
         {/* Toolbar */}
         <div
           className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 rounded-2xl shadow-2xl z-10"
@@ -175,8 +174,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             <p className="text-sm line-clamp-3" style={{color: '#96836F'}}>{prompt}</p>
           </div>
         )}
-      </motion.div>
-    </AnimatePresence>,
+      </motion.div>,
     document.body
   );
 }

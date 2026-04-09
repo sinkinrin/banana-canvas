@@ -1,6 +1,7 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { ImageViewer } from '../ImageViewer';
 import { useStore } from '../../store';
 import type { AppNode } from '../../store';
@@ -12,10 +13,16 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [copiedImage, setCopiedImage] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const rerunAbortRef = useRef<AbortController | null>(null);
   const deleteNode = useStore((state) => state.deleteNode);
   const addNode = useStore((state) => state.addNode);
   const updateNodeData = useStore((state) => state.updateNodeData);
-  const nodes = useStore((state) => state.nodes);
+
+  useEffect(() => {
+    return () => {
+      rerunAbortRef.current?.abort();
+    };
+  }, []);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -35,6 +42,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
   const handleCopyImage = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!data.imageUrl) return;
     try {
       const response = await fetch(data.imageUrl);
       const blob = await response.blob();
@@ -58,17 +66,28 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const handleRerun = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!data.prompt || isRegenerating) return;
+
+    const controller = new AbortController();
+    rerunAbortRef.current = controller;
     setIsRegenerating(true);
+
     try {
       const newUrl = await generateImage({
         prompt: data.prompt,
-        aspectRatio: (data.aspectRatio as any) || '1:1',
-        imageSize: (data.imageSize as any) || '1K',
+        aspectRatio: data.aspectRatio || '1:1',
+        imageSize: data.imageSize || '1K',
+        signal: controller.signal,
       });
-      updateNodeData(id, { imageUrl: newUrl });
-    } catch (err) {
-      console.error('Rerun failed:', err);
+      // Only update if not aborted
+      if (!controller.signal.aborted) {
+        updateNodeData(id, { imageUrl: newUrl });
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.error('Rerun failed:', err);
+      }
     } finally {
+      rerunAbortRef.current = null;
       setIsRegenerating(false);
     }
   };
@@ -78,15 +97,22 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     if (!data.imageUrl) return;
     const match = data.imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
     if (!match) return;
-    const thisNode = nodes.find(n => n.id === id);
+    const thisNode = useStore.getState().nodes.find((n) => n.id === id);
     const pos = thisNode?.position || { x: 0, y: 0 };
-    addNode('promptNode',
+    const newNodeId = addNode('promptNode',
       { x: pos.x + 50, y: pos.y + 300 },
       {
         prompt: '',
         referenceImages: [{ mimeType: match[1], data: match[2], url: data.imageUrl }],
       }
     );
+    useStore.setState((state) => ({
+      edges: [...state.edges, {
+        id: `e-${id}-${newNodeId}`,
+        source: id,
+        target: newNodeId,
+      }],
+    }));
   };
 
   return (
@@ -196,13 +222,15 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
       <Handle type="source" position={Position.Right} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#5B9BD5', borderColor: '#1D1A14'}} />
 
-      {showViewer && data.imageUrl && (
-        <ImageViewer
-          imageUrl={data.imageUrl}
-          prompt={data.prompt}
-          onClose={() => setShowViewer(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showViewer && data.imageUrl && (
+          <ImageViewer
+            imageUrl={data.imageUrl}
+            prompt={data.prompt}
+            onClose={() => setShowViewer(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

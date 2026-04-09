@@ -41,8 +41,15 @@ export async function generateImage(params: GenerateImageParams): Promise<string
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || '图像生成失败');
+      let errorMessage = '图像生成失败';
+      try {
+        const text = await response.text();
+        const json = JSON.parse(text);
+        errorMessage = json.error || errorMessage;
+      } catch {
+        // non-JSON body, use default message
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -78,8 +85,15 @@ export async function optimizePrompt(prompt: string): Promise<string> {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || '提示词优化失败');
+      let errorMessage = '提示词优化失败';
+      try {
+        const text = await response.text();
+        const json = JSON.parse(text);
+        errorMessage = json.error || errorMessage;
+      } catch {
+        // non-JSON body, use default message
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

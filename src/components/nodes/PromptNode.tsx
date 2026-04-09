@@ -27,11 +27,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const updateNodeData = useStore((state) => state.updateNodeData);
   const addNode = useStore((state) => state.addNode);
   const deleteNode = useStore((state) => state.deleteNode);
-  const nodes = useStore((state) => state.nodes);
+  const nodePosition = useStore((state) => {
+    const node = state.nodes.find((n) => n.id === id);
+    return node?.position;
+  });
 
   const [prompt, setPrompt] = useState(data.prompt || '');
-  const [aspectRatio, setAspectRatio] = useState(data.aspectRatio || '1:1');
-  const [imageSize, setImageSize] = useState(data.imageSize || '1K');
+  const [aspectRatio, setAspectRatio] = useState<"1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "1:4" | "1:8" | "4:1" | "8:1">(data.aspectRatio || '1:1');
+  const [imageSize, setImageSize] = useState<"512px" | "1K" | "2K" | "4K">(data.imageSize || '1K');
   const [batchCount, setBatchCount] = useState(data.batchCount || 1);
 
   // Migrate old single referenceImage to array
@@ -105,8 +108,8 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         Array.from({ length: batchCount }).map(async () => {
           const url = await generateImage({
             prompt,
-            aspectRatio: aspectRatio as any,
-            imageSize: imageSize as any,
+            aspectRatio,
+            imageSize,
             referenceImages: referenceImages.length > 0
               ? referenceImages.map(img => ({ data: img.data, mimeType: img.mimeType }))
               : undefined,
@@ -117,10 +120,15 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         })
       );
 
+      // If every result was aborted, silently return — finally will clean up isLoading
+      const wasAborted = results.every(
+        (r) => r.status === 'rejected' && r.reason?.name === 'AbortError'
+      );
+      if (wasAborted) return;
+
       // Find current node position to place the new nodes nearby
-      const currentNode = nodes.find((n) => n.id === id);
-      const baseX = currentNode ? currentNode.position.x + 400 : 0;
-      const baseY = currentNode ? currentNode.position.y : 0;
+      const baseX = nodePosition ? nodePosition.x + 400 : 0;
+      const baseY = nodePosition ? nodePosition.y : 0;
 
       const newEdges: { id: string; source: string; target: string }[] = [];
 
@@ -129,6 +137,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           const imageUrl = result.value;
           const newNodeId = addNode('imageNode', { x: baseX, y: baseY + index * 320 }, { imageUrl, prompt, aspectRatio, imageSize });
           newEdges.push({ id: `e-${id}-${newNodeId}`, source: id, target: newNodeId });
+        } else if (result.reason?.name === 'AbortError') {
+          // Silently skip aborted items in mixed results
+        } else {
+          console.error('Image generation failed:', result.reason);
         }
       });
 
@@ -138,8 +150,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         }));
       }
 
-      // Surface errors for failed items
-      const failures = results.filter((r) => r.status === 'rejected');
+      // Surface errors for non-abort failed items
+      const failures = results.filter(
+        (r) => r.status === 'rejected' && r.reason?.name !== 'AbortError'
+      );
       if (failures.length > 0) {
         const firstError = (failures[0] as PromiseRejectedResult).reason;
         const errorMessage = firstError?.message || '生成失败';
@@ -163,8 +177,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         }
       }
     } catch (error: any) {
-      const errorMessage = error.message || '生成失败';
-      updateNodeData(id, { error: errorMessage });
+      if (error?.name !== 'AbortError') {
+        const errorMessage = error.message || '生成失败';
+        updateNodeData(id, { error: errorMessage });
+      }
     } finally {
       abortControllerRef.current = null;
       updateNodeData(id, { isLoading: false });
@@ -258,7 +274,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 }
               }}
               placeholder="描述你想生成的画面... (支持 Ctrl+V 粘贴图片，Ctrl+Enter 生成)"
-              className="nodrag w-full h-32 p-3 pb-10 rounded-xl resize-none outline-none text-sm transition-all placeholder-[#5C4E3E]"
+              className="nodrag nowheel w-full h-32 p-3 pb-10 rounded-xl resize-none outline-none text-sm transition-all placeholder-[#5C4E3E]"
               style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)', color: '#EEE4CE', caretColor: '#F2C14E'}}
               onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
               onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.15)'}
@@ -360,10 +376,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <select
                   value={aspectRatio}
                   onChange={(e) => {
-                    setAspectRatio(e.target.value);
-                    updateNodeData(id, { aspectRatio: e.target.value });
+                    setAspectRatio(e.target.value as typeof aspectRatio);
+                    updateNodeData(id, { aspectRatio: e.target.value as typeof aspectRatio });
                   }}
-                  className="w-full p-2 rounded-lg text-sm outline-none"
+                  className="nowheel w-full p-2 rounded-lg text-sm outline-none"
                   style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
                   onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
@@ -383,10 +399,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <select
                   value={imageSize}
                   onChange={(e) => {
-                    setImageSize(e.target.value);
-                    updateNodeData(id, { imageSize: e.target.value });
+                    setImageSize(e.target.value as typeof imageSize);
+                    updateNodeData(id, { imageSize: e.target.value as typeof imageSize });
                   }}
-                  className="w-full p-2 rounded-lg text-sm outline-none"
+                  className="nowheel w-full p-2 rounded-lg text-sm outline-none"
                   style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
                   onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}

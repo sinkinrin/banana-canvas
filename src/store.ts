@@ -32,8 +32,8 @@ const storage: StateStorage = {
 
 export type AppNodeData = {
   prompt?: string;
-  aspectRatio?: string;
-  imageSize?: string;
+  aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "1:4" | "1:8" | "4:1" | "8:1";
+  imageSize?: "512px" | "1K" | "2K" | "4K";
   batchCount?: number;
   referenceImages?: Array<{
     data: string;
@@ -46,7 +46,6 @@ export type AppNodeData = {
   isLoading?: boolean;
   error?: string;
   color?: string;
-  onGenerate?: (id: string, prompt: string, params: any) => void;
 };
 
 export type AppNode = Node<AppNodeData>;

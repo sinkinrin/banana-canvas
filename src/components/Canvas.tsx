@@ -34,6 +34,7 @@ function CanvasInner() {
 
   const [confirmClear, setConfirmClear] = useState(false);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const layoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
@@ -53,18 +54,21 @@ function CanvasInner() {
   }, [addNode, screenToFlowPosition]);
 
   const handleAutoLayout = useCallback(() => {
+    // Use fresh state to avoid stale closure
+    const { nodes: currentNodes, edges: currentEdges } = useStore.getState();
+
     // Simple left-to-right tree layout
     const edgeMap = new Map<string, string[]>(); // source -> targets
     const incomingCount = new Map<string, number>();
 
-    edges.forEach(edge => {
+    currentEdges.forEach(edge => {
       const targets = edgeMap.get(edge.source) || [];
       targets.push(edge.target);
       edgeMap.set(edge.source, targets);
       incomingCount.set(edge.target, (incomingCount.get(edge.target) || 0) + 1);
     });
 
-    const rootNodes = nodes.filter(n => !incomingCount.get(n.id));
+    const rootNodes = currentNodes.filter(n => !incomingCount.get(n.id));
 
     const positions = new Map<string, { x: number; y: number }>();
     const columnHeight = new Map<number, number>(); // tracks next y for each column
@@ -85,21 +89,22 @@ function CanvasInner() {
     rootNodes.forEach((node) => visit(node.id, 0));
 
     // Handle disconnected nodes
-    nodes.forEach((node, i) => {
+    currentNodes.forEach((node, i) => {
       if (!positions.has(node.id)) {
         positions.set(node.id, { x: 50, y: (i + rootNodes.length) * ROW_HEIGHT });
       }
     });
 
     useStore.setState({
-      nodes: nodes.map(n => ({
+      nodes: currentNodes.map(n => ({
         ...n,
         position: positions.get(n.id) || n.position,
       }))
     });
 
-    setTimeout(() => fitView({ padding: 0.1, duration: 500 }), 50);
-  }, [nodes, edges, fitView]);
+    if (layoutTimeoutRef.current) clearTimeout(layoutTimeoutRef.current);
+    layoutTimeoutRef.current = setTimeout(() => fitView({ padding: 0.1, duration: 500 }), 50);
+  }, [fitView]); // no longer depends on nodes/edges
 
   const handleClear = () => {
     if (!confirmClear) {
@@ -111,6 +116,14 @@ function CanvasInner() {
       clearCanvas();
     }
   };
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current);
+      if (layoutTimeoutRef.current) clearTimeout(layoutTimeoutRef.current);
+    };
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -134,7 +147,7 @@ function CanvasInner() {
   }, [undo, redo, fitView, handleAddPromptNode]);
 
   // Context menu handlers
-  const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
+  const handlePaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent) => {
     e.preventDefault();
     const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     setContextMenu({ x: e.clientX, y: e.clientY, flowX: flowPos.x, flowY: flowPos.y });

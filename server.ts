@@ -17,7 +17,7 @@ async function startServer() {
     const agent = new HttpsProxyAgent(proxyUrl);
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-      return originalFetch(input, { agent, ...init } as RequestInit);
+      return originalFetch(input, { ...(init ?? {}), agent } as RequestInit & { agent: unknown });
     };
   }
 
