@@ -6,7 +6,6 @@ import {
   Connection,
   Edge,
   EdgeChange,
-  Node,
   NodeChange,
   addEdge,
   OnNodesChange,
@@ -16,6 +15,26 @@ import {
   applyEdgeChanges,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  areHistoryStatesEqual,
+  collectReferencedAssetIdsFromHistory,
+  createHistorySnapshot,
+  migrateCanvasNodesToAssetIds,
+  normalizeNodeDataWithAssets,
+  pruneAssets,
+  type CanvasImageAsset,
+  type CanvasNode,
+  type CanvasNodeData,
+} from './lib/canvasState';
+
+type BananaStoreGlobals = typeof globalThis & {
+  __bananaTemporalAssetsUnsub?: () => void;
+  __bananaHydrationAssetsUnsub?: () => void;
+  __bananaAssetPersistUnsub?: () => void;
+};
+
+const ASSET_STORAGE_KEY = 'banana-art-assets';
+let pruneStoreAssetsNow: (() => void) | undefined;
 
 // Custom storage for IndexedDB
 const storage: StateStorage = {
@@ -30,29 +49,15 @@ const storage: StateStorage = {
   },
 };
 
-export type AppNodeData = {
-  prompt?: string;
-  aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "1:4" | "1:8" | "4:1" | "8:1";
-  imageSize?: "512px" | "1K" | "2K" | "4K";
-  batchCount?: number;
-  referenceImages?: Array<{
-    data: string;
-    mimeType: string;
-    url: string;
-  }> | null;
-  // Keep old field for backward compat migration
-  referenceImage?: { data: string; mimeType: string; url: string; } | null;
-  imageUrl?: string;
-  isLoading?: boolean;
-  error?: string;
-  color?: string;
-};
+export type AppNodeData = CanvasNodeData;
 
-export type AppNode = Node<AppNodeData>;
+export type AppNode = CanvasNode;
 
 export type AppState = {
   nodes: AppNode[];
   edges: Edge[];
+  assets: Record<string, CanvasImageAsset>;
+  assetsHydrated: boolean;
   onNodesChange: OnNodesChange<AppNode>;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -65,7 +70,65 @@ export type AppState = {
 export const useStore = create<AppState>()(
   temporal(
     persist(
-      (set, get) => ({
+      (set, get, store) => {
+        const globalStore = globalThis as BananaStoreGlobals;
+        const temporalStore = store.temporal as {
+          subscribe: (listener: () => void) => () => void;
+          getState: () => {
+            pastStates: Array<{ nodes: AppNode[] }>;
+            futureStates: Array<{ nodes: AppNode[] }>;
+          };
+        };
+        const snapshotAssetIdCache = new WeakMap<object, string[]>();
+        const getSnapshotAssetIds = (snapshot: { nodes: AppNode[] }) => {
+          const snapshotKey = snapshot as object;
+          const cachedAssetIds = snapshotAssetIdCache.get(snapshotKey);
+          if (cachedAssetIds) return cachedAssetIds;
+
+          const assetIds = [...collectReferencedAssetIdsFromHistory([snapshot])];
+          snapshotAssetIdCache.set(snapshotKey, assetIds);
+          return assetIds;
+        };
+
+        const collectPinnedAssetIds = () => {
+          const currentNodes = get().nodes;
+          const ids = new Set<string>();
+          const currentReferencedIds = collectReferencedAssetIdsFromHistory([{ nodes: currentNodes }]);
+          const temporalState = temporalStore.getState();
+
+          currentReferencedIds.forEach((id) => ids.add(id));
+          [...temporalState.pastStates, ...temporalState.futureStates].forEach((snapshot) => {
+            getSnapshotAssetIds(snapshot).forEach((id) => ids.add(id));
+          });
+
+          return ids;
+        };
+
+        const hasSameAssetKeys = (
+          left: Record<string, CanvasImageAsset>,
+          right: Record<string, CanvasImageAsset>
+        ) => {
+          const leftKeys = Object.keys(left);
+          const rightKeys = Object.keys(right);
+
+          if (leftKeys.length !== rightKeys.length) return false;
+
+          return leftKeys.every((key) => key in right);
+        };
+
+        const pruneStoreAssets = () => {
+          const state = get();
+          const nextAssets = pruneAssets(state.assets, collectPinnedAssetIds());
+          if (hasSameAssetKeys(state.assets, nextAssets)) return;
+          set({ assets: nextAssets });
+        };
+
+        globalStore.__bananaTemporalAssetsUnsub?.();
+        globalStore.__bananaTemporalAssetsUnsub = temporalStore.subscribe(pruneStoreAssets);
+        queueMicrotask(pruneStoreAssets);
+        pruneStoreAssetsNow = pruneStoreAssets;
+
+        return ({
         nodes: [
           {
             id: 'initial-node',
@@ -75,9 +138,13 @@ export const useStore = create<AppState>()(
           },
         ],
         edges: [],
+        assets: {},
+        assetsHydrated: false,
         onNodesChange: (changes: NodeChange<AppNode>[]) => {
+          const currentNodes = get().nodes;
+          const nextNodes = applyNodeChanges(changes, currentNodes);
           set({
-            nodes: applyNodeChanges(changes, get().nodes),
+            nodes: nextNodes,
           });
         },
         onEdgesChange: (changes: EdgeChange[]) => {
@@ -92,13 +159,17 @@ export const useStore = create<AppState>()(
         },
         addNode: (type, position, data = {}) => {
           const newId = uuidv4();
+          const normalized = normalizeNodeDataWithAssets(data, get().assets);
           const newNode: AppNode = {
             id: newId,
             type,
             position,
-            data,
+            data: normalized.data,
           };
-          set({ nodes: [...get().nodes, newNode] });
+          set({
+            nodes: [...get().nodes, newNode],
+            assets: normalized.assets,
+          });
           return newId;
         },
         deleteNode: (id) => {
@@ -108,47 +179,139 @@ export const useStore = create<AppState>()(
           });
         },
         updateNodeData: (id, data) => {
+          const currentNode = get().nodes.find((node) => node.id === id);
+          if (!currentNode) return;
+
+          const normalized = normalizeNodeDataWithAssets(
+            { ...currentNode.data, ...data },
+            get().assets
+          );
+
           set({
             nodes: get().nodes.map((node) =>
-              node.id === id ? { ...node, data: { ...node.data, ...data } } : node
+              node.id === id ? { ...node, data: normalized.data } : node
             ),
+            assets: normalized.assets,
           });
         },
         clearCanvas: () => {
-          set({ nodes: [], edges: [] });
+          set({
+            nodes: [],
+            edges: [],
+          });
         },
-      }),
+      })},
       {
         name: 'banana-art-storage',
         storage: createJSONStorage(() => storage),
-        partialize: (state) => ({
-          nodes: state.nodes.map(node => ({
-            ...node,
-            data: {
-              ...node.data,
-              isLoading: false,
-              error: undefined
-            }
-          })),
+        partialize: (state) => createHistorySnapshot({
+          nodes: state.nodes,
           edges: state.edges,
+          assets: state.assets,
         }),
+        merge: (persistedState, currentState) => {
+          const typedPersistedState = persistedState as Partial<Pick<AppState, 'nodes' | 'edges'>>;
+          const migrated = migrateCanvasNodesToAssetIds(
+            typedPersistedState.nodes ?? currentState.nodes,
+            currentState.assets
+          );
+
+          return {
+            ...currentState,
+            ...typedPersistedState,
+            nodes: migrated.nodes,
+            edges: typedPersistedState.edges ?? currentState.edges,
+            assets: migrated.assets,
+            assetsHydrated: false,
+          };
+        },
       }
     ),
     {
       // Only track nodes and edges for history
-      partialize: (state) => ({
-        nodes: state.nodes.map(node => ({
-          ...node,
-          data: {
-            ...node.data,
-            isLoading: false,
-            error: undefined
-          }
-        })),
+      partialize: (state) => createHistorySnapshot({
+        nodes: state.nodes,
         edges: state.edges,
+        assets: state.assets,
       }),
+      equality: areHistoryStatesEqual,
       // Limit history size
       limit: 50,
     }
   )
 );
+
+const globalStore = globalThis as BananaStoreGlobals;
+globalStore.__bananaHydrationAssetsUnsub?.();
+
+let lastPersistedAssetSignature = '';
+let assetsHydrated = false;
+
+const getCurrentAssetSignature = () => {
+  const currentAssetIds = [...collectReferencedAssetIdsFromHistory([{ nodes: useStore.getState().nodes }])].sort();
+  return currentAssetIds.join('|');
+};
+
+const persistCurrentAssets = async () => {
+  if (!assetsHydrated) return;
+
+  const signature = getCurrentAssetSignature();
+  if (signature === lastPersistedAssetSignature) return;
+
+  const currentAssetIds = new Set(signature ? signature.split('|') : []);
+  const assets = pruneAssets(useStore.getState().assets, currentAssetIds);
+
+  if (Object.keys(assets).length === 0) {
+    await del(ASSET_STORAGE_KEY);
+  } else {
+    await set(ASSET_STORAGE_KEY, assets);
+  }
+
+  lastPersistedAssetSignature = signature;
+};
+
+globalStore.__bananaAssetPersistUnsub?.();
+globalStore.__bananaAssetPersistUnsub = useStore.subscribe(() => {
+  void persistCurrentAssets();
+});
+
+globalStore.__bananaHydrationAssetsUnsub = (
+  useStore.persist as unknown as {
+    hasHydrated: () => boolean;
+    onFinishHydration: (listener: () => void) => () => void;
+  }
+).onFinishHydration(() => {
+  pruneStoreAssetsNow?.();
+  void get(ASSET_STORAGE_KEY).then((persistedAssets) => {
+    const nextAssets = pruneAssets(
+      {
+        ...useStore.getState().assets,
+        ...((persistedAssets as Record<string, CanvasImageAsset> | undefined) ?? {}),
+      },
+      collectReferencedAssetIdsFromHistory([{ nodes: useStore.getState().nodes }])
+    );
+    assetsHydrated = true;
+    useStore.setState({ assets: nextAssets, assetsHydrated: true });
+    lastPersistedAssetSignature = '';
+    void persistCurrentAssets();
+  });
+});
+
+if (
+  (useStore.persist as unknown as { hasHydrated: () => boolean }).hasHydrated()
+) {
+  pruneStoreAssetsNow?.();
+  void get(ASSET_STORAGE_KEY).then((persistedAssets) => {
+    const nextAssets = pruneAssets(
+      {
+        ...useStore.getState().assets,
+        ...((persistedAssets as Record<string, CanvasImageAsset> | undefined) ?? {}),
+      },
+      collectReferencedAssetIdsFromHistory([{ nodes: useStore.getState().nodes }])
+    );
+    assetsHydrated = true;
+    useStore.setState({ assets: nextAssets, assetsHydrated: true });
+    lastPersistedAssetSignature = '';
+    void persistCurrentAssets();
+  });
+}

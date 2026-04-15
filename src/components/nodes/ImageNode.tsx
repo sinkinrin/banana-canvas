@@ -5,6 +5,7 @@ import { AnimatePresence } from 'motion/react';
 import { ImageViewer } from '../ImageViewer';
 import { useStore } from '../../store';
 import type { AppNode } from '../../store';
+import { createReferenceImagePayload, resolveImageUrl } from '../../lib/canvasState';
 import { generateImage } from '../../services/gemini';
 
 export function ImageNode({ id, data }: NodeProps<AppNode>) {
@@ -16,7 +17,9 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const rerunAbortRef = useRef<AbortController | null>(null);
   const deleteNode = useStore((state) => state.deleteNode);
   const addNode = useStore((state) => state.addNode);
+  const assets = useStore((state) => state.assets);
   const updateNodeData = useStore((state) => state.updateNodeData);
+  const imageUrl = resolveImageUrl(data, assets);
 
   useEffect(() => {
     return () => {
@@ -31,9 +34,9 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
   const handleDownload = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!data.imageUrl) return;
+    if (!imageUrl) return;
     const a = document.createElement('a');
-    a.href = data.imageUrl;
+    a.href = imageUrl;
     a.download = `banana-art-${Date.now()}.png`;
     document.body.appendChild(a);
     a.click();
@@ -42,9 +45,9 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
   const handleCopyImage = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!data.imageUrl) return;
+    if (!imageUrl) return;
     try {
-      const response = await fetch(data.imageUrl);
+      const response = await fetch(imageUrl);
       const blob = await response.blob();
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type]: blob })
@@ -80,7 +83,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       });
       // Only update if not aborted
       if (!controller.signal.aborted) {
-        updateNodeData(id, { imageUrl: newUrl });
+        updateNodeData(id, { imageUrl: newUrl, imageAssetId: undefined });
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
@@ -94,16 +97,16 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
   const handleUseAsReference = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!data.imageUrl) return;
-    const match = data.imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
-    if (!match) return;
+    if (!imageUrl) return;
+    const referencePayload = createReferenceImagePayload(imageUrl, data.imageAssetId);
+    if (!referencePayload) return;
     const thisNode = useStore.getState().nodes.find((n) => n.id === id);
     const pos = thisNode?.position || { x: 0, y: 0 };
     const newNodeId = addNode('promptNode',
       { x: pos.x + 50, y: pos.y + 300 },
       {
         prompt: '',
-        referenceImages: [{ mimeType: match[1], data: match[2], url: data.imageUrl }],
+        ...referencePayload,
       }
     );
     useStore.setState((state) => ({
@@ -137,10 +140,10 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       <Handle type="target" position={Position.Left} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#9B70D0', borderColor: '#1D1A14'}} />
 
       <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{background: '#141210', borderRadius: '10px', overflow: 'hidden'}}>
-        {data.imageUrl ? (
+        {imageUrl ? (
           <>
             <img
-              src={data.imageUrl}
+              src={imageUrl}
               alt={data.prompt || 'Generated image'}
               className="max-w-[512px] max-h-[512px] object-contain"
             />
@@ -223,9 +226,9 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       <Handle type="source" position={Position.Right} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#5B9BD5', borderColor: '#1D1A14'}} />
 
       <AnimatePresence>
-        {showViewer && data.imageUrl && (
+        {showViewer && imageUrl && (
           <ImageViewer
-            imageUrl={data.imageUrl}
+            imageUrl={imageUrl}
             prompt={data.prompt}
             onClose={() => setShowViewer(false)}
           />

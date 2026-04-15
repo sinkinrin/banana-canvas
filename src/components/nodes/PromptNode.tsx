@@ -1,10 +1,12 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore } from '../../store';
 import type { AppNode } from '../../store';
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Image as ImageIcon, Loader2, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
+import { resolveReferenceImages } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
 import { generateImage, optimizePrompt } from '../../services/gemini';
+import { PromptTextarea } from './PromptTextarea';
 
 async function readImageFile(file: File): Promise<{ data: string; mimeType: string; url: string }> {
   return new Promise((resolve, reject) => {
@@ -26,6 +28,8 @@ async function readImageFile(file: File): Promise<{ data: string; mimeType: stri
 export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const updateNodeData = useStore((state) => state.updateNodeData);
   const addNode = useStore((state) => state.addNode);
+  const assets = useStore((state) => state.assets);
+  const assetsHydrated = useStore((state) => state.assetsHydrated);
   const deleteNode = useStore((state) => state.deleteNode);
   const nodePosition = useStore((state) => {
     const node = state.nodes.find((n) => n.id === id);
@@ -33,22 +37,71 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   });
 
   const [prompt, setPrompt] = useState(data.prompt || '');
-  const [aspectRatio, setAspectRatio] = useState<"1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "1:4" | "1:8" | "4:1" | "8:1">(data.aspectRatio || '1:1');
-  const [imageSize, setImageSize] = useState<"512px" | "1K" | "2K" | "4K">(data.imageSize || '1K');
-  const [batchCount, setBatchCount] = useState(data.batchCount || 1);
-
-  // Migrate old single referenceImage to array
-  const initialImages = data.referenceImages
-    ? data.referenceImages
-    : data.referenceImage ? [data.referenceImage] : [];
-  const [referenceImages, setReferenceImages] = useState<Array<{ data: string; mimeType: string; url: string }>>(initialImages);
-
   const [showSettings, setShowSettings] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [generatedCount, setGeneratedCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isGeneratingRef = useRef(false);
+  const referenceImages = resolveReferenceImages(data, assets);
+  const rawReferenceImageIds = data.referenceImageIds ?? [];
+  const referenceImageIds = assetsHydrated
+    ? rawReferenceImageIds.filter((referenceImageId) => assets[referenceImageId])
+    : rawReferenceImageIds;
+  const usesReferenceImageIds = data.referenceImageIds != null;
+  const hasPendingReferenceHydration = !assetsHydrated && rawReferenceImageIds.length > 0;
+  const aspectRatio = data.aspectRatio || '1:1';
+  const imageSize = data.imageSize || '1K';
+  const batchCount = data.batchCount || 1;
+
+  useEffect(() => {
+    setPrompt(data.prompt || '');
+  }, [data.prompt]);
+
+  const appendReferenceImage = (nextImage: { data: string; mimeType: string; url: string }) => {
+    if (hasPendingReferenceHydration) return;
+    if (referenceImages.length >= 4) return;
+
+    if (usesReferenceImageIds) {
+      updateNodeData(id, {
+        referenceImageIds,
+        referenceImages: [nextImage],
+        referenceImage: undefined,
+      });
+      return;
+    }
+
+    updateNodeData(id, {
+      referenceImages: [...referenceImages, nextImage].slice(0, 4),
+      referenceImageIds: undefined,
+      referenceImage: undefined,
+    });
+  };
+
+  const removeReferenceImage = (index: number) => {
+    if (hasPendingReferenceHydration) return;
+    if (usesReferenceImageIds) {
+      updateNodeData(id, {
+        referenceImageIds: referenceImageIds.filter((_, currentIndex) => currentIndex !== index),
+        referenceImages: undefined,
+        referenceImage: undefined,
+      });
+      return;
+    }
+
+    updateNodeData(id, {
+      referenceImages: referenceImages.filter((_, currentIndex) => currentIndex !== index),
+      referenceImageIds: undefined,
+      referenceImage: undefined,
+    });
+  };
+
+  const commitPrompt = (nextPrompt: string) => {
+    if (nextPrompt !== (data.prompt || '')) {
+      updateNodeData(id, { prompt: nextPrompt });
+    }
+  };
 
   const handleDelete = () => {
     deleteNode(id);
@@ -63,9 +116,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     setIsReadingFile(true);
     try {
       const newRefImage = await readImageFile(file);
-      const newImages = [...referenceImages, newRefImage].slice(0, 4);
-      setReferenceImages(newImages);
-      updateNodeData(id, { referenceImages: newImages });
+      appendReferenceImage(newRefImage);
     } catch {
       alert('读取图片失败，请重试');
     } finally {
@@ -74,9 +125,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   };
 
   const handleRemoveImage = (index: number) => {
-    const newImages = referenceImages.filter((_, i) => i !== index);
-    setReferenceImages(newImages);
-    updateNodeData(id, { referenceImages: newImages });
+    removeReferenceImage(index);
   };
 
   const handleOptimizePrompt = async () => {
@@ -85,7 +134,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     try {
       const optimized = await optimizePrompt(prompt);
       setPrompt(optimized);
-      updateNodeData(id, { prompt: optimized });
+      commitPrompt(optimized);
     } catch (error) {
       console.error("Failed to optimize prompt:", error);
     } finally {
@@ -93,8 +142,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     }
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+  const handleGenerate = async (promptToUse = prompt) => {
+    if (!promptToUse.trim()) return;
+    if (isGeneratingRef.current) return;
+    if (hasPendingReferenceHydration) return;
+
+    isGeneratingRef.current = true;
+    commitPrompt(promptToUse);
 
     // Create a new AbortController for this generation run
     const controller = new AbortController();
@@ -107,7 +161,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       const results = await Promise.allSettled(
         Array.from({ length: batchCount }).map(async () => {
           const url = await generateImage({
-            prompt,
+            prompt: promptToUse,
             aspectRatio,
             imageSize,
             referenceImages: referenceImages.length > 0
@@ -135,7 +189,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           const imageUrl = result.value;
-          const newNodeId = addNode('imageNode', { x: baseX, y: baseY + index * 320 }, { imageUrl, prompt, aspectRatio, imageSize });
+          const newNodeId = addNode('imageNode', { x: baseX, y: baseY + index * 320 }, { imageUrl, prompt: promptToUse, aspectRatio, imageSize });
           newEdges.push({ id: `e-${id}-${newNodeId}`, source: id, target: newNodeId });
         } else if (result.reason?.name === 'AbortError') {
           // Silently skip aborted items in mixed results
@@ -182,6 +236,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         updateNodeData(id, { error: errorMessage });
       }
     } finally {
+      isGeneratingRef.current = false;
       abortControllerRef.current = null;
       updateNodeData(id, { isLoading: false });
     }
@@ -199,9 +254,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         setIsReadingFile(true);
         try {
           const newRefImage = await readImageFile(file);
-          const newImages = [...referenceImages, newRefImage].slice(0, 4);
-          setReferenceImages(newImages);
-          updateNodeData(id, { referenceImages: newImages });
+          appendReferenceImage(newRefImage);
         } catch {
           alert('读取剪贴板图片失败');
         } finally {
@@ -260,24 +313,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
         <div className="space-y-4">
           <div className="relative">
-            <textarea
+            <PromptTextarea
               value={prompt}
               onPaste={handlePaste}
-              onChange={(e) => {
-                setPrompt(e.target.value);
-                updateNodeData(id, { prompt: e.target.value });
-              }}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                  e.preventDefault();
-                  if (prompt.trim() && !data.isLoading) handleGenerate();
-                }
-              }}
-              placeholder="描述你想生成的画面... (支持 Ctrl+V 粘贴图片，Ctrl+Enter 生成)"
-              className="nodrag nowheel w-full h-32 p-3 pb-10 rounded-xl resize-none outline-none text-sm transition-all placeholder-[#5C4E3E]"
-              style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)', color: '#EEE4CE', caretColor: '#F2C14E'}}
-              onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
-              onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.15)'}
+              isLoading={Boolean(data.isLoading)}
+              onDraftChange={setPrompt}
+              onCommit={commitPrompt}
+              onSubmit={handleGenerate}
             />
             <button
               onClick={handleOptimizePrompt}
@@ -376,7 +418,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <select
                   value={aspectRatio}
                   onChange={(e) => {
-                    setAspectRatio(e.target.value as typeof aspectRatio);
                     updateNodeData(id, { aspectRatio: e.target.value as typeof aspectRatio });
                   }}
                   className="nowheel w-full p-2 rounded-lg text-sm outline-none"
@@ -399,7 +440,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <select
                   value={imageSize}
                   onChange={(e) => {
-                    setImageSize(e.target.value as typeof imageSize);
                     updateNodeData(id, { imageSize: e.target.value as typeof imageSize });
                   }}
                   className="nowheel w-full p-2 rounded-lg text-sm outline-none"
@@ -421,7 +461,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                     <button
                       key={count}
                       onClick={() => {
-                        setBatchCount(count);
                         updateNodeData(id, { batchCount: count });
                       }}
                       className="flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors"
@@ -469,8 +508,8 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           )}
 
           <button
-            onClick={handleGenerate}
-            disabled={data.isLoading || !prompt.trim()}
+            onClick={() => handleGenerate()}
+            disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration}
             className="w-full py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               background: data.isLoading || !prompt.trim()
