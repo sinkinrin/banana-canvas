@@ -19,6 +19,7 @@ import {
   areHistoryStatesEqual,
   collectReferencedAssetIdsFromHistory,
   createHistorySnapshot,
+  createPersistedSnapshot,
   migrateCanvasNodesToAssetIds,
   normalizeNodeDataWithAssets,
   pruneAssets,
@@ -26,6 +27,7 @@ import {
   type CanvasNode,
   type CanvasNodeData,
 } from './lib/canvasState';
+import { normalizeProjectSnapshot, type ProjectSnapshot } from './lib/projectSession';
 
 type BananaStoreGlobals = typeof globalThis & {
   __bananaTemporalAssetsUnsub?: () => void;
@@ -65,6 +67,8 @@ export type AppState = {
   deleteNode: (id: string) => void;
   updateNodeData: (id: string, data: Partial<AppNodeData>) => void;
   clearCanvas: () => void;
+  hydrateProject: (snapshot: ProjectSnapshot) => void;
+  exportProject: () => ProjectSnapshot;
 };
 
 export const useStore = create<AppState>()(
@@ -75,6 +79,7 @@ export const useStore = create<AppState>()(
         const temporalStore = store.temporal as {
           subscribe: (listener: () => void) => () => void;
           getState: () => {
+            clear: () => void;
             pastStates: Array<{ nodes: AppNode[] }>;
             futureStates: Array<{ nodes: AppNode[] }>;
           };
@@ -200,6 +205,30 @@ export const useStore = create<AppState>()(
             edges: [],
           });
         },
+        hydrateProject: (snapshot) => {
+          const normalizedSnapshot = normalizeProjectSnapshot(snapshot);
+          const migrated = migrateCanvasNodesToAssetIds(
+            normalizedSnapshot.nodes,
+            normalizedSnapshot.assets
+          );
+          const assets = pruneAssets(
+            migrated.assets,
+            collectReferencedAssetIdsFromHistory([{ nodes: migrated.nodes }])
+          );
+
+          temporalStore.getState().clear();
+          set({
+            nodes: migrated.nodes,
+            edges: normalizedSnapshot.edges,
+            assets,
+            assetsHydrated: true,
+          });
+        },
+        exportProject: () => createPersistedSnapshot({
+          nodes: get().nodes,
+          edges: get().edges,
+          assets: get().assets,
+        }),
       })},
       {
         name: 'banana-art-storage',
