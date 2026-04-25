@@ -53,7 +53,7 @@ IMAGE2_API_KEY=你的_Image2_Key
 IMAGE2_MODEL=你的_Image2_模型名
 ```
 
-`IMAGE2_BASE_URL` 填 API base URL，例如 `https://api.akemi.cc/v1`。如果误填成 `https://api.akemi.cc/v1/chat/completions`，服务端也会自动解析回 `https://api.akemi.cc/v1`。
+`IMAGE2_BASE_URL` 填 API base URL，例如 `https://example.com/v1`。如果误填成 `https://example.com/v1/chat/completions`，服务端也会自动解析回 `https://example.com/v1`。
 
 `gpt-image-*` 模型会自动走 `/v1/images/generations` 或 `/v1/images/edits`；其他模型默认走 `/v1/chat/completions`。如需强制指定，可设置 `IMAGE2_ENDPOINT_TYPE=images` 或 `IMAGE2_ENDPOINT_TYPE=chat`。
 
@@ -160,7 +160,7 @@ http://localhost:3000
 | 变量名 | 用途 |
 | --- | --- |
 | `GEMINI_API_KEY` | 本地或服务端调用 Gemini API 时使用的默认 Key |
-| `IMAGE2_BASE_URL` | Image2 中转 API base URL，使用 Image2 时必须配置，例如 `https://api.akemi.cc/v1` |
+| `IMAGE2_BASE_URL` | Image2 中转 API base URL，使用 Image2 时必须配置，例如 `https://example.com/v1` |
 | `IMAGE2_API_KEY` | Image2 中转接口 Key，使用 Image2 时必须配置 |
 | `IMAGE2_MODEL` | 发送到 Image2 中转接口的模型名，使用 Image2 时必须配置 |
 | `IMAGE2_ENDPOINT_TYPE` | 可选，`images` 或 `chat`；默认 `gpt-image-*` 走 images，其他模型走 chat |
