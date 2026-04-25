@@ -1,17 +1,62 @@
 
+import {
+  normalizeBananaOptions,
+  normalizeImage2Options,
+  normalizeImageModel,
+  type BananaAspectRatio,
+  type BananaImageSize,
+  type BananaOptions,
+  type Image2Options,
+  type ImageModelId,
+} from '../lib/imageModels';
+
 export interface GenerateImageParams {
   prompt: string;
-  aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "1:4" | "1:8" | "4:1" | "8:1";
-  imageSize?: "512px" | "1K" | "2K" | "4K";
+  imageModel?: ImageModelId;
+  aspectRatio?: BananaAspectRatio;
+  imageSize?: BananaImageSize | '512px';
+  bananaOptions?: BananaOptions;
+  image2Options?: Image2Options;
   referenceImages?: Array<{ data: string; mimeType: string; }>;
+  maskImage?: { data: string; mimeType: 'image/png' };
   signal?: AbortSignal;
 }
 
+export type GenerateImagePayload = Omit<GenerateImageParams, 'signal' | 'imageModel'> & {
+  imageModel: ImageModelId;
+  customKey: string | null;
+};
+
+export function getGenerateImageTimeoutMs(imageModel?: ImageModelId) {
+  return normalizeImageModel(imageModel) === 'image2' ? 300000 : 60000;
+}
+
+export function createGenerateImagePayload(
+  params: GenerateImageParams,
+  customKey: string | null
+): GenerateImagePayload {
+  const { signal, imageModel, bananaOptions, image2Options, ...restParams } = params;
+  void signal;
+  const normalizedBananaOptions = normalizeBananaOptions(bananaOptions);
+  const normalizedImage2Options = normalizeImage2Options(image2Options);
+
+  return {
+    ...restParams,
+    ...(Object.keys(normalizedBananaOptions).length > 0 ? { bananaOptions: normalizedBananaOptions } : {}),
+    ...(Object.keys(normalizedImage2Options).length > 0 ? { image2Options: normalizedImage2Options } : {}),
+    imageModel: normalizeImageModel(imageModel),
+    customKey,
+  };
+}
+
 export async function generateImage(params: GenerateImageParams): Promise<string> {
-  const { signal: externalSignal, ...restParams } = params;
+  const { signal: externalSignal } = params;
   const customKey = localStorage.getItem('custom_gemini_api_key');
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), 60000); // 60s timeout
+  const timeoutId = setTimeout(
+    () => timeoutController.abort(),
+    getGenerateImageTimeoutMs(params.imageModel)
+  );
 
   // Merge external signal with timeout signal
   const signals: AbortSignal[] = [timeoutController.signal];
@@ -33,10 +78,7 @@ export async function generateImage(params: GenerateImageParams): Promise<string
         'Content-Type': 'application/json',
       },
       signal,
-      body: JSON.stringify({
-        ...restParams,
-        customKey,
-      }),
+      body: JSON.stringify(createGenerateImagePayload(params, customKey)),
     });
     clearTimeout(timeoutId);
 

@@ -1,5 +1,15 @@
 import type { Edge, Node } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  normalizeBananaOptions,
+  normalizeImage2Options,
+  normalizeImageModel,
+  type BananaAspectRatio,
+  type BananaImageSize,
+  type BananaOptions,
+  type Image2Options,
+  type ImageModelId,
+} from './imageModels';
 
 export type InlineImageData = {
   data: string;
@@ -15,17 +25,26 @@ export type CanvasImageAsset = {
 
 export type CanvasNodeData = {
   prompt?: string;
-  aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "1:4" | "1:8" | "4:1" | "8:1";
-  imageSize?: "512px" | "1K" | "2K" | "4K";
+  imageModel?: ImageModelId;
+  aspectRatio?: BananaAspectRatio;
+  imageSize?: BananaImageSize | '512px';
+  bananaOptions?: BananaOptions;
+  image2Options?: Image2Options;
   batchCount?: number;
   referenceImageIds?: string[] | null;
   imageAssetId?: string;
+  sourceImageAssetId?: string;
   referenceImages?: InlineImageData[] | null;
   referenceImage?: InlineImageData | null;
+  sourceImage?: InlineImageData | null;
   imageUrl?: string;
+  sourcePrompt?: string;
+  generationMode?: 'standard' | 'mask-edit';
   isLoading?: boolean;
   error?: string;
   color?: string;
+  createdAt?: string;
+  generationTitle?: string;
 };
 
 export type CanvasNode = Node<CanvasNodeData>;
@@ -120,6 +139,17 @@ export function resolveImageUrl(
   return data.imageUrl;
 }
 
+export function resolveSourceImageUrl(
+  data: CanvasNodeData,
+  assets: Record<string, CanvasImageAsset>
+): string | undefined {
+  if (data.sourceImageAssetId && assets[data.sourceImageAssetId]) {
+    return assetUrl(assets[data.sourceImageAssetId]);
+  }
+
+  return data.sourceImage?.url;
+}
+
 export function createReferenceImagePayload(
   imageUrl: string,
   imageAssetId?: string
@@ -143,17 +173,29 @@ export function createReferenceImagePayload(
 }
 
 function sanitizeNodeDataForSnapshot(data: CanvasNodeData): CanvasNodeData {
+  const bananaOptions = normalizeBananaOptions(data.bananaOptions);
+  const image2Options = normalizeImage2Options(data.image2Options);
+
   return {
     prompt: data.prompt,
+    imageModel: data.imageModel ? normalizeImageModel(data.imageModel) : undefined,
     aspectRatio: data.aspectRatio,
     imageSize: data.imageSize,
+    bananaOptions: Object.keys(bananaOptions).length > 0 ? bananaOptions : undefined,
+    image2Options: Object.keys(image2Options).length > 0 ? image2Options : undefined,
     batchCount: data.batchCount,
     referenceImageIds: data.referenceImageIds,
     imageAssetId: data.imageAssetId,
+    sourceImageAssetId: data.sourceImageAssetId,
     imageUrl: data.imageUrl && !isDataUrl(data.imageUrl) ? data.imageUrl : undefined,
+    sourcePrompt: data.sourcePrompt,
+    generationMode: data.generationMode,
     color: data.color,
+    createdAt: data.createdAt,
+    generationTitle: data.generationTitle,
     referenceImages: undefined,
     referenceImage: undefined,
+    sourceImage: undefined,
     isLoading: false,
     error: undefined,
   };
@@ -203,6 +245,9 @@ function collectReferencedAssetIds(nodes: CanvasNode[]): Set<string> {
     node.data.referenceImageIds?.forEach((id) => ids.add(id));
     if (node.data.imageAssetId) {
       ids.add(node.data.imageAssetId);
+    }
+    if (node.data.sourceImageAssetId) {
+      ids.add(node.data.sourceImageAssetId);
     }
   });
 
@@ -282,8 +327,14 @@ export function normalizeNodeDataWithAssets(
     }
   }
 
+  if (!nextData.sourceImageAssetId && nextData.sourceImage) {
+    const sourceImageAssetId = storeAsset(nextData.sourceImage);
+    nextData.sourceImageAssetId = sourceImageAssetId;
+  }
+
   nextData.referenceImages = undefined;
   nextData.referenceImage = undefined;
+  nextData.sourceImage = undefined;
   nextData.isLoading = nextData.isLoading ?? false;
 
   return {

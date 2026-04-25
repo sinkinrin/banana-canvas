@@ -25,15 +25,17 @@ Add Image2 local mask editing so both uploaded reference images and generated im
 
 ## Current Persistence Model
 
-The app does not use a backend database. It stores project data in the browser using IndexedDB through `idb-keyval`.
+The app uses local file storage when the Express API is available and falls back to IndexedDB when it is not.
 
-- Project index key: `banana-projects-index`.
-- Project snapshot key: `banana-project:<projectId>`.
+- Default local storage root: `data/projects/`.
+- Optional local storage override: `BANANA_DATA_DIR`.
+- Legacy IndexedDB project index key: `banana-projects-index`.
+- Legacy IndexedDB project snapshot key: `banana-project:<projectId>`.
 - Legacy single-canvas key: `banana-art-storage`.
 - Legacy asset key: `banana-art-assets`.
 - API key override: `custom_gemini_api_key` in `localStorage`.
 
-Each project snapshot stores `nodes`, `edges`, and `assets`. Image binary data is stored as base64 assets keyed by asset id. Nodes reference assets via fields like `referenceImageIds` and `imageAssetId`. Autosave exports the current canvas to the active project snapshot.
+Each project snapshot stores `nodes`, `edges`, and `assets`. Local file storage writes image assets as files under each project `assets/` directory and stores node references by asset id. IndexedDB fallback stores image binary data as base64 assets keyed by asset id. Autosave exports the current canvas to the active project snapshot.
 
 ## Persistence Strategy For Mask Editing
 
@@ -104,7 +106,7 @@ When `maskImage` is present:
 - Require at least one reference image.
 - Put the masked source image first in `referenceImages`.
 - Append `mask` to multipart form data.
-- Preserve existing Image2 options such as `quality`, `background`, `output_format`, `input_fidelity`, `stream`, and `partial_images`.
+- Preserve existing supported Image2 options such as `quality`, `background`, `output_format`, `stream`, and `partial_images`; omit `input_fidelity` for `gpt-image-2` because it is not configurable.
 
 The server should reject `maskImage` for Banana2 with a clear error.
 
@@ -112,8 +114,8 @@ The server should reject `maskImage` for Banana2 with a clear error.
 
 The editor exports a PNG with the same pixel dimensions as the source image:
 
-- Fully transparent pixels mean the area is not selected for edit.
-- Opaque white pixels mean the area is selected for edit.
+- Fully transparent pixels mean the area is selected for edit by the Image2 edits API.
+- Opaque white pixels mean the area should be preserved as unmasked context.
 - The visible editor overlay uses project amber for user feedback, but export uses alpha mask semantics.
 
 ## Error Handling

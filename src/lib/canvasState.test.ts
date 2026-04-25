@@ -58,6 +58,98 @@ test('history snapshot excludes inline image payloads but keeps asset ids', () =
   assert.equal(history.nodes[0].data.error, undefined);
 });
 
+test('history snapshot preserves selected image model metadata', () => {
+  const state: PersistedCanvasState = {
+    nodes: [
+      {
+        id: 'prompt-1',
+        type: 'promptNode',
+        position: { x: 10, y: 20 },
+        data: {
+          prompt: 'banana',
+          imageModel: 'image2',
+          image2Options: {
+            quality: 'high',
+            outputFormat: 'webp',
+            outputCompression: 75,
+            moderation: 'low',
+            stream: 'on',
+            partialImages: 2,
+          },
+        },
+      },
+      {
+        id: 'image-1',
+        type: 'imageNode',
+        position: { x: 30, y: 40 },
+        data: {
+          prompt: 'banana',
+          imageModel: 'image2',
+          imageUrl: 'https://example.com/image.png',
+          image2Options: {
+            quality: 'medium',
+            background: 'transparent',
+            responseFormat: 'url',
+          },
+        },
+      },
+    ],
+    edges: [],
+    assets: {},
+  };
+
+  const history = createHistorySnapshot(state);
+
+  assert.equal(history.nodes[0].data.imageModel, 'image2');
+  assert.equal(history.nodes[1].data.imageModel, 'image2');
+  assert.deepEqual(history.nodes[0].data.image2Options, {
+    quality: 'high',
+    outputFormat: 'webp',
+    outputCompression: 75,
+    partialImages: 2,
+  });
+  assert.deepEqual(history.nodes[1].data.image2Options, {
+    quality: 'medium',
+    responseFormat: 'url',
+  });
+});
+
+test('history snapshot preserves normalized Banana2 advanced options', () => {
+  const state: PersistedCanvasState = {
+    nodes: [
+      {
+        id: 'prompt-1',
+        type: 'promptNode',
+        position: { x: 10, y: 20 },
+        data: {
+          prompt: 'banana',
+          imageModel: 'banana',
+          bananaOptions: {
+            responseMode: 'image',
+            thinkingLevel: 'medium',
+            mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+            searchGrounding: true,
+            safetySettings: {
+              HARM_CATEGORY_HARASSMENT: 'BLOCK_ONLY_HIGH',
+              HARM_CATEGORY_CIVIC_INTEGRITY: 'BLOCK_NONE',
+            },
+          } as any,
+        },
+      },
+    ],
+    edges: [],
+    assets: {},
+  };
+
+  const history = createHistorySnapshot(state);
+
+  assert.deepEqual(history.nodes[0].data.bananaOptions, {
+    thinkingLevel: 'MEDIUM',
+    mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+    searchGrounding: true,
+  });
+});
+
 test('persisted snapshot keeps assets separately and strips inline payloads from nodes', () => {
   const state: PersistedCanvasState = {
     nodes: [
@@ -278,4 +370,58 @@ test('reference payload uses asset ids when available', () => {
 
 test('reference payload rejects non-data urls without asset ids', () => {
   assert.equal(createReferenceImagePayload('https://example.com/image.png'), null);
+});
+
+test('normalization extracts mask edit source images into asset ids', () => {
+  const normalized = normalizeNodeDataWithAssets(
+    {
+      imageUrl: 'data:image/png;base64,bmV3',
+      sourceImage: {
+        data: 'b3JpZ2luYWw=',
+        mimeType: 'image/png',
+        url: 'data:image/png;base64,b3JpZ2luYWw=',
+      },
+      sourcePrompt: '改掉帽子',
+      generationMode: 'mask-edit',
+    },
+    {}
+  );
+
+  const assetIds = Object.keys(normalized.assets);
+
+  assert.equal(assetIds.length, 2);
+  assert.equal(normalized.data.sourceImage, undefined);
+  assert.ok(normalized.data.sourceImageAssetId);
+  assert.equal(normalized.assets[normalized.data.sourceImageAssetId!].data, 'b3JpZ2luYWw=');
+  assert.equal(normalized.data.sourcePrompt, '改掉帽子');
+  assert.equal(normalized.data.generationMode, 'mask-edit');
+});
+
+test('history snapshots keep mask edit source asset references', () => {
+  const history = createHistorySnapshot({
+    nodes: [
+      {
+        id: 'n1',
+        type: 'imageNode',
+        position: { x: 0, y: 0 },
+        data: {
+          imageAssetId: 'asset-new',
+          sourceImageAssetId: 'asset-original',
+          sourcePrompt: '改掉帽子',
+          generationMode: 'mask-edit',
+        },
+      },
+    ],
+    edges: [],
+    assets: {
+      'asset-new': { id: 'asset-new', data: 'new', mimeType: 'image/png' },
+      'asset-original': { id: 'asset-original', data: 'original', mimeType: 'image/png' },
+    },
+  });
+  const ids = collectReferencedAssetIdsFromHistory([history]);
+
+  assert.equal(history.nodes[0].data.sourceImageAssetId, 'asset-original');
+  assert.equal(history.nodes[0].data.sourcePrompt, '改掉帽子');
+  assert.equal(history.nodes[0].data.generationMode, 'mask-edit');
+  assert.ok(ids.has('asset-original'));
 });

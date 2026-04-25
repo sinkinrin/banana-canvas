@@ -2,11 +2,25 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore } from '../../store';
 import type { AppNode } from '../../store';
 import React, { useEffect, useState, useRef } from 'react';
-import { Image as ImageIcon, Loader2, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
-import { resolveReferenceImages } from '../../lib/canvasState';
+import { Edit3, Image as ImageIcon, Loader2, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
+import { resolveReferenceImages, type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
 import { generateImage, optimizePrompt } from '../../services/gemini';
 import { PromptTextarea } from './PromptTextarea';
+import {
+  BANANA_ASPECT_RATIO_VALUES,
+  BANANA_IMAGE_SIZE_VALUES,
+  IMAGE_MODELS,
+  normalizeBananaAspectRatio,
+  normalizeBananaImageSize,
+  normalizeImageModel,
+  type BananaAspectRatio,
+  type BananaImageSize,
+  type ImageModelId,
+} from '../../lib/imageModels';
+import { BananaOptionsPanel } from './BananaOptionsPanel';
+import { Image2OptionsPanel } from './Image2OptionsPanel';
+import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 
 async function readImageFile(file: File): Promise<{ data: string; mimeType: string; url: string }> {
   return new Promise((resolve, reject) => {
@@ -25,6 +39,30 @@ async function readImageFile(file: File): Promise<{ data: string; mimeType: stri
   });
 }
 
+const aspectRatioLabels: Record<BananaAspectRatio, string> = {
+  '1:1': '1:1 (正方形)',
+  '1:4': '1:4 (超高)',
+  '1:8': '1:8 (极高)',
+  '2:3': '2:3 (竖版)',
+  '3:2': '3:2 (横版)',
+  '3:4': '3:4 (竖版)',
+  '4:1': '4:1 (超宽)',
+  '4:3': '4:3 (标准)',
+  '4:5': '4:5 (社媒竖版)',
+  '5:4': '5:4 (社媒横版)',
+  '8:1': '8:1 (极宽)',
+  '9:16': '9:16 (手机)',
+  '16:9': '16:9 (宽屏)',
+  '21:9': '21:9 (电影宽屏)',
+};
+
+const imageSizeLabels: Record<BananaImageSize, string> = {
+  '512': '512 (0.5K 快速)',
+  '1K': '1K (标准)',
+  '2K': '2K (高清)',
+  '4K': '4K (超清)',
+};
+
 export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const updateNodeData = useStore((state) => state.updateNodeData);
   const addNode = useStore((state) => state.addNode);
@@ -41,6 +79,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [generatedCount, setGeneratedCount] = useState(0);
+  const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isGeneratingRef = useRef(false);
@@ -51,9 +90,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     : rawReferenceImageIds;
   const usesReferenceImageIds = data.referenceImageIds != null;
   const hasPendingReferenceHydration = !assetsHydrated && rawReferenceImageIds.length > 0;
-  const aspectRatio = data.aspectRatio || '1:1';
-  const imageSize = data.imageSize || '1K';
+  const aspectRatio = normalizeBananaAspectRatio(data.aspectRatio) ?? '1:1';
+  const imageSize = normalizeBananaImageSize(data.imageSize) ?? '1K';
   const batchCount = data.batchCount || 1;
+  const imageModel = normalizeImageModel(data.imageModel);
+  const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Banana';
+  const bananaOptions = data.bananaOptions;
+  const image2Options = data.image2Options;
 
   useEffect(() => {
     setPrompt(data.prompt || '');
@@ -128,6 +171,77 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     removeReferenceImage(index);
   };
 
+  const handleMaskGenerate = async ({ prompt: maskPrompt, maskImage, sourceImage }: MaskGeneratePayload) => {
+    if (!maskEditorSource) return;
+
+    const editReferences = [
+      sourceImage,
+      ...referenceImages.filter((_, index) => index !== maskEditorSource.index),
+    ].slice(0, 4);
+    const baseX = nodePosition ? nodePosition.x + 400 : 0;
+    const baseY = nodePosition ? nodePosition.y : 0;
+    const createdAt = new Date().toISOString();
+    const placeholderNodeId = addNode(
+      'imageNode',
+      { x: baseX, y: baseY },
+      {
+        prompt: maskPrompt,
+        imageModel: 'image2',
+        aspectRatio,
+        imageSize,
+        image2Options,
+        isLoading: true,
+        error: undefined,
+        createdAt,
+        generationTitle: `Image2 局部编辑 | ${maskPrompt.slice(0, 28) || '生成任务'}`,
+        sourceImage,
+        sourcePrompt: maskPrompt,
+        generationMode: 'mask-edit',
+      }
+    );
+
+    useStore.setState((state) => ({
+      edges: [
+        ...state.edges,
+        { id: `e-${id}-${placeholderNodeId}`, source: id, target: placeholderNodeId },
+      ],
+    }));
+
+    try {
+      const url = await generateImage({
+        prompt: maskPrompt,
+        imageModel: 'image2',
+        aspectRatio,
+        imageSize,
+        image2Options,
+        referenceImages: editReferences.map((image) => ({ data: image.data, mimeType: image.mimeType })),
+        maskImage,
+      });
+
+      updateNodeData(placeholderNodeId, {
+        imageUrl: url,
+        prompt: maskPrompt,
+        imageModel: 'image2',
+        aspectRatio,
+        imageSize,
+        image2Options,
+        sourceImage,
+        sourcePrompt: maskPrompt,
+        generationMode: 'mask-edit',
+        isLoading: false,
+        error: undefined,
+      });
+      setMaskEditorSource(null);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '局部编辑生成失败';
+      updateNodeData(placeholderNodeId, {
+        isLoading: false,
+        error: errorMessage,
+      });
+      throw error;
+    }
+  };
+
   const handleOptimizePrompt = async () => {
     if (!prompt.trim()) return;
     setIsOptimizing(true);
@@ -157,21 +271,89 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     updateNodeData(id, { isLoading: true, error: undefined });
     setGeneratedCount(0);
 
+    const baseX = nodePosition ? nodePosition.x + 400 : 0;
+    const baseY = nodePosition ? nodePosition.y : 0;
+    const createdAt = new Date().toISOString();
+    const generationReferenceData = referenceImageIds.length > 0
+      ? { referenceImageIds }
+      : referenceImages.length > 0
+        ? { referenceImages }
+        : {};
+    const placeholderNodeIds = Array.from({ length: batchCount }).map((_, index) =>
+      addNode(
+        'imageNode',
+        { x: baseX, y: baseY + index * 430 },
+        {
+          prompt: promptToUse,
+          imageModel,
+          aspectRatio,
+          imageSize,
+          bananaOptions: imageModel === 'banana' ? bananaOptions : undefined,
+          image2Options: imageModel === 'image2' ? image2Options : undefined,
+          isLoading: true,
+          error: undefined,
+          createdAt,
+          generationTitle: `${imageModelLabel} | ${promptToUse.slice(0, 28) || '生成任务'}`,
+          ...generationReferenceData,
+        }
+      )
+    );
+
+    useStore.setState((state) => ({
+      edges: [
+        ...state.edges,
+        ...placeholderNodeIds.map((nodeId) => ({ id: `e-${id}-${nodeId}`, source: id, target: nodeId })),
+      ],
+    }));
+
     try {
       const results = await Promise.allSettled(
-        Array.from({ length: batchCount }).map(async () => {
+        placeholderNodeIds.map(async (placeholderNodeId) => {
           const url = await generateImage({
             prompt: promptToUse,
+            imageModel,
             aspectRatio,
             imageSize,
+            bananaOptions: imageModel === 'banana' ? bananaOptions : undefined,
+            image2Options: imageModel === 'image2' ? image2Options : undefined,
             referenceImages: referenceImages.length > 0
               ? referenceImages.map(img => ({ data: img.data, mimeType: img.mimeType }))
               : undefined,
             signal: controller.signal,
           });
+
+          if (controller.signal.aborted) {
+            deleteNode(placeholderNodeId);
+            throw new DOMException('Aborted', 'AbortError');
+          }
+
+          updateNodeData(placeholderNodeId, {
+            imageUrl: url,
+            prompt: promptToUse,
+            imageModel,
+            aspectRatio,
+            imageSize,
+            bananaOptions: imageModel === 'banana' ? bananaOptions : undefined,
+            image2Options: imageModel === 'image2' ? image2Options : undefined,
+            isLoading: false,
+            error: undefined,
+          });
           setGeneratedCount((prev) => prev + 1);
           return url;
-        })
+        }).map((task, index) => task.catch((error) => {
+          const placeholderNodeId = placeholderNodeIds[index];
+          if (error?.name === 'AbortError') {
+            deleteNode(placeholderNodeId);
+            throw error;
+          }
+
+          const errorMessage = error?.message || '生成失败';
+          updateNodeData(placeholderNodeId, {
+            isLoading: false,
+            error: errorMessage,
+          });
+          throw error;
+        }))
       );
 
       // If every result was aborted, silently return — finally will clean up isLoading
@@ -180,29 +362,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       );
       if (wasAborted) return;
 
-      // Find current node position to place the new nodes nearby
-      const baseX = nodePosition ? nodePosition.x + 400 : 0;
-      const baseY = nodePosition ? nodePosition.y : 0;
-
-      const newEdges: { id: string; source: string; target: string }[] = [];
-
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          const imageUrl = result.value;
-          const newNodeId = addNode('imageNode', { x: baseX, y: baseY + index * 320 }, { imageUrl, prompt: promptToUse, aspectRatio, imageSize });
-          newEdges.push({ id: `e-${id}-${newNodeId}`, source: id, target: newNodeId });
-        } else if (result.reason?.name === 'AbortError') {
+      results.forEach((result) => {
+        if (result.status === 'rejected' && result.reason?.name === 'AbortError') {
           // Silently skip aborted items in mixed results
-        } else {
+        } else if (result.status === 'rejected') {
           console.error('Image generation failed:', result.reason);
         }
       });
-
-      if (newEdges.length > 0) {
-        useStore.setState((state) => ({
-          edges: [...state.edges, ...newEdges],
-        }));
-      }
 
       // Surface errors for non-abort failed items
       const failures = results.filter(
@@ -214,11 +380,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         updateNodeData(id, { error: errorMessage });
 
         if (
-          errorMessage.includes('Requested entity was not found') ||
-          errorMessage.includes('PERMISSION_DENIED') ||
-          errorMessage.includes('The caller does not have permission') ||
-          errorMessage.includes('API key not valid') ||
-          errorMessage.includes('API key is required')
+          imageModel === 'banana' &&
+          (
+            errorMessage.includes('Requested entity was not found') ||
+            errorMessage.includes('PERMISSION_DENIED') ||
+            errorMessage.includes('The caller does not have permission') ||
+            errorMessage.includes('API key not valid') ||
+            errorMessage.includes('API key is required')
+          )
         ) {
           const customKey = localStorage.getItem('custom_gemini_api_key');
           if (customKey) {
@@ -344,6 +513,17 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          setMaskEditorSource({ image: img, index });
+                        }}
+                        className="absolute top-1 left-1 z-20 rounded-full p-1 text-[#16130F] shadow transition-colors hover:bg-[#FFD36B]"
+                        style={{ background: '#F2C14E' }}
+                        title="使用 Image2 蒙版编辑"
+                      >
+                        <Edit3 size={10} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleRemoveImage(index);
                         }}
                         className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full shadow hover:bg-red-600 transition-colors z-20"
@@ -414,6 +594,26 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           {showSettings && (
             <div className="p-4 rounded-xl space-y-4" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.1)'}}>
               <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>生图模型</label>
+                <select
+                  value={imageModel}
+                  onChange={(e) => {
+                    updateNodeData(id, { imageModel: e.target.value as ImageModelId });
+                  }}
+                  className="nowheel w-full p-2 rounded-lg text-sm outline-none"
+                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
+                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
+                >
+                  {IMAGE_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label} - {model.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>画面比例</label>
                 <select
                   value={aspectRatio}
@@ -425,15 +625,35 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
-                  <option value="1:1">1:1 (正方形)</option>
-                  <option value="4:3">4:3 (标准)</option>
-                  <option value="3:4">3:4 (竖版)</option>
-                  <option value="16:9">16:9 (宽屏)</option>
-                  <option value="9:16">9:16 (手机)</option>
-                  <option value="4:1">4:1 (超宽)</option>
-                  <option value="1:4">1:4 (超高)</option>
+                  {BANANA_ASPECT_RATIO_VALUES.map((ratio) => (
+                    <option key={ratio} value={ratio}>{aspectRatioLabels[ratio]}</option>
+                  ))}
                 </select>
               </div>
+
+              {imageModel === 'banana' && (
+                <BananaOptionsPanel
+                  value={bananaOptions}
+                  hasReferenceImages={referenceImages.length > 0}
+                  onChange={(nextOptions) => {
+                    updateNodeData(id, {
+                      bananaOptions: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
+                    });
+                  }}
+                />
+              )}
+
+              {imageModel === 'image2' && (
+                <Image2OptionsPanel
+                  value={image2Options}
+                  hasReferenceImages={referenceImages.length > 0}
+                  onChange={(nextOptions) => {
+                    updateNodeData(id, {
+                      image2Options: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
+                    });
+                  }}
+                />
+              )}
 
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>分辨率</label>
@@ -447,10 +667,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
-                  <option value="512px">512px (快速)</option>
-                  <option value="1K">1K (标准)</option>
-                  <option value="2K">2K (高清)</option>
-                  <option value="4K">4K (超清)</option>
+                  {BANANA_IMAGE_SIZE_VALUES.map((size) => (
+                    <option key={size} value={size}>{imageSizeLabels[size]}</option>
+                  ))}
                 </select>
               </div>
 
@@ -529,7 +748,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             ) : (
               <>
                 <ImageIcon size={18} />
-                <span>生成图像</span>
+                <span>生成图像 · {imageModelLabel}</span>
               </>
             )}
           </button>
@@ -550,6 +769,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       </div>
 
       <Handle type="source" position={Position.Right} className="w-3 h-3 border-2" style={{background: '#5B9BD5', borderColor: '#1D1A14'}} />
+      {maskEditorSource && (
+        <MaskEditorModal
+          title="局部编辑参考图"
+          sourceImage={maskEditorSource.image}
+          onClose={() => setMaskEditorSource(null)}
+          onGenerate={handleMaskGenerate}
+        />
+      )}
     </div>
   );
 }

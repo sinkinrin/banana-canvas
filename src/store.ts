@@ -223,6 +223,7 @@ export const useStore = create<AppState>()(
             assets,
             assetsHydrated: true,
           });
+          temporalStore.getState().clear();
         },
         exportProject: () => createPersistedSnapshot({
           nodes: get().nodes,

@@ -64,6 +64,31 @@ test('migrateLegacyCanvasIfNeeded creates a default project from the old single-
   assert.equal(snapshot?.nodes.length, 1);
 });
 
+test('migrateLegacyCanvasIfNeeded is a no-op when the project index already exists', async () => {
+  const storage = createMemoryProjectStorage();
+
+  await storage.seedIndex([
+    {
+      id: 'p1',
+      name: '项目 1',
+      createdAt: '2026-04-16T10:00:00.000Z',
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    },
+  ]);
+  await storage.seedLegacyCanvas({
+    nodes: [],
+    edges: [],
+    assets: {},
+  });
+
+  const projectId = await migrateLegacyCanvasIfNeeded(storage.adapter);
+  const index = await loadProjectIndex(storage.adapter);
+
+  assert.equal(projectId, null);
+  assert.equal(index.length, 1);
+  assert.equal(index[0].id, 'p1');
+});
+
 test('migrateLegacyCanvasIfNeeded drops malformed legacy node and edge entries', async () => {
   const storage = createMemoryProjectStorage();
 

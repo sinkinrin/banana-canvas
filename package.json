@@ -1,11 +1,11 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "node server.ts",
+    "start": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -19,14 +19,14 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "https-proxy-agent": "^7.0.1",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.5.0",
-    "uuid": "^13.0.0",
+    "undici": "^7.25.0",
+    "uuid": "^14.0.0",
     "vite": "^6.2.0",
     "zundo": "^2.3.0",
     "zustand": "^5.0.12"
@@ -38,9 +38,14 @@
     "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.21",
+    "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "protobufjs": "^7.5.5"
   }
 }
