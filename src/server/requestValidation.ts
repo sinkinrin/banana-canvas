@@ -1,8 +1,12 @@
 import {
   getImageModelConfig,
+  normalizeBananaAspectRatio,
+  normalizeBananaImageSize,
   normalizeBananaOptions,
   normalizeImage2Options,
   normalizeImageModel,
+  type BananaAspectRatio,
+  type BananaImageSize,
   type BananaOptions,
   type Image2Options,
   type ImageModelId,
@@ -26,8 +30,8 @@ export type ValidGenerateImageRequest = {
   prompt: string;
   imageModel: ImageModelId;
   provider: ReturnType<typeof getImageModelConfig>['provider'];
-  aspectRatio?: unknown;
-  imageSize?: unknown;
+  aspectRatio?: BananaAspectRatio;
+  imageSize?: BananaImageSize;
   referenceImages: ReferenceImageInput[];
   maskImage?: ReferenceImageInput;
   bananaOptions: BananaOptions;
@@ -125,8 +129,8 @@ export function validateGenerateImageRequest(body: unknown): ValidationResult<Va
       prompt: requestBody.prompt ?? '',
       imageModel,
       provider: modelConfig.provider,
-      aspectRatio: requestBody.aspectRatio,
-      imageSize: requestBody.imageSize,
+      aspectRatio: normalizeBananaAspectRatio(requestBody.aspectRatio),
+      imageSize: normalizeBananaImageSize(requestBody.imageSize),
       referenceImages: references.value,
       maskImage,
       bananaOptions: normalizeBananaOptions(requestBody.bananaOptions),

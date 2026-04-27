@@ -96,3 +96,27 @@ test('returns normalized provider options and effective generation fields', () =
     });
   }
 });
+
+test('normalizes generation dimensions and omits invalid values', () => {
+  const legacySizeResult = validateGenerateImageRequest({
+    aspectRatio: '16:9',
+    imageSize: '512px',
+  });
+
+  assert.equal(legacySizeResult.ok, true);
+  if (legacySizeResult.ok) {
+    assert.equal(legacySizeResult.value.aspectRatio, '16:9');
+    assert.equal(legacySizeResult.value.imageSize, '512');
+  }
+
+  const invalidDimensionsResult = validateGenerateImageRequest({
+    aspectRatio: 'wide',
+    imageSize: 'huge',
+  });
+
+  assert.equal(invalidDimensionsResult.ok, true);
+  if (invalidDimensionsResult.ok) {
+    assert.equal(invalidDimensionsResult.value.aspectRatio, undefined);
+    assert.equal(invalidDimensionsResult.value.imageSize, undefined);
+  }
+});
