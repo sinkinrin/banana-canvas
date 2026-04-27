@@ -2203,7 +2203,104 @@ export function ConfirmDialog({
 }
 ```
 
-- [ ] **Step 6: Replace native dialogs in pages**
+- [ ] **Step 6: Write failing page-wiring tests**
+
+Update `ProjectsPage.test.tsx` before changing `ProjectsPage.tsx`.
+
+Add these imports if they are not already present:
+
+```tsx
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
+import { ConfirmDialog } from '../components/projects/ConfirmDialog';
+```
+
+Add this helper near the existing test setup:
+
+```tsx
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+```
+
+Add these tests:
+
+```tsx
+test('project dialogs render without native browser prompt text', () => {
+  const createHtml = renderToStaticMarkup(
+    <ProjectNameDialog
+      title="新建项目"
+      initialValue="未命名项目"
+      confirmLabel="创建"
+      cancelLabel="取消"
+      onConfirm={() => {}}
+      onCancel={() => {}}
+    />
+  );
+  const deleteHtml = renderToStaticMarkup(
+    <ConfirmDialog
+      title="删除项目"
+      body="删除项目“海报项目”？此操作不会进入回收站。"
+      confirmLabel="删除"
+      cancelLabel="取消"
+      onConfirm={() => {}}
+      onCancel={() => {}}
+    />
+  );
+
+  assert.match(createHtml, /新建项目/);
+  assert.match(deleteHtml, /删除项目/);
+});
+
+test('ProjectsPage dialog callbacks are wired through the tested helper', () => {
+  const source = readFileSync(path.join(rootDir, 'src/pages/ProjectsPage.tsx'), 'utf8');
+
+  assert.match(source, /createProjectDialogCallbacks/);
+  assert.doesNotMatch(source, /window\.prompt|window\.confirm/);
+  assert.doesNotMatch(source, /const confirmCreate = async/);
+  assert.doesNotMatch(source, /const confirmRename = async/);
+  assert.doesNotMatch(source, /const confirmDelete = async/);
+});
+```
+
+Update `ProjectCanvasPage.test.tsx` before changing `ProjectCanvasPage.tsx`.
+
+Add this import if it is not already present:
+
+```tsx
+import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
+```
+
+Add this test:
+
+```tsx
+test('project canvas rename dialog renders with project name input', () => {
+  const html = renderToStaticMarkup(
+    <ProjectNameDialog
+      title="重命名项目"
+      initialValue="海报项目"
+      confirmLabel="保存"
+      cancelLabel="取消"
+      onConfirm={() => {}}
+      onCancel={() => {}}
+    />
+  );
+
+  assert.match(html, /重命名项目/);
+  assert.match(html, /value="海报项目"/);
+  assert.match(html, /保存/);
+});
+```
+
+Run:
+
+```bash
+npx tsx --test src/pages/ProjectsPage.test.tsx src/pages/ProjectCanvasPage.test.tsx
+```
+
+Expected: FAIL while production pages still use native `window.prompt` and `window.confirm`. The `ProjectsPage` wiring assertion should fail until `ProjectsPage.tsx` imports and uses `createProjectDialogCallbacks` and removes native dialogs.
+
+- [ ] **Step 7: Replace native dialogs in pages**
 
 In `ProjectsPage.tsx`, track dialog state:
 
@@ -2252,97 +2349,52 @@ const dialogCallbacks = createProjectDialogCallbacks({
 });
 ```
 
-Render dialogs after `ProjectsPageView`:
+Render dialogs as siblings after the existing `ProjectsPageView` call in `ProjectsPage.tsx`:
+
+- Add imports for `ProjectNameDialog`, `ConfirmDialog`, and `createProjectDialogCallbacks`.
+- Preserve the existing `ProjectsPageView` import and its current prop list.
+- Wrap the current single-element `ProjectsPageView` return expression in a fragment.
+- Keep the existing `ProjectsPageView` JSX unchanged inside that fragment.
+- Append the three conditional dialog renders below it.
+- Replace the existing native dialog handlers with the `setDialog` handlers shown above.
+- Do not keep inline `confirmCreate`, `confirmRename`, or `confirmDelete` functions in the page; route those actions through `dialogCallbacks`.
+
+Append this JSX immediately after the preserved `ProjectsPageView` element:
 
 ```tsx
-<>
-  <ProjectsPageView ... />
-  {dialog?.type === 'create' && (
-    <ProjectNameDialog
-      title="新建项目"
-      initialValue="未命名项目"
-      confirmLabel="创建"
-      cancelLabel="取消"
-      onConfirm={dialogCallbacks.confirmCreate}
-      onCancel={() => setDialog(null)}
-    />
-  )}
-  {dialog?.type === 'rename' && (
-    <ProjectNameDialog
-      title="重命名项目"
-      initialValue={dialog.project.name}
-      confirmLabel="保存"
-      cancelLabel="取消"
-      onConfirm={(name) => dialogCallbacks.confirmRename(dialog.project.id, name)}
-      onCancel={() => setDialog(null)}
-    />
-  )}
-  {dialog?.type === 'delete' && (
-    <ConfirmDialog
-      title="删除项目"
-      body={`删除项目“${dialog.project.name}”？此操作不会进入回收站。`}
-      confirmLabel="删除"
-      cancelLabel="取消"
-      onConfirm={() => dialogCallbacks.confirmDelete(dialog.project.id)}
-      onCancel={() => setDialog(null)}
-    />
-  )}
-</>
+{dialog?.type === 'create' && (
+  <ProjectNameDialog
+    title="新建项目"
+    initialValue="未命名项目"
+    confirmLabel="创建"
+    cancelLabel="取消"
+    onConfirm={dialogCallbacks.confirmCreate}
+    onCancel={() => setDialog(null)}
+  />
+)}
+{dialog?.type === 'rename' && (
+  <ProjectNameDialog
+    title="重命名项目"
+    initialValue={dialog.project.name}
+    confirmLabel="保存"
+    cancelLabel="取消"
+    onConfirm={(name) => dialogCallbacks.confirmRename(dialog.project.id, name)}
+    onCancel={() => setDialog(null)}
+  />
+)}
+{dialog?.type === 'delete' && (
+  <ConfirmDialog
+    title="删除项目"
+    body={`删除项目“${dialog.project.name}”？此操作不会进入回收站。`}
+    confirmLabel="删除"
+    cancelLabel="取消"
+    onConfirm={() => dialogCallbacks.confirmDelete(dialog.project.id)}
+    onCancel={() => setDialog(null)}
+  />
+)}
 ```
 
 In `ProjectCanvasPage.tsx`, use `ProjectNameDialog` for rename with the same confirm/cancel labels and initial value of `project.name`.
-
-- [ ] **Step 7: Extend page tests for static markup**
-
-Update `ProjectsPage.test.tsx` with:
-
-```tsx
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
-import { ConfirmDialog } from '../components/projects/ConfirmDialog';
-
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-
-test('project dialogs render without native browser prompt text', () => {
-  const createHtml = renderToStaticMarkup(
-    <ProjectNameDialog
-      title="新建项目"
-      initialValue="未命名项目"
-      confirmLabel="创建"
-      cancelLabel="取消"
-      onConfirm={() => {}}
-      onCancel={() => {}}
-    />
-  );
-  const deleteHtml = renderToStaticMarkup(
-    <ConfirmDialog
-      title="删除项目"
-      body="删除项目“海报项目”？此操作不会进入回收站。"
-      confirmLabel="删除"
-      cancelLabel="取消"
-      onConfirm={() => {}}
-      onCancel={() => {}}
-    />
-  );
-
-  assert.match(createHtml, /新建项目/);
-  assert.match(deleteHtml, /删除项目/);
-});
-
-test('ProjectsPage dialog callbacks are wired through the tested helper', () => {
-  const source = readFileSync(path.join(rootDir, 'src/pages/ProjectsPage.tsx'), 'utf8');
-
-  assert.match(source, /createProjectDialogCallbacks/);
-  assert.doesNotMatch(source, /window\.prompt|window\.confirm/);
-  assert.doesNotMatch(source, /const confirmCreate = async/);
-  assert.doesNotMatch(source, /const confirmRename = async/);
-  assert.doesNotMatch(source, /const confirmDelete = async/);
-});
-```
-
-Update `ProjectCanvasPage.test.tsx` similarly with a static `ProjectNameDialog` render for `重命名项目`.
 
 - [ ] **Step 8: Run targeted and relevant tests**
 
