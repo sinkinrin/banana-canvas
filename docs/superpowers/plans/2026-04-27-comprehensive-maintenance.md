@@ -820,6 +820,7 @@ import {
   base64ToBlob,
   buildImage2MultipartRequest,
   extractImage2GeneratedUrl,
+  fetchImage2WithNetworkFallback,
   getImage2AttemptPlan,
   parseImage2SseEvents,
   previewResponseBody,
@@ -906,6 +907,65 @@ test('buildImage2MultipartRequest includes mask and edit references in request c
   assert.equal(request.body.get('response_format'), 'url');
   assert.equal(request.body.getAll('image').length, 1);
   assert.ok(request.body.get('mask'));
+});
+
+test('fetchImage2WithNetworkFallback consumes attempt plan through injected fetch without network', async () => {
+  const calls: Array<{ label: string; dispatcher: unknown }> = [];
+  const proxyDispatcher = { name: 'proxy-dispatcher' };
+  const directDispatcher = { name: 'direct-dispatcher' };
+
+  const response = await fetchImage2WithNetworkFallback({
+    url: 'https://api.openai.com/v1/images/generations',
+    init: { method: 'POST', body: JSON.stringify({ prompt: 'draw' }) },
+    attempts: getImage2AttemptPlan({ proxyMode: 'auto', hasProxy: true }),
+    fetchImpl: async (_url, init, attempt) => {
+      calls.push({ label: attempt.label, dispatcher: (init as any).dispatcher });
+      if (attempt.label === 'proxy') throw new TypeError('proxy failed');
+      return new Response(JSON.stringify({ data: [{ b64_json: 'abc' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+    getProxyDispatcher: () => proxyDispatcher,
+    getDirectDispatcher: () => directDispatcher,
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [
+    { label: 'proxy', dispatcher: proxyDispatcher },
+    { label: 'direct', dispatcher: directDispatcher },
+  ]);
+});
+
+test('fetchImage2WithNetworkFallback honors direct-only and proxy-only attempt modes', async () => {
+  const directCalls: string[] = [];
+  await fetchImage2WithNetworkFallback({
+    url: 'https://api.openai.com/v1/images/generations',
+    init: { method: 'POST' },
+    attempts: getImage2AttemptPlan({ proxyMode: 'direct', hasProxy: true }),
+    fetchImpl: async (_url, _init, attempt) => {
+      directCalls.push(attempt.label);
+      return new Response('{}', { status: 200 });
+    },
+    getProxyDispatcher: () => ({ name: 'proxy' }),
+    getDirectDispatcher: () => ({ name: 'direct' }),
+  });
+
+  const proxyCalls: string[] = [];
+  await fetchImage2WithNetworkFallback({
+    url: 'https://api.openai.com/v1/images/generations',
+    init: { method: 'POST' },
+    attempts: getImage2AttemptPlan({ proxyMode: 'proxy', hasProxy: true }),
+    fetchImpl: async (_url, _init, attempt) => {
+      proxyCalls.push(attempt.label);
+      return new Response('{}', { status: 200 });
+    },
+    getProxyDispatcher: () => ({ name: 'proxy' }),
+    getDirectDispatcher: () => ({ name: 'direct' }),
+  });
+
+  assert.deepEqual(directCalls, ['direct']);
+  assert.deepEqual(proxyCalls, ['proxy']);
 });
 ```
 
@@ -1242,6 +1302,36 @@ export function toImage2Size(aspectRatio?: string, imageSize?: string) {
 export function base64ToBlob(image: ReferenceImageInput) {
   const binary = Buffer.from(image.data, 'base64');
   return new Blob([binary], { type: image.mimeType || 'image/png' });
+}
+
+export type Image2Attempt = ReturnType<typeof getImage2AttemptPlan>[number];
+
+export async function fetchImage2WithNetworkFallback({
+  url,
+  init,
+  attempts,
+  fetchImpl = async (requestUrl, requestInit) => fetch(requestUrl, requestInit),
+  getProxyDispatcher,
+  getDirectDispatcher,
+}: {
+  url: string;
+  init: RequestInit;
+  attempts: Image2Attempt[];
+  fetchImpl?: (url: string, init: RequestInit & { dispatcher?: unknown }, attempt: Image2Attempt) => Promise<Response>;
+  getProxyDispatcher: () => unknown;
+  getDirectDispatcher: () => unknown;
+}) {
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    const dispatcher = attempt.useProxy ? getProxyDispatcher() : getDirectDispatcher();
+    try {
+      return await fetchImpl(url, { ...init, dispatcher }, attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts[attempts.length - 1]) throw error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Image2 request failed');
 }
 ```
 
@@ -1797,6 +1887,28 @@ test('Escape callback cancels through the same close path', () => {
 
   assert.deepEqual(calls, ['close']);
 });
+
+test('dialog callback helper routes repository failures to the page error handler', async () => {
+  const calls: string[] = [];
+  const actions = createProjectDialogCallbacks({
+    projectRepository: {
+      createProject: async () => {
+        throw new Error('create failed');
+      },
+      renameProject: async () => calls.push('rename'),
+      deleteProject: async () => calls.push('delete'),
+    },
+    closeDialog: () => calls.push('close'),
+    refreshProjects: async () => calls.push('refresh'),
+    navigateTo: (path) => calls.push(`navigate:${path}`),
+    getProjectPath: (projectId) => `/projects/${projectId}`,
+    onError: (error) => calls.push(`error:${error instanceof Error ? error.message : String(error)}`),
+  });
+
+  await actions.confirmCreate('Broken Project');
+
+  assert.deepEqual(calls, ['close', 'error:create failed']);
+});
 ```
 
 - [ ] **Step 2: Write failing static markup tests**
@@ -1896,14 +2008,26 @@ export function createProjectDialogCallbacks({
   refreshProjects,
   navigateTo,
   getProjectPath,
+  afterDelete,
+  onError,
 }: {
   projectRepository: ProjectDialogRepository;
   closeDialog: () => void;
   refreshProjects: () => Promise<void>;
   navigateTo: (path: string) => void;
   getProjectPath: (projectId: string) => string;
+  afterDelete?: (projectId: string) => void | Promise<void>;
+  onError?: (error: unknown) => void | Promise<void>;
 }) {
   const cancel = () => closeDialog();
+
+  async function runDialogAction(action: () => Promise<void>) {
+    try {
+      await action();
+    } catch (error) {
+      await onError?.(error);
+    }
+  }
 
   return {
     cancel,
@@ -1911,19 +2035,26 @@ export function createProjectDialogCallbacks({
       if (shouldCloseDialogForKey(key)) cancel();
     },
     async confirmCreate(name: string) {
-      closeDialog();
-      const project = await projectRepository.createProject(name);
-      navigateTo(getProjectPath(project.id));
+      await runDialogAction(async () => {
+        closeDialog();
+        const project = await projectRepository.createProject(name);
+        navigateTo(getProjectPath(project.id));
+      });
     },
     async confirmRename(projectId: string, name: string) {
-      closeDialog();
-      await projectRepository.renameProject(projectId, name);
-      await refreshProjects();
+      await runDialogAction(async () => {
+        closeDialog();
+        await projectRepository.renameProject(projectId, name);
+        await refreshProjects();
+      });
     },
     async confirmDelete(projectId: string) {
-      closeDialog();
-      await projectRepository.deleteProject(projectId);
-      await refreshProjects();
+      await runDialogAction(async () => {
+        closeDialog();
+        await projectRepository.deleteProject(projectId);
+        await afterDelete?.(projectId);
+        await refreshProjects();
+      });
     },
   };
 }
@@ -2102,33 +2233,23 @@ const handleDelete = (projectId: string) => {
 };
 ```
 
-Add submit functions:
+Create the page callback adapter from the same tested helper. `ProjectsPage.tsx` must not duplicate the create, rename, or delete callback bodies inline:
 
 ```ts
-const confirmCreate = async (name: string) => {
-  try {
-    setDialog(null);
-    const project = await projectRepository.createProject(name);
-    navigateTo(getProjectPath(project.id));
-  } catch (error) {
+const dialogCallbacks = createProjectDialogCallbacks({
+  projectRepository,
+  closeDialog: () => setDialog(null),
+  refreshProjects,
+  navigateTo,
+  getProjectPath,
+  afterDelete: (projectId) => {
+    setProjects(sortProjectsByUpdatedAt(projects.filter((item) => item.id !== projectId)));
+  },
+  onError: (error) => {
     setErrorMessage(getErrorMessage(error));
     setStatus('error');
-  }
-};
-
-const confirmRename = async (projectId: string, nextName: string) => {
-  setDialog(null);
-  await projectRepository.renameProject(projectId, nextName);
-  await refreshProjects();
-};
-
-const confirmDelete = async (projectId: string) => {
-  setDialog(null);
-  const nextProjects = projects.filter((item) => item.id !== projectId);
-  await projectRepository.deleteProject(projectId);
-  setProjects(sortProjectsByUpdatedAt(nextProjects));
-  await refreshProjects();
-};
+  },
+});
 ```
 
 Render dialogs after `ProjectsPageView`:
@@ -2142,7 +2263,7 @@ Render dialogs after `ProjectsPageView`:
       initialValue="未命名项目"
       confirmLabel="创建"
       cancelLabel="取消"
-      onConfirm={confirmCreate}
+      onConfirm={dialogCallbacks.confirmCreate}
       onCancel={() => setDialog(null)}
     />
   )}
@@ -2152,7 +2273,7 @@ Render dialogs after `ProjectsPageView`:
       initialValue={dialog.project.name}
       confirmLabel="保存"
       cancelLabel="取消"
-      onConfirm={(name) => confirmRename(dialog.project.id, name)}
+      onConfirm={(name) => dialogCallbacks.confirmRename(dialog.project.id, name)}
       onCancel={() => setDialog(null)}
     />
   )}
@@ -2162,7 +2283,7 @@ Render dialogs after `ProjectsPageView`:
       body={`删除项目“${dialog.project.name}”？此操作不会进入回收站。`}
       confirmLabel="删除"
       cancelLabel="取消"
-      onConfirm={() => confirmDelete(dialog.project.id)}
+      onConfirm={() => dialogCallbacks.confirmDelete(dialog.project.id)}
       onCancel={() => setDialog(null)}
     />
   )}
@@ -2176,8 +2297,13 @@ In `ProjectCanvasPage.tsx`, use `ProjectNameDialog` for rename with the same con
 Update `ProjectsPage.test.tsx` with:
 
 ```tsx
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
 import { ConfirmDialog } from '../components/projects/ConfirmDialog';
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 test('project dialogs render without native browser prompt text', () => {
   const createHtml = renderToStaticMarkup(
@@ -2203,6 +2329,16 @@ test('project dialogs render without native browser prompt text', () => {
 
   assert.match(createHtml, /新建项目/);
   assert.match(deleteHtml, /删除项目/);
+});
+
+test('ProjectsPage dialog callbacks are wired through the tested helper', () => {
+  const source = readFileSync(path.join(rootDir, 'src/pages/ProjectsPage.tsx'), 'utf8');
+
+  assert.match(source, /createProjectDialogCallbacks/);
+  assert.doesNotMatch(source, /window\.prompt|window\.confirm/);
+  assert.doesNotMatch(source, /const confirmCreate = async/);
+  assert.doesNotMatch(source, /const confirmRename = async/);
+  assert.doesNotMatch(source, /const confirmDelete = async/);
 });
 ```
 
@@ -2255,7 +2391,9 @@ import {
   buildAddReferenceImagePatch,
   buildRemoveReferenceImagePatch,
   canAddReferenceImage,
+  createReferenceImageController,
   extractPasteImageFiles,
+  parseImageDataUrl,
   selectImageFiles,
 } from './useReferenceImages';
 
@@ -2286,6 +2424,85 @@ test('extractPasteImageFiles reads image files from clipboard items without DOM 
   });
 
   assert.deepEqual(files, [png]);
+});
+
+test('parseImageDataUrl returns inline image data without FileReader', () => {
+  assert.deepEqual(
+    parseImageDataUrl('data:image/png;base64,abc123'),
+    { mimeType: 'image/png', data: 'abc123', url: 'data:image/png;base64,abc123' }
+  );
+  assert.throws(() => parseImageDataUrl('not-a-data-url'), /Invalid image format/);
+});
+
+test('reference image controller upload and paste read through injected reader and patch node data', async () => {
+  const patches: Array<{ nodeId: string; patch: unknown }> = [];
+  const png = { type: 'image/png', name: 'upload.png' } as File;
+  const paste = { type: 'image/jpeg', name: 'paste.jpg' } as File;
+  const controller = createReferenceImageController({
+    nodeId: 'prompt-1',
+    data: { referenceImages: [] } as any,
+    assets: {},
+    assetsHydrated: true,
+    updateNodeData: (nodeId, patch) => patches.push({ nodeId, patch }),
+    readImageFile: async (file) => ({
+      data: file.name,
+      mimeType: file.type,
+      url: `data:${file.type};base64,${file.name}`,
+    }),
+  });
+
+  const uploadEvent = { target: { files: [png], value: 'selected' } };
+  await controller.handleImageUpload(uploadEvent);
+
+  let prevented = false;
+  await controller.handlePaste({
+    clipboardData: { items: [{ kind: 'file', type: 'image/jpeg', getAsFile: () => paste }] },
+    preventDefault: () => {
+      prevented = true;
+    },
+  });
+
+  assert.equal(uploadEvent.target.value, '');
+  assert.equal(prevented, true);
+  assert.deepEqual(patches, [
+    {
+      nodeId: 'prompt-1',
+      patch: {
+        referenceImages: [{ data: 'upload.png', mimeType: 'image/png', url: 'data:image/png;base64,upload.png' }],
+        referenceImageIds: undefined,
+        referenceImage: undefined,
+      },
+    },
+    {
+      nodeId: 'prompt-1',
+      patch: {
+        referenceImages: [{ data: 'paste.jpg', mimeType: 'image/jpeg', url: 'data:image/jpeg;base64,paste.jpg' }],
+        referenceImageIds: undefined,
+        referenceImage: undefined,
+      },
+    },
+  ]);
+});
+
+test('reference image controller reports injected read failures and clears upload input', async () => {
+  const patches: Array<{ nodeId: string; patch: unknown }> = [];
+  const png = { type: 'image/png', name: 'broken.png' } as File;
+  const controller = createReferenceImageController({
+    nodeId: 'prompt-1',
+    data: { referenceImages: [] } as any,
+    assets: {},
+    assetsHydrated: true,
+    updateNodeData: (nodeId, patch) => patches.push({ nodeId, patch }),
+    readImageFile: async () => {
+      throw new Error('read failed');
+    },
+  });
+
+  const uploadEvent = { target: { files: [png], value: 'selected' } };
+  await controller.handleImageUpload(uploadEvent);
+
+  assert.equal(uploadEvent.target.value, '');
+  assert.deepEqual(patches, [{ nodeId: 'prompt-1', patch: { error: 'read failed' } }]);
 });
 
 test('asset-backed reference add preserves referenceImageIds precedence and stores new inline image', () => {
@@ -2435,7 +2652,7 @@ Expected: FAIL because the hook modules do not exist.
 
 - [ ] **Step 4: Implement reference image helper functions and hook**
 
-Create `src/components/nodes/useReferenceImages.ts` with pure helpers plus the hook:
+Create `src/components/nodes/useReferenceImages.ts` with pure helpers plus the hook. Keep `FileReader` isolated in `createBrowserImageFileReader`; upload and paste core logic must use the injected `readImageFile` function so `node:test` can cover reads without DOM globals:
 
 ```ts
 import { useRef, useState } from 'react';
@@ -2444,22 +2661,35 @@ import type { AppNode } from '../../store';
 
 export type ReferenceImagePatch = Pick<AppNode['data'], 'referenceImage' | 'referenceImages' | 'referenceImageIds'>;
 
-export async function readImageFile(file: File): Promise<{ data: string; mimeType: string; url: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+export type ReadImageFile = (file: File) => Promise<InlineImageData>;
+
+export function parseImageDataUrl(dataUrl: string): InlineImageData {
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) throw new Error('Invalid image format');
+  return { mimeType: match[1], data: match[2], url: dataUrl };
+}
+
+export function createBrowserImageFileReader({
+  createFileReader = () => new FileReader(),
+}: {
+  createFileReader?: () => FileReader;
+} = {}): ReadImageFile {
+  return (file) => new Promise((resolve, reject) => {
+    const reader = createFileReader();
     reader.onload = (event) => {
       const base64String = event.target?.result as string;
-      const match = base64String.match(/^data:(image\/[a-z]+);base64,(.+)$/);
-      if (match) {
-        resolve({ mimeType: match[1], data: match[2], url: base64String });
-      } else {
-        reject(new Error('Invalid image format'));
+      try {
+        resolve(parseImageDataUrl(base64String));
+      } catch (error) {
+        reject(error);
       }
     };
     reader.onerror = () => reject(new Error('读取图片失败'));
     reader.readAsDataURL(file);
   });
 }
+
+export const readImageFile = createBrowserImageFileReader();
 
 export function canAddReferenceImage({
   hasPendingReferenceHydration,
@@ -2542,21 +2772,25 @@ export function buildRemoveReferenceImagePatch({
   };
 }
 
-export function useReferenceImages({
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '读取图片失败';
+}
+
+export function createReferenceImageController({
   nodeId,
   data,
   assets,
   assetsHydrated,
   updateNodeData,
+  readImageFile,
 }: {
   nodeId: string;
   data: AppNode['data'];
   assets: Parameters<typeof resolveReferenceImages>[1];
   assetsHydrated: boolean;
   updateNodeData: (nodeId: string, patch: Partial<AppNode['data']>) => void;
+  readImageFile: ReadImageFile;
 }) {
-  const [isReadingFile, setIsReadingFile] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const referenceImages = resolveReferenceImages(data, assets);
   const rawReferenceImageIds = data.referenceImageIds ?? [];
   const referenceImageIds = assetsHydrated
@@ -2586,15 +2820,13 @@ export function useReferenceImages({
   };
 
   const readAndAppendFiles = async (files: File[]) => {
-    if (!files.length) return;
-    setIsReadingFile(true);
-    try {
-      const selectedFiles = selectImageFiles(files, { currentCount: referenceImages.length });
-      for (const file of selectedFiles) {
+    const selectedFiles = selectImageFiles(files, { currentCount: referenceImages.length });
+    for (const file of selectedFiles) {
+      try {
         appendReferenceImage(await readImageFile(file));
+      } catch (error) {
+        updateNodeData(nodeId, { error: getErrorMessage(error) });
       }
-    } finally {
-      setIsReadingFile(false);
     }
   };
 
@@ -2611,9 +2843,6 @@ export function useReferenceImages({
   };
 
   return {
-    fileInputRef,
-    isReadingFile,
-    setIsReadingFile,
     referenceImages,
     referenceImageIds,
     usesReferenceImageIds,
@@ -2622,6 +2851,51 @@ export function useReferenceImages({
     removeReferenceImage,
     handleImageUpload,
     handlePaste,
+  };
+}
+
+export function useReferenceImages({
+  nodeId,
+  data,
+  assets,
+  assetsHydrated,
+  updateNodeData,
+  readImageFile = createBrowserImageFileReader(),
+}: {
+  nodeId: string;
+  data: AppNode['data'];
+  assets: Parameters<typeof resolveReferenceImages>[1];
+  assetsHydrated: boolean;
+  updateNodeData: (nodeId: string, patch: Partial<AppNode['data']>) => void;
+  readImageFile?: ReadImageFile;
+}) {
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const controller = createReferenceImageController({
+    nodeId,
+    data,
+    assets,
+    assetsHydrated,
+    updateNodeData,
+    readImageFile,
+  });
+
+  const withReadingState = async (action: () => Promise<void>) => {
+    setIsReadingFile(true);
+    try {
+      await action();
+    } finally {
+      setIsReadingFile(false);
+    }
+  };
+
+  return {
+    fileInputRef,
+    isReadingFile,
+    setIsReadingFile,
+    ...controller,
+    handleImageUpload: (event: Parameters<typeof controller.handleImageUpload>[0]) => withReadingState(() => controller.handleImageUpload(event)),
+    handlePaste: (event: Parameters<typeof controller.handlePaste>[0]) => withReadingState(() => controller.handlePaste(event)),
   };
 }
 ```
@@ -3008,6 +3282,87 @@ test('prompt generation runner creates batch placeholders, edges, and final imag
   assert.ok(calls.includes('update:prompt-1:{"isLoading":false}'));
 });
 
+test('prompt generation runner resets and increments generatedCount progress per completed image', async () => {
+  const progress: number[] = [];
+  const runner = createPromptGenerationRunner({
+    generateImage: async ({ prompt }) => `data:image/png;base64,${prompt}`,
+    addNode: () => `image-${progress.length + 1}`,
+    deleteNode: () => {},
+    updateNodeData: () => {},
+    setEdges: () => {},
+    commitPrompt: () => {},
+    now: () => '2026-04-27T00:00:00.000Z',
+    onGeneratedCountChange: (count) => progress.push(count),
+  });
+
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 3,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+
+  assert.deepEqual(progress, [0, 1, 2, 3]);
+});
+
+test('prompt generation runner aborts the injected controller and passes its signal to generateImage', async () => {
+  const controller = new AbortController();
+  let abortCalled = false;
+  const originalAbort = controller.abort.bind(controller);
+  controller.abort = () => {
+    abortCalled = true;
+    originalAbort();
+  };
+  let receivedSignal: AbortSignal | undefined;
+  let release!: () => void;
+  const pending = new Promise<string>((resolve) => {
+    release = () => resolve('data:image/png;base64,result');
+  });
+  const runner = createPromptGenerationRunner({
+    generateImage: async ({ signal }) => {
+      receivedSignal = signal;
+      return pending;
+    },
+    addNode: () => 'image-1',
+    deleteNode: () => {},
+    updateNodeData: () => {},
+    setEdges: () => {},
+    commitPrompt: () => {},
+    now: () => '2026-04-27T00:00:00.000Z',
+    createAbortController: () => controller,
+  });
+
+  const runPromise = runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  runner.abort();
+  release();
+  await runPromise;
+
+  assert.equal(abortCalled, true);
+  assert.equal(receivedSignal, controller.signal);
+  assert.equal(controller.signal.aborted, true);
+});
+
 test('prompt generation runner deletes placeholders on abort', async () => {
   const calls: string[] = [];
   const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });
@@ -3280,6 +3635,7 @@ export type PromptGenerationRunnerDeps = {
   createAbortController?: () => AbortController;
   removeApiKey?: (key: string) => void;
   openSelectKey?: () => void;
+  onGeneratedCountChange?: (count: number) => void;
 };
 
 function getErrorMessage(error: unknown) {
@@ -3313,9 +3669,11 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
       isGenerating = true;
       abortController = deps.createAbortController?.() ?? new AbortController();
       const createdNodeIds: string[] = [];
+      let generatedCount = 0;
 
       try {
         deps.commitPrompt();
+        deps.onGeneratedCountChange?.(0);
         deps.updateNodeData(input.nodeId, { isLoading: true, error: undefined });
         const referenceData = buildGenerationReferenceData({
           referenceImageIds: input.referenceImageIds,
@@ -3360,6 +3718,8 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
               signal: abortController?.signal,
             });
             deps.updateNodeData(nodeId, { imageUrl, isLoading: false, error: undefined });
+            generatedCount += 1;
+            deps.onGeneratedCountChange?.(generatedCount);
           } catch (error) {
             if (isAbortError(error)) {
               deps.deleteNode(nodeId);
@@ -3416,6 +3776,7 @@ export function usePromptGeneration({
       now: () => new Date().toISOString(),
       removeApiKey: (key) => localStorage.removeItem(key),
       openSelectKey: () => window.aistudio?.openSelectKey?.(),
+      onGeneratedCountChange: setGeneratedCount,
     });
   }
 
@@ -3435,6 +3796,8 @@ Refactor `PromptNode.tsx` so `handleGenerate` only collects current node setting
 - pending reference hydration blocks generate
 - `commitPrompt` runs before placeholders are created
 - batch count creates one image node per request at `y + index * 430`
+- `generatedCount` resets to `0` at run start and increments once per completed image
+- `abortGeneration` calls the active controller and passes the active signal to `generateImage`
 - abort deletes aborted placeholders
 - failed provider calls set placeholder errors and source prompt-node error
 - invalid Banana key flow still removes `custom_gemini_api_key` or calls `window.aistudio.openSelectKey`
