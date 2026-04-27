@@ -185,6 +185,8 @@ http://localhost:3000
 | `npm run dev` | 启动 Express + Vite 开发环境，包含图像生成和提示词优化接口 |
 | `npm run build` | 构建前端静态资源到 `dist/` |
 | `npm run lint` | 运行 TypeScript 类型检查 |
+| `npm test` | 运行全部 `src/**/*.test.ts` 和 `src/**/*.test.tsx` 测试 |
+| `npm run check` | 依次运行类型检查、测试和构建 |
 | `npm run preview` | 仅预览 Vite 构建产物，不包含 Express API |
 | `npm run clean` | 删除 `dist/` 目录 |
 
@@ -221,8 +223,10 @@ http://localhost:3000
 当前仓库包含项目路由、本地文件存储、IndexedDB 回退、画布资产归档、模型参数、节点组件、mask 编辑和前端 payload 测试。推荐执行全量测试：
 
 ```bash
-npx tsx --test "src/**/*.test.ts" "src/**/*.test.tsx"
+npm test
 ```
+
+`npm install` 是首次设置步骤，用于安装依赖。`npm run check` 不会执行 `npm install`，它只会按顺序运行 `npm run lint`、`npm test` 和 `npm run build`。
 
 ## 当前架构概览
 
