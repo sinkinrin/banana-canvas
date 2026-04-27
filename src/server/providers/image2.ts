@@ -102,10 +102,15 @@ export function getImage2AttemptPlan({
   hasProxy: boolean;
 }) {
   if (proxyMode === 'direct' || !hasProxy) return [{ label: 'direct' as const, useProxy: false }];
-  if (proxyMode === 'proxy') return [{ label: 'proxy' as const, useProxy: true }];
+  if (proxyMode === 'proxy') {
+    return [
+      { label: 'proxy' as const, useProxy: true },
+      { label: 'direct' as const, useProxy: false },
+    ];
+  }
   return [
-    { label: 'proxy' as const, useProxy: true },
     { label: 'direct' as const, useProxy: false },
+    { label: 'proxy' as const, useProxy: true },
   ];
 }
 
@@ -180,7 +185,12 @@ export function buildImage2MultipartRequest({
   body.set('moderation', 'low');
   if (responseFormat) body.set('response_format', responseFormat);
   if (outputFormat) body.set('output_format', outputFormat);
-  if (typeof outputCompression === 'number') body.set('output_compression', String(outputCompression));
+  if (
+    typeof outputCompression === 'number' &&
+    (outputFormat === 'jpeg' || outputFormat === 'webp')
+  ) {
+    body.set('output_compression', String(outputCompression));
+  }
 
   referenceImages.forEach((reference, index) => {
     const extension = reference.mimeType.split('/')[1] || 'png';
@@ -489,7 +499,7 @@ async function normalizeGeneratedImageUrl(imageUrl: string) {
 
   let response: Response;
   try {
-    response = await directFetch(imageUrl);
+    response = await globalThis.fetch(imageUrl);
   } catch (error) {
     const { code, message } = summarizeNetworkError(error);
     console.warn(`[image2] generated image url download failed code=${code} message=${message}; returning original url`);

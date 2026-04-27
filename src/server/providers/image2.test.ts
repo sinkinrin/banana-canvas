@@ -13,6 +13,9 @@ import {
   toImage2Size,
 } from './image2';
 
+const attemptLabels = (attempts: ReturnType<typeof getImage2AttemptPlan>) =>
+  attempts.map((attempt) => attempt.label);
+
 test('toImage2Size preserves existing aspect and size mapping', () => {
   assert.equal(toImage2Size('16:9', '1K'), '1536x1024');
   assert.equal(toImage2Size('9:16', '1K'), '1024x1536');
@@ -42,16 +45,10 @@ test('selectImage2Endpoint chooses edit endpoint when references or mask are pre
   assert.equal(selectImage2Endpoint({ baseUrl: 'https://relay.example/v1', referenceCount: 0, hasMask: true }), 'https://relay.example/v1/images/edits');
 });
 
-test('getImage2AttemptPlan preserves proxy-first direct-fallback order', () => {
-  assert.deepEqual(
-    getImage2AttemptPlan({ proxyMode: 'auto', hasProxy: true }),
-    [
-      { label: 'proxy', useProxy: true },
-      { label: 'direct', useProxy: false },
-    ]
-  );
+test('getImage2AttemptPlan preserves pre-extraction direct/proxy retry order', () => {
+  assert.deepEqual(attemptLabels(getImage2AttemptPlan({ proxyMode: 'auto', hasProxy: true })), ['direct', 'proxy']);
   assert.deepEqual(getImage2AttemptPlan({ proxyMode: 'direct', hasProxy: true }), [{ label: 'direct', useProxy: false }]);
-  assert.deepEqual(getImage2AttemptPlan({ proxyMode: 'proxy', hasProxy: true }), [{ label: 'proxy', useProxy: true }]);
+  assert.deepEqual(attemptLabels(getImage2AttemptPlan({ proxyMode: 'proxy', hasProxy: true })), ['proxy', 'direct']);
   assert.deepEqual(getImage2AttemptPlan({ proxyMode: 'proxy', hasProxy: false }), [{ label: 'direct', useProxy: false }]);
 });
 
@@ -103,12 +100,28 @@ test('buildImage2MultipartRequest includes mask and edit references in request c
   assert.equal(request.body.get('size'), '1024x1024');
   assert.equal(request.body.get('response_format'), 'url');
   assert.equal(request.body.get('output_format'), 'png');
-  assert.equal(request.body.get('output_compression'), '90');
+  assert.equal(request.body.get('output_compression'), null);
   assert.equal(request.body.getAll('image').length, 1);
   assert.ok(request.body.get('mask'));
 });
 
-test('fetchImage2WithNetworkFallback consumes attempt plan through injected fetch without network', async () => {
+test('buildImage2MultipartRequest includes output compression only for jpeg and webp edits', () => {
+  for (const outputFormat of ['jpeg', 'webp'] as const) {
+    const request = buildImage2MultipartRequest({
+      model: 'gpt-image-2',
+      prompt: 'compress',
+      size: '1024x1024',
+      outputFormat,
+      outputCompression: 90,
+      referenceImages: [{ data: Buffer.from('source').toString('base64'), mimeType: 'image/png' }],
+    });
+
+    assert.equal(request.body.get('output_format'), outputFormat);
+    assert.equal(request.body.get('output_compression'), '90');
+  }
+});
+
+test('fetchImage2WithNetworkFallback consumes auto attempt plan through injected fetch without network', async () => {
   const calls: Array<{ label: string; dispatcher: unknown }> = [];
   const proxyDispatcher = { name: 'proxy-dispatcher' };
   const directDispatcher = { name: 'direct-dispatcher' };
@@ -117,6 +130,34 @@ test('fetchImage2WithNetworkFallback consumes attempt plan through injected fetc
     url: 'https://api.openai.com/v1/images/generations',
     init: { method: 'POST', body: JSON.stringify({ prompt: 'draw' }) },
     attempts: getImage2AttemptPlan({ proxyMode: 'auto', hasProxy: true }),
+    fetchImpl: async (_url, init, attempt) => {
+      calls.push({ label: attempt.label, dispatcher: init.dispatcher });
+      if (attempt.label === 'direct') throw new TypeError('direct failed');
+      return new Response(JSON.stringify({ data: [{ b64_json: 'abc' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+    getProxyDispatcher: () => proxyDispatcher,
+    getDirectDispatcher: () => directDispatcher,
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [
+    { label: 'direct', dispatcher: directDispatcher },
+    { label: 'proxy', dispatcher: proxyDispatcher },
+  ]);
+});
+
+test('fetchImage2WithNetworkFallback consumes proxy attempt plan through injected fetch without network', async () => {
+  const calls: Array<{ label: string; dispatcher: unknown }> = [];
+  const proxyDispatcher = { name: 'proxy-dispatcher' };
+  const directDispatcher = { name: 'direct-dispatcher' };
+
+  const response = await fetchImage2WithNetworkFallback({
+    url: 'https://api.openai.com/v1/images/generations',
+    init: { method: 'POST', body: JSON.stringify({ prompt: 'draw' }) },
+    attempts: getImage2AttemptPlan({ proxyMode: 'proxy', hasProxy: true }),
     fetchImpl: async (_url, init, attempt) => {
       calls.push({ label: attempt.label, dispatcher: init.dispatcher });
       if (attempt.label === 'proxy') throw new TypeError('proxy failed');
@@ -136,7 +177,7 @@ test('fetchImage2WithNetworkFallback consumes attempt plan through injected fetc
   ]);
 });
 
-test('fetchImage2WithNetworkFallback honors direct-only and proxy-only attempt modes', async () => {
+test('fetchImage2WithNetworkFallback honors direct-only attempt mode', async () => {
   const directCalls: string[] = [];
   await fetchImage2WithNetworkFallback({
     url: 'https://api.openai.com/v1/images/generations',
@@ -150,19 +191,64 @@ test('fetchImage2WithNetworkFallback honors direct-only and proxy-only attempt m
     getDirectDispatcher: () => ({ name: 'direct' }),
   });
 
-  const proxyCalls: string[] = [];
-  await fetchImage2WithNetworkFallback({
-    url: 'https://api.openai.com/v1/images/generations',
-    init: { method: 'POST' },
-    attempts: getImage2AttemptPlan({ proxyMode: 'proxy', hasProxy: true }),
-    fetchImpl: async (_url, _init, attempt) => {
-      proxyCalls.push(attempt.label);
-      return new Response('{}', { status: 200 });
-    },
-    getProxyDispatcher: () => ({ name: 'proxy' }),
-    getDirectDispatcher: () => ({ name: 'direct' }),
-  });
-
   assert.deepEqual(directCalls, ['direct']);
-  assert.deepEqual(proxyCalls, ['proxy']);
+});
+
+test('generateImage2Image downloads generated image URLs with current global fetch', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalEnv = {
+    IMAGE2_BASE_URL: process.env.IMAGE2_BASE_URL,
+    IMAGE2_API_KEY: process.env.IMAGE2_API_KEY,
+    IMAGE2_MODEL: process.env.IMAGE2_MODEL,
+    IMAGE2_ENDPOINT_TYPE: process.env.IMAGE2_ENDPOINT_TYPE,
+    IMAGE2_PROXY_MODE: process.env.IMAGE2_PROXY_MODE,
+    IMAGE2_MAX_ATTEMPTS: process.env.IMAGE2_MAX_ATTEMPTS,
+    IMAGE2_RETRY_DELAY_MS: process.env.IMAGE2_RETRY_DELAY_MS,
+  };
+
+  try {
+    process.env.IMAGE2_BASE_URL = 'https://api.openai.com/v1';
+    process.env.IMAGE2_API_KEY = 'test-key';
+    process.env.IMAGE2_MODEL = 'gpt-image-2';
+    process.env.IMAGE2_ENDPOINT_TYPE = 'images';
+    process.env.IMAGE2_PROXY_MODE = 'direct';
+    process.env.IMAGE2_MAX_ATTEMPTS = '1';
+    process.env.IMAGE2_RETRY_DELAY_MS = '1';
+
+    globalThis.fetch = async (input) => {
+      assert.equal(String(input), 'https://api.openai.com/v1/images/generations');
+      return new Response(JSON.stringify({ data: [{ url: 'https://cdn.example.test/generated.png' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    const imported = await import(`./image2.ts?global-fetch-${Date.now()}`);
+
+    globalThis.fetch = async (input) => {
+      assert.equal(String(input), 'https://cdn.example.test/generated.png');
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+    };
+
+    const imageUrl = await imported.generateImage2Image({
+      requestId: 'global-fetch-test',
+      prompt: 'draw',
+      images: [],
+      image2Options: { responseFormat: 'url' },
+    });
+
+    assert.equal(imageUrl, 'data:image/png;base64,AQID');
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 });
