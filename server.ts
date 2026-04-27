@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { Agent, ProxyAgent } from "undici";
 import { getLocalDataWatchIgnoreGlobs } from "./src/lib/devServerWatch";
 import { createLocalProjectStore } from "./src/lib/localProjectStore";
+import { mountGenerationRoutes } from "./src/server/generationRoutes";
 import {
   buildBananaGenerateContentRequest,
   buildImage2ChatCompletionRequest,
@@ -22,12 +23,9 @@ import {
   getImage2ChatCompletionsEndpoint,
   getImage2ImagesEndpoint,
   getImage2NetworkErrorCode,
-  getImageModelConfig,
   isImage2RetriableHttpStatus,
   isImage2RetriableNetworkError,
-  normalizeBananaOptions,
   normalizeImage2Options,
-  normalizeImageModel,
   type BananaOptions,
   type Image2AttemptChannel,
   type Image2Options,
@@ -38,19 +36,6 @@ import {
 } from "./src/lib/imageModels";
 
 dotenv.config();
-
-type GenerateImageRequestBody = {
-  prompt?: string;
-  imageModel?: unknown;
-  aspectRatio?: any;
-  imageSize?: any;
-  referenceImages?: ReferenceImageInput[];
-  referenceImage?: ReferenceImageInput;
-  maskImage?: ReferenceImageInput;
-  bananaOptions?: unknown;
-  image2Options?: unknown;
-  customKey?: string;
-};
 
 type FetchInitWithDispatcher = RequestInit & { dispatcher?: unknown };
 
@@ -81,10 +66,6 @@ function sendProjectRouteError(res: express.Response, error: unknown) {
   res.status(status).json({ error: message });
 }
 
-function collectReferenceImages(body: GenerateImageRequestBody): ReferenceImageInput[] {
-  return body.referenceImages || (body.referenceImage ? [body.referenceImage] : []);
-}
-
 function tryParseJson(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -104,10 +85,6 @@ function extractErrorMessage(payload: unknown): string | null {
   }
 
   return null;
-}
-
-function createRequestId() {
-  return globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
 }
 
 function previewResponseBody(text: string) {
@@ -803,81 +780,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/generate-image", async (req, res) => {
-    const requestId = createRequestId();
-    try {
-      const body = req.body as GenerateImageRequestBody;
-      const { prompt = "", aspectRatio, imageSize, customKey } = body;
-      const imageModel = normalizeImageModel(body.imageModel);
-      const modelConfig = getImageModelConfig(imageModel);
-      const apiKey = customKey || process.env.GEMINI_API_KEY;
-      const bananaOptions = normalizeBananaOptions(body.bananaOptions);
-      const image2Options = normalizeImage2Options(body.image2Options);
-      const maskImage = body.maskImage;
-
-      if (modelConfig.provider === "gemini" && !apiKey) {
-        return res.status(401).json({ error: "需要 API Key" });
-      }
-
-      if (maskImage && modelConfig.provider !== "openai-chat") {
-        return res.status(400).json({ error: "蒙版编辑仅支持 Image2。" });
-      }
-
-      const images = collectReferenceImages(body);
-      console.info(
-        `[generate-image:${requestId}] model=${imageModel} provider=${modelConfig.provider} refs=${images.length} promptChars=${prompt.length}${modelConfig.provider === "gemini" ? ` bananaOptions=${JSON.stringify(bananaOptions)}` : ""}`
-      );
-      const imageUrl = modelConfig.provider === "gemini"
-        ? await generateBananaImage({
-            prompt,
-            apiKey: apiKey!,
-            aspectRatio,
-            imageSize,
-            images,
-            bananaOptions,
-          })
-        : await generateImage2Image({
-            requestId,
-            prompt,
-            aspectRatio,
-            imageSize,
-            images,
-            image2Options,
-            maskImage,
-          });
-
-      res.json({ imageUrl, imageModel });
-    } catch (error: any) {
-      const message = error.message || "图像生成失败";
-      console.error(`[generate-image:${requestId}] failed:`, error);
-      res.status(500).json({ error: `${message}（请求 ID：${requestId}）`, requestId });
-    }
-  });
-
-  app.post("/api/optimize-prompt", async (req, res) => {
-    try {
-      const { prompt, customKey } = req.body;
-      const apiKey = customKey || process.env.GEMINI_API_KEY;
-      
-      if (!apiKey) {
-        return res.status(401).json({ error: "需要 API Key" });
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: `你是一位 AI 图像生成的专家提示词工程师。
-请优化以下提示词，以创建高度详细、视觉效果惊人的图像。
-仅返回优化后的提示词文本，使用原始语言（如果是中文则返回中文，英文则返回英文），不要包含任何对话性文字、引号或 Markdown 格式。
-原始提示词：${prompt}`,
-      });
-      
-      res.json({ optimizedPrompt: response.text?.trim() || prompt });
-    } catch (error: any) {
-      console.error("Error optimizing prompt:", error);
-      res.status(500).json({ error: error.message || "提示词优化失败" });
-    }
-  });
+  mountGenerationRoutes(app, { providers: { generateBananaImage, generateImage2Image } });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
