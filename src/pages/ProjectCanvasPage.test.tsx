@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
 import { ProjectCanvasPageView, hasProjectSnapshotChanged } from './ProjectCanvasPage';
 
 test('ProjectCanvasPageView renders project navigation and saved status', () => {
@@ -81,4 +82,21 @@ test('hasProjectSnapshotChanged detects real project changes', () => {
     ),
     true
   );
+});
+
+test('project canvas rename dialog renders with project name input', () => {
+  const html = renderToStaticMarkup(
+    <ProjectNameDialog
+      title="重命名项目"
+      initialValue="海报项目"
+      confirmLabel="保存"
+      cancelLabel="取消"
+      onConfirm={() => {}}
+      onCancel={() => {}}
+    />
+  );
+
+  assert.match(html, /重命名项目/);
+  assert.match(html, /value="海报项目"/);
+  assert.match(html, /保存/);
 });

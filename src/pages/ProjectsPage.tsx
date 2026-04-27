@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
+import { ConfirmDialog } from '../components/projects/ConfirmDialog';
+import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
 import { ProjectsList } from '../components/projects/ProjectsList';
+import { createProjectDialogCallbacks } from '../components/projects/projectDialogLogic';
 import { sortProjectsByUpdatedAt, type ProjectMeta } from '../lib/projects';
 import { createProjectRepository } from '../lib/projectRepository';
 import { getProjectPath } from '../lib/routes';
 
 type ProjectsPageStatus = 'loading' | 'ready' | 'error';
+type ProjectDialogState =
+  | { type: 'create' }
+  | { type: 'rename'; project: ProjectMeta }
+  | { type: 'delete'; project: ProjectMeta }
+  | null;
 
 const projectRepository = createProjectRepository();
 
@@ -92,6 +100,7 @@ export function ProjectsPage() {
   const [status, setStatus] = useState<ProjectsPageStatus>('loading');
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [dialog, setDialog] = useState<ProjectDialogState>(null);
 
   const refreshProjects = async () => {
     const index = await projectRepository.listProjects();
@@ -121,53 +130,78 @@ export function ProjectsPage() {
     };
   }, []);
 
-  const handleCreate = async () => {
-    try {
-      const name = window.prompt('项目名称', '未命名项目') ?? '未命名项目';
-      const project = await projectRepository.createProject(name);
-      navigateTo(getProjectPath(project.id));
-    } catch (error) {
+  const dialogCallbacks = createProjectDialogCallbacks({
+    projectRepository,
+    closeDialog: () => setDialog(null),
+    refreshProjects,
+    navigateTo,
+    getProjectPath,
+    afterDelete: (projectId) => {
+      setProjects(sortProjectsByUpdatedAt(projects.filter((item) => item.id !== projectId)));
+    },
+    onError: (error) => {
       setErrorMessage(getErrorMessage(error));
       setStatus('error');
-    }
-  };
+    },
+  });
+
+  const handleCreate = () => setDialog({ type: 'create' });
 
   const handleOpen = (projectId: string) => {
     navigateTo(getProjectPath(projectId));
   };
 
-  const handleRename = async (projectId: string) => {
+  const handleRename = (projectId: string) => {
     const project = projects.find((item) => item.id === projectId);
-    if (!project) return;
-
-    const nextName = window.prompt('项目名称', project.name);
-    if (nextName === null) return;
-
-    await projectRepository.renameProject(projectId, nextName);
-    await refreshProjects();
+    if (project) setDialog({ type: 'rename', project });
   };
 
-  const handleDelete = async (projectId: string) => {
+  const handleDelete = (projectId: string) => {
     const project = projects.find((item) => item.id === projectId);
-    if (!project) return;
-
-    if (!window.confirm(`删除项目“${project.name}”？此操作不会进入回收站。`)) return;
-
-    const nextProjects = projects.filter((item) => item.id !== projectId);
-    await projectRepository.deleteProject(projectId);
-    setProjects(sortProjectsByUpdatedAt(nextProjects));
-    await refreshProjects();
+    if (project) setDialog({ type: 'delete', project });
   };
 
   return (
-    <ProjectsPageView
-      status={status}
-      projects={projects}
-      errorMessage={errorMessage}
-      onCreate={handleCreate}
-      onOpen={handleOpen}
-      onRename={handleRename}
-      onDelete={handleDelete}
-    />
+    <>
+      <ProjectsPageView
+        status={status}
+        projects={projects}
+        errorMessage={errorMessage}
+        onCreate={handleCreate}
+        onOpen={handleOpen}
+        onRename={handleRename}
+        onDelete={handleDelete}
+      />
+      {dialog?.type === 'create' && (
+        <ProjectNameDialog
+          title="新建项目"
+          initialValue="未命名项目"
+          confirmLabel="创建"
+          cancelLabel="取消"
+          onConfirm={dialogCallbacks.confirmCreate}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog?.type === 'rename' && (
+        <ProjectNameDialog
+          title="重命名项目"
+          initialValue={dialog.project.name}
+          confirmLabel="保存"
+          cancelLabel="取消"
+          onConfirm={(name) => dialogCallbacks.confirmRename(dialog.project.id, name)}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog?.type === 'delete' && (
+        <ConfirmDialog
+          title="删除项目"
+          body={`删除项目“${dialog.project.name}”？此操作不会进入回收站。`}
+          confirmLabel="删除"
+          cancelLabel="取消"
+          onConfirm={() => dialogCallbacks.confirmDelete(dialog.project.id)}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+    </>
   );
 }

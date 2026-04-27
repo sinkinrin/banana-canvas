@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'rea
 import { ArrowLeft, Pencil, Save } from 'lucide-react';
 
 import { MissingProjectState } from '../components/projects/MissingProjectState';
+import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
 import { createEmptyProjectSnapshot, type ProjectSnapshot } from '../lib/projectSession';
 import type { ProjectMeta } from '../lib/projects';
 import { createProjectRepository } from '../lib/projectRepository';
@@ -95,6 +96,7 @@ export function ProjectCanvasPage({ projectId }: { projectId: string }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('loading');
   const [project, setProject] = useState<ProjectMeta | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const saveRevisionRef = useRef(0);
@@ -193,13 +195,15 @@ export function ProjectCanvasPage({ projectId }: { projectId: string }) {
     };
   }, [project, status]);
 
-  const handleRename = async () => {
+  const handleRename = () => {
     if (!project) return;
+    setIsRenameDialogOpen(true);
+  };
 
-    const nextName = window.prompt('项目名称', project.name);
-    if (nextName === null) return;
-
-    const renamed = await projectRepository.renameProject(project.id, nextName);
+  const handleConfirmRename = async (name: string) => {
+    if (!project) return;
+    setIsRenameDialogOpen(false);
+    const renamed = await projectRepository.renameProject(project.id, name);
     if (renamed) setProject(renamed);
   };
 
@@ -235,21 +239,33 @@ export function ProjectCanvasPage({ projectId }: { projectId: string }) {
   }
 
   return (
-    <ProjectCanvasPageView
-      project={project}
-      saveStatus={saveStatus}
-      onBack={navigateToProjects}
-      onRename={handleRename}
-    >
-      <Suspense
-        fallback={
-          <div className="flex h-screen items-center justify-center" style={{ color: '#96836F' }}>
-            加载画布中...
-          </div>
-        }
+    <>
+      <ProjectCanvasPageView
+        project={project}
+        saveStatus={saveStatus}
+        onBack={navigateToProjects}
+        onRename={handleRename}
       >
-        <Canvas />
-      </Suspense>
-    </ProjectCanvasPageView>
+        <Suspense
+          fallback={
+            <div className="flex h-screen items-center justify-center" style={{ color: '#96836F' }}>
+              加载画布中...
+            </div>
+          }
+        >
+          <Canvas />
+        </Suspense>
+      </ProjectCanvasPageView>
+      {isRenameDialogOpen && (
+        <ProjectNameDialog
+          title="重命名项目"
+          initialValue={project.name}
+          confirmLabel="保存"
+          cancelLabel="取消"
+          onConfirm={handleConfirmRename}
+          onCancel={() => setIsRenameDialogOpen(false)}
+        />
+      )}
+    </>
   );
 }
