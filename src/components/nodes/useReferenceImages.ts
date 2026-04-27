@@ -5,6 +5,7 @@ import type { AppNode } from '../../store';
 export type ReferenceImagePatch = Pick<AppNode['data'], 'referenceImage' | 'referenceImages' | 'referenceImageIds'>;
 
 export type ReadImageFile = (file: File) => Promise<InlineImageData>;
+export type OnReferenceImageReadError = (message: string) => void;
 
 export function parseImageDataUrl(dataUrl: string): InlineImageData {
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -119,6 +120,12 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '读取图片失败';
 }
 
+function alertReadError(message: string) {
+  if (typeof globalThis.alert === 'function') {
+    globalThis.alert(message);
+  }
+}
+
 export function createReferenceImageController({
   nodeId,
   data,
@@ -126,6 +133,7 @@ export function createReferenceImageController({
   assetsHydrated,
   updateNodeData,
   readImageFile,
+  onReadError = alertReadError,
 }: {
   nodeId: string;
   data: AppNode['data'];
@@ -133,6 +141,7 @@ export function createReferenceImageController({
   assetsHydrated: boolean;
   updateNodeData: (nodeId: string, patch: Partial<AppNode['data']>) => void;
   readImageFile: ReadImageFile;
+  onReadError?: OnReferenceImageReadError;
 }) {
   const referenceImages = resolveReferenceImages(data, assets);
   const rawReferenceImageIds = data.referenceImageIds ?? [];
@@ -163,12 +172,33 @@ export function createReferenceImageController({
   };
 
   const readAndAppendFiles = async (files: File[]) => {
-    const selectedFiles = selectImageFiles(files, { currentCount: referenceImages.length });
+    if (hasPendingReferenceHydration) return;
+
+    const existingInlineReferenceImages = usesReferenceImageIds
+      ? [...(data.referenceImages ?? [])]
+      : [...referenceImages];
+    const selectedFiles = selectImageFiles(files, {
+      currentCount: usesReferenceImageIds
+        ? referenceImageIds.length + existingInlineReferenceImages.length
+        : existingInlineReferenceImages.length,
+    });
+    let nextReferenceImages = existingInlineReferenceImages;
+
     for (const file of selectedFiles) {
       try {
-        appendReferenceImage(await readImageFile(file));
+        const nextImage = await readImageFile(file);
+        const availableSlots = usesReferenceImageIds
+          ? Math.max(0, 4 - referenceImageIds.length)
+          : 4;
+        nextReferenceImages = [...nextReferenceImages, nextImage].slice(0, availableSlots);
+
+        updateNodeData(nodeId, {
+          referenceImageIds: usesReferenceImageIds ? referenceImageIds : undefined,
+          referenceImages: nextReferenceImages,
+          referenceImage: undefined,
+        });
       } catch (error) {
-        updateNodeData(nodeId, { error: getErrorMessage(error) });
+        onReadError(getErrorMessage(error));
       }
     }
   };
@@ -204,6 +234,7 @@ export function useReferenceImages({
   assetsHydrated,
   updateNodeData,
   readImageFile = createBrowserImageFileReader(),
+  onReadError = alertReadError,
 }: {
   nodeId: string;
   data: AppNode['data'];
@@ -211,6 +242,7 @@ export function useReferenceImages({
   assetsHydrated: boolean;
   updateNodeData: (nodeId: string, patch: Partial<AppNode['data']>) => void;
   readImageFile?: ReadImageFile;
+  onReadError?: OnReferenceImageReadError;
 }) {
   const [isReadingFile, setIsReadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -221,6 +253,7 @@ export function useReferenceImages({
     assetsHydrated,
     updateNodeData,
     readImageFile,
+    onReadError,
   });
 
   const withReadingState = async (action: () => Promise<void>) => {

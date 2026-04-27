@@ -12,6 +12,8 @@ import {
 } from './useReferenceImages';
 
 const image = { data: 'base64', mimeType: 'image/png', url: 'data:image/png;base64,base64' };
+const secondImage = { data: 'second', mimeType: 'image/png', url: 'data:image/png;base64,second' };
+const thirdImage = { data: 'third', mimeType: 'image/webp', url: 'data:image/webp;base64,third' };
 
 test('canAddReferenceImage enforces hydration and four-image limit', () => {
   assert.equal(canAddReferenceImage({ hasPendingReferenceHydration: true, referenceCount: 0 }), false);
@@ -98,25 +100,106 @@ test('reference image controller upload and paste read through injected reader a
   ]);
 });
 
-test('reference image controller reports injected read failures and clears upload input', async () => {
+test('reference image controller accumulates multiple uploaded files with existing inline references', async () => {
   const patches: Array<{ nodeId: string; patch: unknown }> = [];
-  const png = { type: 'image/png', name: 'broken.png' } as File;
+  const png = { type: 'image/png', name: 'second' } as File;
+  const webp = { type: 'image/webp', name: 'third' } as File;
+  const controller = createReferenceImageController({
+    nodeId: 'prompt-1',
+    data: { referenceImages: [image] } as any,
+    assets: {},
+    assetsHydrated: true,
+    updateNodeData: (nodeId, patch) => patches.push({ nodeId, patch }),
+    readImageFile: async (file) => ({
+      data: file.name,
+      mimeType: file.type,
+      url: `data:${file.type};base64,${file.name}`,
+    }),
+  });
+
+  await controller.handleImageUpload({ target: { files: [png, webp], value: 'selected' } });
+
+  assert.deepEqual(patches.at(-1), {
+    nodeId: 'prompt-1',
+    patch: {
+      referenceImages: [image, secondImage, thirdImage],
+      referenceImageIds: undefined,
+      referenceImage: undefined,
+    },
+  });
+});
+
+test('reference image controller accumulates multiple uploaded files with existing asset references', async () => {
+  const patches: Array<{ nodeId: string; patch: unknown }> = [];
+  const png = { type: 'image/png', name: 'second' } as File;
+  const webp = { type: 'image/webp', name: 'third' } as File;
+  const controller = createReferenceImageController({
+    nodeId: 'prompt-1',
+    data: { referenceImageIds: ['asset-1'] } as any,
+    assets: {
+      'asset-1': { id: 'asset-1', data: 'base64', mimeType: 'image/png' },
+    },
+    assetsHydrated: true,
+    updateNodeData: (nodeId, patch) => patches.push({ nodeId, patch }),
+    readImageFile: async (file) => ({
+      data: file.name,
+      mimeType: file.type,
+      url: `data:${file.type};base64,${file.name}`,
+    }),
+  });
+
+  await controller.handleImageUpload({ target: { files: [png, webp], value: 'selected' } });
+
+  assert.deepEqual(patches.at(-1), {
+    nodeId: 'prompt-1',
+    patch: {
+      referenceImageIds: ['asset-1'],
+      referenceImages: [secondImage, thirdImage],
+      referenceImage: undefined,
+    },
+  });
+});
+
+test('reference image controller reports injected read failures without storing node errors and recovers on later reads', async () => {
+  const patches: Array<{ nodeId: string; patch: unknown }> = [];
+  const readErrors: string[] = [];
+  const broken = { type: 'image/png', name: 'broken.png' } as File;
+  const good = { type: 'image/png', name: 'good.png' } as File;
   const controller = createReferenceImageController({
     nodeId: 'prompt-1',
     data: { referenceImages: [] } as any,
     assets: {},
     assetsHydrated: true,
     updateNodeData: (nodeId, patch) => patches.push({ nodeId, patch }),
-    readImageFile: async () => {
-      throw new Error('read failed');
+    onReadError: (message) => readErrors.push(message),
+    readImageFile: async (file) => {
+      if (file.name === 'broken.png') throw new Error('read failed');
+      return {
+        data: file.name,
+        mimeType: file.type,
+        url: `data:${file.type};base64,${file.name}`,
+      };
     },
   });
 
-  const uploadEvent = { target: { files: [png], value: 'selected' } };
-  await controller.handleImageUpload(uploadEvent);
+  const failedUploadEvent = { target: { files: [broken], value: 'selected' } };
+  await controller.handleImageUpload(failedUploadEvent);
 
-  assert.equal(uploadEvent.target.value, '');
-  assert.deepEqual(patches, [{ nodeId: 'prompt-1', patch: { error: 'read failed' } }]);
+  const successfulUploadEvent = { target: { files: [good], value: 'selected' } };
+  await controller.handleImageUpload(successfulUploadEvent);
+
+  assert.equal(failedUploadEvent.target.value, '');
+  assert.equal(successfulUploadEvent.target.value, '');
+  assert.deepEqual(readErrors, ['read failed']);
+  assert.equal(patches.some(({ patch }) => 'error' in (patch as Record<string, unknown>)), false);
+  assert.deepEqual(patches, [{
+    nodeId: 'prompt-1',
+    patch: {
+      referenceImages: [{ data: 'good.png', mimeType: 'image/png', url: 'data:image/png;base64,good.png' }],
+      referenceImageIds: undefined,
+      referenceImage: undefined,
+    },
+  }]);
 });
 
 test('asset-backed reference add preserves referenceImageIds precedence and stores new inline image', () => {
