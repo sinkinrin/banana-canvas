@@ -1,11 +1,11 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore } from '../../store';
 import type { AppNode } from '../../store';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Edit3, Image as ImageIcon, Loader2, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
-import { generateImage, optimizePrompt } from '../../services/gemini';
+import { optimizePrompt } from '../../services/gemini';
 import { PromptTextarea } from './PromptTextarea';
 import {
   BANANA_ASPECT_RATIO_VALUES,
@@ -23,6 +23,7 @@ import { Image2OptionsPanel } from './Image2OptionsPanel';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { useReferenceImages } from './useReferenceImages';
 import { buildPromptMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
+import { usePromptGeneration } from './usePromptGeneration';
 
 const aspectRatioLabels: Record<BananaAspectRatio, string> = {
   '1:1': '1:1 (正方形)',
@@ -62,10 +63,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const [prompt, setPrompt] = useState(data.prompt || '');
   const [showSettings, setShowSettings] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [generatedCount, setGeneratedCount] = useState(0);
   const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const isGeneratingRef = useRef(false);
   const {
     fileInputRef,
     isReadingFile,
@@ -100,6 +98,20 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       updateNodeData(id, { prompt: nextPrompt });
     }
   };
+
+  const { generatedCount, runGeneration, abortGeneration } = usePromptGeneration({
+    nodeId: id,
+    nodePosition,
+    updateNodeData,
+    addNode,
+    deleteNode,
+    setEdges: (edges) => {
+      useStore.setState((state) => ({
+        edges: [...state.edges, ...edges],
+      }));
+    },
+    commitPrompt,
+  });
 
   const handleDelete = () => {
     deleteNode(id);
@@ -192,158 +204,19 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   };
 
   const handleGenerate = async (promptToUse = prompt) => {
-    if (!promptToUse.trim()) return;
-    if (isGeneratingRef.current) return;
-    if (hasPendingReferenceHydration) return;
-
-    isGeneratingRef.current = true;
-    commitPrompt(promptToUse);
-
-    // Create a new AbortController for this generation run
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    updateNodeData(id, { isLoading: true, error: undefined });
-    setGeneratedCount(0);
-
-    const baseX = nodePosition ? nodePosition.x + 400 : 0;
-    const baseY = nodePosition ? nodePosition.y : 0;
-    const createdAt = new Date().toISOString();
-    const generationReferenceData = referenceImageIds.length > 0
-      ? { referenceImageIds }
-      : referenceImages.length > 0
-        ? { referenceImages }
-        : {};
-    const placeholderNodeIds = Array.from({ length: batchCount }).map((_, index) =>
-      addNode(
-        'imageNode',
-        { x: baseX, y: baseY + index * 430 },
-        {
-          prompt: promptToUse,
-          imageModel,
-          aspectRatio,
-          imageSize,
-          bananaOptions: imageModel === 'banana' ? bananaOptions : undefined,
-          image2Options: imageModel === 'image2' ? image2Options : undefined,
-          isLoading: true,
-          error: undefined,
-          createdAt,
-          generationTitle: `${imageModelLabel} | ${promptToUse.slice(0, 28) || '生成任务'}`,
-          ...generationReferenceData,
-        }
-      )
-    );
-
-    useStore.setState((state) => ({
-      edges: [
-        ...state.edges,
-        ...placeholderNodeIds.map((nodeId) => ({ id: `e-${id}-${nodeId}`, source: id, target: nodeId })),
-      ],
-    }));
-
-    try {
-      const results = await Promise.allSettled(
-        placeholderNodeIds.map(async (placeholderNodeId) => {
-          const url = await generateImage({
-            prompt: promptToUse,
-            imageModel,
-            aspectRatio,
-            imageSize,
-            bananaOptions: imageModel === 'banana' ? bananaOptions : undefined,
-            image2Options: imageModel === 'image2' ? image2Options : undefined,
-            referenceImages: referenceImages.length > 0
-              ? referenceImages.map(img => ({ data: img.data, mimeType: img.mimeType }))
-              : undefined,
-            signal: controller.signal,
-          });
-
-          if (controller.signal.aborted) {
-            deleteNode(placeholderNodeId);
-            throw new DOMException('Aborted', 'AbortError');
-          }
-
-          updateNodeData(placeholderNodeId, {
-            imageUrl: url,
-            prompt: promptToUse,
-            imageModel,
-            aspectRatio,
-            imageSize,
-            bananaOptions: imageModel === 'banana' ? bananaOptions : undefined,
-            image2Options: imageModel === 'image2' ? image2Options : undefined,
-            isLoading: false,
-            error: undefined,
-          });
-          setGeneratedCount((prev) => prev + 1);
-          return url;
-        }).map((task, index) => task.catch((error) => {
-          const placeholderNodeId = placeholderNodeIds[index];
-          if (error?.name === 'AbortError') {
-            deleteNode(placeholderNodeId);
-            throw error;
-          }
-
-          const errorMessage = error?.message || '生成失败';
-          updateNodeData(placeholderNodeId, {
-            isLoading: false,
-            error: errorMessage,
-          });
-          throw error;
-        }))
-      );
-
-      // If every result was aborted, silently return — finally will clean up isLoading
-      const wasAborted = results.every(
-        (r) => r.status === 'rejected' && r.reason?.name === 'AbortError'
-      );
-      if (wasAborted) return;
-
-      results.forEach((result) => {
-        if (result.status === 'rejected' && result.reason?.name === 'AbortError') {
-          // Silently skip aborted items in mixed results
-        } else if (result.status === 'rejected') {
-          console.error('Image generation failed:', result.reason);
-        }
-      });
-
-      // Surface errors for non-abort failed items
-      const failures = results.filter(
-        (r) => r.status === 'rejected' && r.reason?.name !== 'AbortError'
-      );
-      if (failures.length > 0) {
-        const firstError = (failures[0] as PromiseRejectedResult).reason;
-        const errorMessage = firstError?.message || '生成失败';
-        updateNodeData(id, { error: errorMessage });
-
-        if (
-          imageModel === 'banana' &&
-          (
-            errorMessage.includes('Requested entity was not found') ||
-            errorMessage.includes('PERMISSION_DENIED') ||
-            errorMessage.includes('The caller does not have permission') ||
-            errorMessage.includes('API key not valid') ||
-            errorMessage.includes('API key is required')
-          )
-        ) {
-          const customKey = localStorage.getItem('custom_gemini_api_key');
-          if (customKey) {
-            localStorage.removeItem('custom_gemini_api_key');
-            alert('您填写的 API Key 无效或没有权限，请重新输入。');
-            window.location.reload();
-          } else if (window.aistudio?.openSelectKey) {
-            await window.aistudio.openSelectKey();
-          }
-        }
-      }
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') {
-        const errorMessage = error.message || '生成失败';
-        updateNodeData(id, { error: errorMessage });
-      }
-    } finally {
-      isGeneratingRef.current = false;
-      abortControllerRef.current = null;
-      updateNodeData(id, { isLoading: false });
-    }
+    await runGeneration({
+      prompt: promptToUse,
+      imageModel,
+      imageModelLabel,
+      aspectRatio,
+      imageSize,
+      bananaOptions,
+      image2Options,
+      batchCount,
+      referenceImageIds,
+      referenceImages,
+      hasPendingReferenceHydration,
+    });
   };
 
   return (
@@ -668,7 +541,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           {data.isLoading && (
             <button
               onClick={() => {
-                abortControllerRef.current?.abort();
+                abortGeneration();
                 updateNodeData(id, { isLoading: false });
               }}
               className="w-full py-1 text-[10px] transition-colors hover:text-[#96836F]"

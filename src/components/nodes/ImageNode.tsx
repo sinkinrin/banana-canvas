@@ -1,49 +1,47 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, Edit3, GitCompare } from 'lucide-react';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { ImageViewer } from '../ImageViewer';
 import { useStore } from '../../store';
 import type { AppNode } from '../../store';
 import {
-  createReferenceImagePayload,
-  imageAssetFromDataUrl,
   resolveImageUrl,
-  resolveReferenceImages,
   resolveSourceImageUrl,
-  type CanvasImageAsset,
   type InlineImageData,
 } from '../../lib/canvasState';
-import { generateImage } from '../../services/gemini';
 import { getImageModelConfig, normalizeImageModel } from '../../lib/imageModels';
 import { GeneratingImagePlaceholder } from './GeneratingImagePlaceholder';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { MaskCompareModal } from '../mask/MaskCompareModal';
 import { buildImageMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
+import {
+  buildDownloadFileName,
+  buildReferenceNodeData,
+  canRerunImageNode,
+  getRerunReferenceImages,
+  useImageNodeActions,
+} from './useImageNodeActions';
 
-export function canRerunImageNode(data: AppNode['data']) {
-  return Boolean(data.prompt) && data.generationMode !== 'mask-edit';
-}
-
-export function getRerunReferenceImages(
-  data: AppNode['data'],
-  assets: Record<string, CanvasImageAsset>
-) {
-  const referenceImages = resolveReferenceImages(data, assets);
-  return referenceImages.length > 0
-    ? referenceImages.map((image) => ({ data: image.data, mimeType: image.mimeType }))
-    : undefined;
-}
+export { canRerunImageNode, getRerunReferenceImages } from './useImageNodeActions';
 
 export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [isHovered, setIsHovered] = useState(false);
   const [showViewer, setShowViewer] = useState(false);
-  const [copiedImage, setCopiedImage] = useState(false);
-  const [copiedPrompt, setCopiedPrompt] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
-  const rerunAbortRef = useRef<AbortController | null>(null);
+  const {
+    copiedImage,
+    copiedPrompt,
+    isRegenerating,
+    setCopiedImage,
+    setCopiedPrompt,
+    setIsRegenerating,
+    rerunAbortRef,
+    generateImage: generateImageAction,
+    createReferenceImagePayload: createReferenceImagePayloadAction,
+    imageAssetFromDataUrl: imageAssetFromDataUrlAction,
+  } = useImageNodeActions();
   const { generateMaskImage } = useMaskGeneration();
   const deleteNode = useStore((state) => state.deleteNode);
   const addNode = useStore((state) => state.addNode);
@@ -56,12 +54,6 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const generationTitle = data.generationTitle || `${imageModelLabel} | ${data.prompt?.slice(0, 24) || '生成任务'}`;
   const canRerun = canRerunImageNode(data);
 
-  useEffect(() => {
-    return () => {
-      rerunAbortRef.current?.abort();
-    };
-  }, []);
-
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     deleteNode(id);
@@ -72,7 +64,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     if (!imageUrl) return;
     const a = document.createElement('a');
     a.href = imageUrl;
-    a.download = `banana-art-${Date.now()}.png`;
+    a.download = buildDownloadFileName();
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -111,7 +103,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     setIsRegenerating(true);
 
     try {
-      const newUrl = await generateImage({
+      const newUrl = await generateImageAction({
         prompt,
         imageModel,
         aspectRatio: data.aspectRatio || '1:1',
@@ -152,25 +144,24 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     }
 
     if (!imageUrl) return null;
-    const asset = imageAssetFromDataUrl(imageUrl);
+    const asset = imageAssetFromDataUrlAction(imageUrl);
     return asset ? { data: asset.data, mimeType: asset.mimeType, url: imageUrl } : null;
   };
 
   const createReferenceNode = () => {
     if (!imageUrl) return;
-    const referencePayload = createReferenceImagePayload(imageUrl, data.imageAssetId);
+    const referencePayload = createReferenceImagePayloadAction(imageUrl, data.imageAssetId);
     if (!referencePayload) return;
     const thisNode = useStore.getState().nodes.find((n) => n.id === id);
     const pos = thisNode?.position || { x: 0, y: 0 };
     const newNodeId = addNode('promptNode',
       { x: pos.x + 50, y: pos.y + 300 },
-      {
-        prompt: '',
+      buildReferenceNodeData({
         imageModel,
-        bananaOptions: imageModel === 'banana' ? data.bananaOptions : undefined,
-        image2Options: imageModel === 'image2' ? data.image2Options : undefined,
-        ...referencePayload,
-      }
+        bananaOptions: data.bananaOptions,
+        image2Options: data.image2Options,
+        referencePayload,
+      })
     );
     useStore.setState((state) => ({
       edges: [...state.edges, {

@@ -204,7 +204,11 @@ http://localhost:3000
 │  │  │  ├─ Image2OptionsPanel.tsx # Image2 高级参数面板
 │  │  │  ├─ BananaOptionsPanel.tsx # Banana2 高级参数面板
 │  │  │  ├─ GeneratingImagePlaceholder.tsx # 生成中过渡卡片
-│  │  │  └─ PromptTextarea.tsx     # 文本框与 Ctrl/Cmd+Enter 提交
+│  │  │  ├─ PromptTextarea.tsx     # 文本框与 Ctrl/Cmd+Enter 提交
+│  │  │  ├─ useReferenceImages.ts  # 参考图解析、上传/粘贴与上限控制
+│  │  │  ├─ usePromptGeneration.ts # 提示词节点生成流程
+│  │  │  ├─ useImageNodeActions.ts # 图片节点复制、下载、重跑与参考节点动作
+│  │  │  └─ useMaskGeneration.ts   # Image2 局部编辑共享请求逻辑
 │  │  ├─ mask/                     # Image2 蒙版编辑与对比弹窗
 │  │  ├─ projects/                 # 项目列表、缺失项目状态
 │  │  └─ edges/
