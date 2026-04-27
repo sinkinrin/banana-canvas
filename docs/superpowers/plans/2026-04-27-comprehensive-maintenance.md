@@ -566,6 +566,30 @@ test('provider failures still return 500 with a request ID', async () => {
   assert.match(response.body.error, /provider exploded/);
   assert.equal(typeof response.body.requestId, 'string');
 });
+
+test('optimize-prompt returns stable response shape through injected optimizer without image providers', async () => {
+  let imageProviderCalled = false;
+  const app = createApp({
+    generateBananaImage: async () => {
+      imageProviderCalled = true;
+      return 'data:image/png;base64,banana';
+    },
+    generateImage2Image: async () => {
+      imageProviderCalled = true;
+      return 'data:image/png;base64,image2';
+    },
+    optimizePrompt: async ({ prompt }) => {
+      assert.equal(prompt, 'short prompt');
+      return 'expanded prompt';
+    },
+  });
+
+  const response = await requestJson(app, '/api/optimize-prompt', { prompt: 'short prompt', customKey: 'test-key' });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { optimizedPrompt: 'expanded prompt' });
+  assert.equal(imageProviderCalled, false);
+});
 ```
 
 - [ ] **Step 2: Run targeted route tests and verify failure**
@@ -736,6 +760,7 @@ git commit -m "feat: route generation through validation"
 - Create: `src/server/proxy.ts`
 - Create: `src/server/proxy.test.ts`
 - Create: `src/server/providers/banana.ts`
+- Create: `src/server/providers/banana.test.ts`
 - Create: `src/server/providers/image2.ts`
 - Create: `src/server/providers/image2.test.ts`
 - Modify: `server.ts`
@@ -793,7 +818,12 @@ import assert from 'node:assert/strict';
 
 import {
   base64ToBlob,
+  buildImage2MultipartRequest,
+  extractImage2GeneratedUrl,
+  getImage2AttemptPlan,
+  parseImage2SseEvents,
   previewResponseBody,
+  selectImage2Endpoint,
   toImage2Size,
 } from './image2';
 
@@ -817,6 +847,108 @@ test('base64ToBlob creates a Blob with the source MIME type', async () => {
   assert.equal(blob.type, 'image/webp');
   assert.equal(await blob.text(), 'image bytes');
 });
+
+test('selectImage2Endpoint chooses edit endpoint when references or mask are present', () => {
+  assert.equal(selectImage2Endpoint({ referenceCount: 0, hasMask: false }), '/v1/images/generations');
+  assert.equal(selectImage2Endpoint({ referenceCount: 1, hasMask: false }), '/v1/images/edits');
+  assert.equal(selectImage2Endpoint({ referenceCount: 0, hasMask: true }), '/v1/images/edits');
+});
+
+test('getImage2AttemptPlan preserves proxy-direct fallback order', () => {
+  assert.deepEqual(
+    getImage2AttemptPlan({ proxyMode: 'auto', hasProxy: true }),
+    [
+      { label: 'proxy', useProxy: true },
+      { label: 'direct', useProxy: false },
+    ]
+  );
+  assert.deepEqual(getImage2AttemptPlan({ proxyMode: 'direct', hasProxy: true }), [{ label: 'direct', useProxy: false }]);
+  assert.deepEqual(getImage2AttemptPlan({ proxyMode: 'proxy', hasProxy: true }), [{ label: 'proxy', useProxy: true }]);
+});
+
+test('parseImage2SseEvents extracts generated image URLs from streaming events', () => {
+  assert.deepEqual(
+    parseImage2SseEvents([
+      'data: {"type":"response.output_text.delta","delta":"ignored"}',
+      'data: {"type":"response.image_generation.completed","image_url":"https://example.test/generated.png"}',
+      'data: [DONE]',
+    ].join('\n\n')),
+    [{ type: 'response.image_generation.completed', image_url: 'https://example.test/generated.png' }]
+  );
+});
+
+test('extractImage2GeneratedUrl normalizes generated URL and data URL responses', () => {
+  assert.equal(
+    extractImage2GeneratedUrl({ data: [{ url: '/files/generated.png' }] }, 'https://api.openai.com'),
+    'https://api.openai.com/files/generated.png'
+  );
+  assert.equal(
+    extractImage2GeneratedUrl({ data: [{ b64_json: 'abc' }] }, 'https://api.openai.com'),
+    'data:image/png;base64,abc'
+  );
+});
+
+test('buildImage2MultipartRequest includes mask and edit references in request construction', async () => {
+  const request = buildImage2MultipartRequest({
+    prompt: 'replace hat',
+    size: '1024x1024',
+    responseFormat: 'url',
+    outputFormat: 'png',
+    outputCompression: 90,
+    referenceImages: [{ data: Buffer.from('source').toString('base64'), mimeType: 'image/png' }],
+    maskImage: { data: Buffer.from('mask').toString('base64'), mimeType: 'image/png' },
+  });
+
+  assert.equal(request.method, 'POST');
+  assert.equal(request.endpoint, '/v1/images/edits');
+  assert.equal(request.body.get('prompt'), 'replace hat');
+  assert.equal(request.body.get('size'), '1024x1024');
+  assert.equal(request.body.get('response_format'), 'url');
+  assert.equal(request.body.getAll('image').length, 1);
+  assert.ok(request.body.get('mask'));
+});
+```
+
+Create `src/server/providers/banana.test.ts`:
+
+```ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  buildBananaProviderRequest,
+  extractBananaProviderImageUrl,
+} from './banana';
+
+test('buildBananaProviderRequest preserves prompt, model options, and inline references', () => {
+  const request = buildBananaProviderRequest({
+    prompt: 'draw',
+    aspectRatio: '16:9',
+    imageSize: '1K',
+    images: [{ data: Buffer.from('ref').toString('base64'), mimeType: 'image/png' }],
+    bananaOptions: { thinkingLevel: 'HIGH' },
+  }) as any;
+
+  assert.equal(request.model, 'gemini-3.1-flash-image-preview');
+  assert.equal(request.contents.parts[0].inlineData.mimeType, 'image/png');
+  assert.equal(request.contents.parts[1].text, 'draw');
+  assert.equal(request.config.imageConfig.aspectRatio, '16:9');
+  assert.equal(request.config.imageConfig.imageSize, '1K');
+  assert.equal(request.config.thinkingConfig.thinkingLevel, 'HIGH');
+});
+
+test('extractBananaProviderImageUrl returns a data URL from provider image parts', () => {
+  assert.equal(
+    extractBananaProviderImageUrl({
+      candidates: [{
+        content: {
+          parts: [{ inlineData: { mimeType: 'image/png', data: 'abc' } }],
+        },
+      }],
+    }),
+    'data:image/png;base64,abc'
+  );
+});
 ```
 
 - [ ] **Step 2: Run targeted tests and verify failure**
@@ -824,7 +956,7 @@ test('base64ToBlob creates a Blob with the source MIME type', async () => {
 Run:
 
 ```bash
-npx tsx --test src/server/proxy.test.ts src/server/providers/image2.test.ts
+npx tsx --test src/server/proxy.test.ts src/server/providers/banana.test.ts src/server/providers/image2.test.ts src/lib/imageModels.test.ts
 ```
 
 Expected: FAIL because the new modules do not exist.
@@ -950,7 +1082,7 @@ Update existing call sites to use `readPositiveIntEnv(process.env, name, fallbac
 
 - [ ] **Step 4: Extract Banana provider**
 
-Create `src/server/providers/banana.ts`:
+Create `src/server/providers/banana.ts`. Export `buildBananaProviderRequest` and `extractBananaProviderImageUrl` so request construction and provider response extraction remain covered without live Gemini calls:
 
 ```ts
 import { GoogleGenAI } from '@google/genai';
@@ -960,6 +1092,32 @@ import {
   type BananaOptions,
   type ReferenceImageInput,
 } from '../../lib/imageModels';
+
+export function buildBananaProviderRequest({
+  prompt,
+  aspectRatio,
+  imageSize,
+  images,
+  bananaOptions,
+}: {
+  prompt: string;
+  aspectRatio?: unknown;
+  imageSize?: unknown;
+  images: ReferenceImageInput[];
+  bananaOptions: BananaOptions;
+}) {
+  return buildBananaGenerateContentRequest({
+    prompt,
+    aspectRatio,
+    imageSize,
+    referenceImages: images,
+    bananaOptions,
+  });
+}
+
+export function extractBananaProviderImageUrl(response: unknown) {
+  return extractBananaImageUrl(response);
+}
 
 export async function generateBananaImage({
   prompt,
@@ -977,16 +1135,16 @@ export async function generateBananaImage({
   bananaOptions: BananaOptions;
 }) {
   const ai = new GoogleGenAI({ apiKey });
-  const request = buildBananaGenerateContentRequest({
+  const request = buildBananaProviderRequest({
     prompt,
     aspectRatio,
     imageSize,
-    referenceImages: images,
+    images,
     bananaOptions,
   });
 
   const response = await ai.models.generateContent(request as any);
-  const imageUrl = extractBananaImageUrl(response);
+  const imageUrl = extractBananaProviderImageUrl(response);
   if (imageUrl) return imageUrl;
 
   throw new Error('响应中未找到图像数据。');
@@ -995,9 +1153,79 @@ export async function generateBananaImage({
 
 - [ ] **Step 5: Extract Image2 provider**
 
-Create `src/server/providers/image2.ts` by moving the existing Image2-specific code from `server.ts` without changing behavior. Export these helpers for tests:
+Create `src/server/providers/image2.ts` by moving the existing Image2-specific code from `server.ts` without changing behavior. Export these helpers for tests, and use them inside `generateImage2Image` instead of duplicating endpoint, retry, parsing, URL, or multipart logic:
 
 ```ts
+export function selectImage2Endpoint({
+  referenceCount,
+  hasMask,
+}: {
+  referenceCount: number;
+  hasMask: boolean;
+}) {
+  return referenceCount > 0 || hasMask ? '/v1/images/edits' : '/v1/images/generations';
+}
+
+export function getImage2AttemptPlan({
+  proxyMode,
+  hasProxy,
+}: {
+  proxyMode: Image2ProxyMode;
+  hasProxy: boolean;
+}) {
+  if (proxyMode === 'direct' || !hasProxy) return [{ label: 'direct' as const, useProxy: false }];
+  if (proxyMode === 'proxy') return [{ label: 'proxy' as const, useProxy: true }];
+  return [
+    { label: 'proxy' as const, useProxy: true },
+    { label: 'direct' as const, useProxy: false },
+  ];
+}
+
+export function parseImage2SseEvents(body: string) {
+  return body
+    .split(/\n\n+/)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.startsWith('data: '))
+    .map((chunk) => chunk.slice('data: '.length).trim())
+    .filter((chunk) => chunk && chunk !== '[DONE]')
+    .map((chunk) => JSON.parse(chunk) as Record<string, unknown>);
+}
+
+export function extractImage2GeneratedUrl(responseBody: unknown, baseUrl: string) {
+  const first = Array.isArray((responseBody as any)?.data) ? (responseBody as any).data[0] : undefined;
+  if (typeof first?.b64_json === 'string') return `data:image/png;base64,${first.b64_json}`;
+  if (typeof first?.url === 'string') return new URL(first.url, baseUrl).toString();
+  throw new Error('响应中未找到图像 URL。');
+}
+
+export function buildImage2MultipartRequest({
+  prompt,
+  size,
+  responseFormat,
+  outputFormat,
+  outputCompression,
+  referenceImages,
+  maskImage,
+}: {
+  prompt: string;
+  size: string;
+  responseFormat?: string;
+  outputFormat?: string;
+  outputCompression?: number;
+  referenceImages: ReferenceImageInput[];
+  maskImage?: ReferenceImageInput;
+}) {
+  const body = new FormData();
+  body.set('prompt', prompt);
+  body.set('size', size);
+  if (responseFormat) body.set('response_format', responseFormat);
+  if (outputFormat) body.set('output_format', outputFormat);
+  if (typeof outputCompression === 'number') body.set('output_compression', String(outputCompression));
+  for (const reference of referenceImages) body.append('image', base64ToBlob(reference), 'reference.png');
+  if (maskImage) body.set('mask', base64ToBlob(maskImage), 'mask.png');
+  return { endpoint: selectImage2Endpoint({ referenceCount: referenceImages.length, hasMask: Boolean(maskImage) }), method: 'POST' as const, body };
+}
+
 export function previewResponseBody(text: string) {
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;
 }
@@ -1017,7 +1245,7 @@ export function base64ToBlob(image: ReferenceImageInput) {
 }
 ```
 
-The exported `generateImage2Image` signature must match `Image2GenerateInput` from `generationRoutes.ts`. Keep the existing retry constants, `IMAGE2_HEDGED_CANCEL_REASON`, `fetchImage2WithNetworkFallback`, SSE parsing, generated URL normalization, multipart mask handling, and error messages unchanged.
+The exported `generateImage2Image` signature must match `Image2GenerateInput` from `generationRoutes.ts`. Keep the existing retry constants, `IMAGE2_HEDGED_CANCEL_REASON`, `fetchImage2WithNetworkFallback`, SSE parsing, generated URL normalization, multipart mask handling, and error messages unchanged. `fetchImage2WithNetworkFallback` must consume `getImage2AttemptPlan`, so tests can prove proxy-first and direct fallback behavior without real network calls.
 
 - [ ] **Step 6: Wire extracted providers**
 
@@ -1061,7 +1289,7 @@ if (proxyUrl) {
 Run:
 
 ```bash
-npx tsx --test src/server/proxy.test.ts src/server/providers/image2.test.ts src/server/generationRoutes.test.ts
+npx tsx --test src/server/proxy.test.ts src/server/providers/banana.test.ts src/server/providers/image2.test.ts src/server/generationRoutes.test.ts src/lib/imageModels.test.ts
 npm run lint
 ```
 
@@ -1070,7 +1298,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add server.ts src/server/proxy.ts src/server/proxy.test.ts src/server/providers/banana.ts src/server/providers/image2.ts src/server/providers/image2.test.ts src/server/generationRoutes.ts
+git add server.ts src/server/proxy.ts src/server/proxy.test.ts src/server/providers/banana.ts src/server/providers/banana.test.ts src/server/providers/image2.ts src/server/providers/image2.test.ts src/server/generationRoutes.ts
 git commit -m "refactor: extract generation providers and proxy helpers"
 ```
 
@@ -1127,7 +1355,14 @@ test('project routes create, rename, load, list, and delete local projects', asy
       });
       assert.equal(created.status, 200);
       const createdBody = await created.json() as any;
+      assert.deepEqual(Object.keys(createdBody).sort(), ['project']);
       assert.equal(createdBody.project.name, 'First');
+
+      const listed = await fetch(`${baseUrl}/api/projects`);
+      assert.equal(listed.status, 200);
+      const listedBody = await listed.json() as any;
+      assert.ok(Array.isArray(listedBody.projects));
+      assert.equal(listedBody.projects[0].id, createdBody.project.id);
 
       const renamed = await fetch(`${baseUrl}/api/projects/${createdBody.project.id}`, {
         method: 'PATCH',
@@ -1135,14 +1370,53 @@ test('project routes create, rename, load, list, and delete local projects', asy
         body: JSON.stringify({ name: ' Renamed ' }),
       });
       assert.equal(renamed.status, 200);
-      assert.equal((await renamed.json() as any).project.name, 'Renamed');
+      const renamedBody = await renamed.json() as any;
+      assert.deepEqual(Object.keys(renamedBody).sort(), ['project']);
+      assert.equal(renamedBody.project.name, 'Renamed');
+
+      const saved = await fetch(`${baseUrl}/api/projects/${createdBody.project.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes: [{ id: 'node-1', type: 'promptNode', position: { x: 0, y: 0 }, data: { prompt: 'draw' } }],
+          edges: [],
+          assets: {},
+        }),
+      });
+      assert.equal(saved.status, 200);
+      assert.deepEqual(await saved.json(), { ok: true });
 
       const loaded = await fetch(`${baseUrl}/api/projects/${createdBody.project.id}`);
       assert.equal(loaded.status, 200);
-      assert.equal((await loaded.json() as any).project.name, 'Renamed');
+      const loadedBody = await loaded.json() as any;
+      assert.equal(loadedBody.project.name, 'Renamed');
+      assert.equal(loadedBody.snapshot.nodes[0].id, 'node-1');
+
+      const imported = await fetch(`${baseUrl}/api/projects/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projects: [{
+            project: {
+              id: 'imported-project',
+              name: 'Imported',
+              createdAt: '2026-04-27T00:00:00.000Z',
+              updatedAt: '2026-04-27T00:00:00.000Z',
+            },
+            snapshot: { nodes: [], edges: [], assets: {} },
+          }],
+        }),
+      });
+      assert.equal(imported.status, 200);
+      assert.deepEqual(await imported.json(), { ok: true });
+
+      const listAfterImport = await fetch(`${baseUrl}/api/projects`);
+      const listAfterImportBody = await listAfterImport.json() as any;
+      assert.equal(listAfterImportBody.projects.some((project: any) => project.id === 'imported-project'), true);
 
       const deleted = await fetch(`${baseUrl}/api/projects/${createdBody.project.id}`, { method: 'DELETE' });
       assert.equal(deleted.status, 200);
+      assert.deepEqual(await deleted.json(), { ok: true });
 
       const missing = await fetch(`${baseUrl}/api/projects/${createdBody.project.id}`);
       assert.equal(missing.status, 404);
@@ -1378,11 +1652,13 @@ In README's main directory tree, replace the single `server.ts` description with
 Run:
 
 ```bash
-npx tsx --test src/server/projectsRoutes.test.ts src/server/generationRoutes.test.ts src/server/proxy.test.ts src/server/providers/image2.test.ts
+npx tsx --test src/server/projectsRoutes.test.ts src/server/generationRoutes.test.ts src/server/proxy.test.ts src/server/providers/banana.test.ts src/server/providers/image2.test.ts src/lib/imageModels.test.ts
 npm run lint
 ```
 
 Expected: PASS.
+
+This test is the public endpoint stability coverage for `GET /api/projects`, `POST /api/projects`, `POST /api/projects/import`, `GET /api/projects/:projectId`, `PUT /api/projects/:projectId`, `PATCH /api/projects/:projectId`, and `DELETE /api/projects/:projectId`. It must assert response shapes and must not import or call generation providers.
 
 - [ ] **Step 7: Commit**
 
@@ -1415,6 +1691,7 @@ import assert from 'node:assert/strict';
 
 import {
   DEFAULT_PROJECT_DIALOG_NAME,
+  createProjectDialogCallbacks,
   getProjectNameSubmissionValue,
   shouldCloseDialogForKey,
 } from './projectDialogLogic';
@@ -1428,6 +1705,97 @@ test('empty project name submissions preserve existing default-name behavior', (
 test('Escape closes dialogs and other keys do not', () => {
   assert.equal(shouldCloseDialogForKey('Escape'), true);
   assert.equal(shouldCloseDialogForKey('Enter'), false);
+});
+
+test('cancel closes the active dialog without repository calls', async () => {
+  const calls: string[] = [];
+  const actions = createProjectDialogCallbacks({
+    projectRepository: {
+      createProject: async () => {
+        calls.push('create');
+        return { id: 'created' };
+      },
+      renameProject: async () => calls.push('rename'),
+      deleteProject: async () => calls.push('delete'),
+    },
+    closeDialog: () => calls.push('close'),
+    refreshProjects: async () => calls.push('refresh'),
+    navigateTo: (path) => calls.push(`navigate:${path}`),
+    getProjectPath: (projectId) => `/projects/${projectId}`,
+  });
+
+  actions.cancel();
+
+  assert.deepEqual(calls, ['close']);
+});
+
+test('create submission closes, calls repository, and navigates to the created project', async () => {
+  const calls: string[] = [];
+  const actions = createProjectDialogCallbacks({
+    projectRepository: {
+      createProject: async (name) => {
+        calls.push(`create:${name}`);
+        return { id: 'created-project' };
+      },
+      renameProject: async () => calls.push('rename'),
+      deleteProject: async () => calls.push('delete'),
+    },
+    closeDialog: () => calls.push('close'),
+    refreshProjects: async () => calls.push('refresh'),
+    navigateTo: (path) => calls.push(`navigate:${path}`),
+    getProjectPath: (projectId) => `/projects/${projectId}`,
+  });
+
+  await actions.confirmCreate('New Project');
+
+  assert.deepEqual(calls, ['close', 'create:New Project', 'navigate:/projects/created-project']);
+});
+
+test('rename and delete submissions close, call repository actions, and refresh projects', async () => {
+  const calls: string[] = [];
+  const actions = createProjectDialogCallbacks({
+    projectRepository: {
+      createProject: async () => ({ id: 'unused' }),
+      renameProject: async (projectId, name) => calls.push(`rename:${projectId}:${name}`),
+      deleteProject: async (projectId) => calls.push(`delete:${projectId}`),
+    },
+    closeDialog: () => calls.push('close'),
+    refreshProjects: async () => calls.push('refresh'),
+    navigateTo: (path) => calls.push(`navigate:${path}`),
+    getProjectPath: (projectId) => `/projects/${projectId}`,
+  });
+
+  await actions.confirmRename('project-1', 'Renamed');
+  await actions.confirmDelete('project-1');
+
+  assert.deepEqual(calls, [
+    'close',
+    'rename:project-1:Renamed',
+    'refresh',
+    'close',
+    'delete:project-1',
+    'refresh',
+  ]);
+});
+
+test('Escape callback cancels through the same close path', () => {
+  const calls: string[] = [];
+  const actions = createProjectDialogCallbacks({
+    projectRepository: {
+      createProject: async () => ({ id: 'unused' }),
+      renameProject: async () => calls.push('rename'),
+      deleteProject: async () => calls.push('delete'),
+    },
+    closeDialog: () => calls.push('close'),
+    refreshProjects: async () => calls.push('refresh'),
+    navigateTo: (path) => calls.push(`navigate:${path}`),
+    getProjectPath: (projectId) => `/projects/${projectId}`,
+  });
+
+  actions.handleKeyDown('Enter');
+  actions.handleKeyDown('Escape');
+
+  assert.deepEqual(calls, ['close']);
 });
 ```
 
@@ -1514,6 +1882,50 @@ export function getProjectNameSubmissionValue(value: string) {
 
 export function shouldCloseDialogForKey(key: string) {
   return key === 'Escape';
+}
+
+type ProjectDialogRepository = {
+  createProject: (name: string) => Promise<{ id: string }>;
+  renameProject: (projectId: string, name: string) => Promise<unknown>;
+  deleteProject: (projectId: string) => Promise<unknown>;
+};
+
+export function createProjectDialogCallbacks({
+  projectRepository,
+  closeDialog,
+  refreshProjects,
+  navigateTo,
+  getProjectPath,
+}: {
+  projectRepository: ProjectDialogRepository;
+  closeDialog: () => void;
+  refreshProjects: () => Promise<void>;
+  navigateTo: (path: string) => void;
+  getProjectPath: (projectId: string) => string;
+}) {
+  const cancel = () => closeDialog();
+
+  return {
+    cancel,
+    handleKeyDown(key: string) {
+      if (shouldCloseDialogForKey(key)) cancel();
+    },
+    async confirmCreate(name: string) {
+      closeDialog();
+      const project = await projectRepository.createProject(name);
+      navigateTo(getProjectPath(project.id));
+    },
+    async confirmRename(projectId: string, name: string) {
+      closeDialog();
+      await projectRepository.renameProject(projectId, name);
+      await refreshProjects();
+    },
+    async confirmDelete(projectId: string) {
+      closeDialog();
+      await projectRepository.deleteProject(projectId);
+      await refreshProjects();
+    },
+  };
 }
 ```
 
@@ -1843,6 +2255,8 @@ import {
   buildAddReferenceImagePatch,
   buildRemoveReferenceImagePatch,
   canAddReferenceImage,
+  extractPasteImageFiles,
+  selectImageFiles,
 } from './useReferenceImages';
 
 const image = { data: 'base64', mimeType: 'image/png', url: 'data:image/png;base64,base64' };
@@ -1851,6 +2265,27 @@ test('canAddReferenceImage enforces hydration and four-image limit', () => {
   assert.equal(canAddReferenceImage({ hasPendingReferenceHydration: true, referenceCount: 0 }), false);
   assert.equal(canAddReferenceImage({ hasPendingReferenceHydration: false, referenceCount: 4 }), false);
   assert.equal(canAddReferenceImage({ hasPendingReferenceHydration: false, referenceCount: 3 }), true);
+});
+
+test('selectImageFiles keeps only image files and respects remaining slots', () => {
+  const png = { type: 'image/png', name: 'a.png' } as File;
+  const jpg = { type: 'image/jpeg', name: 'b.jpg' } as File;
+  const text = { type: 'text/plain', name: 'notes.txt' } as File;
+
+  assert.deepEqual(selectImageFiles([png, text, jpg], { currentCount: 3, maxCount: 4 }), [png]);
+  assert.deepEqual(selectImageFiles([png, jpg], { currentCount: 4, maxCount: 4 }), []);
+});
+
+test('extractPasteImageFiles reads image files from clipboard items without DOM dependencies', () => {
+  const png = { type: 'image/png', name: 'paste.png' } as File;
+  const files = extractPasteImageFiles({
+    items: [
+      { kind: 'string', type: 'text/plain', getAsFile: () => null },
+      { kind: 'file', type: 'image/png', getAsFile: () => png },
+    ],
+  });
+
+  assert.deepEqual(files, [png]);
 });
 
 test('asset-backed reference add preserves referenceImageIds precedence and stores new inline image', () => {
@@ -1914,6 +2349,10 @@ test('remove reference image handles asset-backed and inline references', () => 
       referenceImage: undefined,
     }
   );
+});
+
+test('add and remove patches are blocked by pending hydration through canAddReferenceImage', () => {
+  assert.equal(canAddReferenceImage({ hasPendingReferenceHydration: true, referenceCount: 1 }), false);
 });
 ```
 
@@ -2032,6 +2471,25 @@ export function canAddReferenceImage({
   return !hasPendingReferenceHydration && referenceCount < 4;
 }
 
+export function selectImageFiles(
+  files: Iterable<File>,
+  { currentCount, maxCount = 4 }: { currentCount: number; maxCount?: number }
+) {
+  const remainingSlots = Math.max(0, maxCount - currentCount);
+  return Array.from(files)
+    .filter((file) => file.type.startsWith('image/'))
+    .slice(0, remainingSlots);
+}
+
+export function extractPasteImageFiles(clipboardData: {
+  items?: Iterable<{ kind: string; type: string; getAsFile: () => File | null }>;
+}) {
+  return Array.from(clipboardData.items ?? [])
+    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+}
+
 export function buildAddReferenceImagePatch({
   usesReferenceImageIds,
   referenceImageIds,
@@ -2127,6 +2585,31 @@ export function useReferenceImages({
     }));
   };
 
+  const readAndAppendFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setIsReadingFile(true);
+    try {
+      const selectedFiles = selectImageFiles(files, { currentCount: referenceImages.length });
+      for (const file of selectedFiles) {
+        appendReferenceImage(await readImageFile(file));
+      }
+    } finally {
+      setIsReadingFile(false);
+    }
+  };
+
+  const handleImageUpload = async (event: { target: { files: FileList | File[] | null; value: string } }) => {
+    await readAndAppendFiles(Array.from(event.target.files ?? []));
+    event.target.value = '';
+  };
+
+  const handlePaste = async (event: { clipboardData: Parameters<typeof extractPasteImageFiles>[0]; preventDefault: () => void }) => {
+    const files = extractPasteImageFiles(event.clipboardData);
+    if (!files.length) return;
+    event.preventDefault();
+    await readAndAppendFiles(files);
+  };
+
   return {
     fileInputRef,
     isReadingFile,
@@ -2137,6 +2620,8 @@ export function useReferenceImages({
     hasPendingReferenceHydration,
     appendReferenceImage,
     removeReferenceImage,
+    handleImageUpload,
+    handlePaste,
   };
 }
 ```
@@ -2229,10 +2714,10 @@ Refactor `PromptNode.tsx` and `ImageNode.tsx` to call `buildPromptMaskGeneration
 
 - [ ] **Step 6: Refactor PromptNode reference image code through the hook**
 
-In `PromptNode.tsx`, delete the local `readImageFile`, reference ID filtering, `appendReferenceImage`, and `removeReferenceImage` definitions. Import:
+In `PromptNode.tsx`, delete the local `readImageFile`, reference ID filtering, upload/paste file selection, `appendReferenceImage`, and `removeReferenceImage` definitions. Import:
 
 ```ts
-import { readImageFile, useReferenceImages } from './useReferenceImages';
+import { useReferenceImages } from './useReferenceImages';
 ```
 
 Use:
@@ -2247,6 +2732,8 @@ const {
   hasPendingReferenceHydration,
   appendReferenceImage,
   removeReferenceImage,
+  handleImageUpload,
+  handlePaste,
 } = useReferenceImages({
   nodeId: id,
   data,
@@ -2256,7 +2743,7 @@ const {
 });
 ```
 
-Keep `handleImageUpload`, `handlePaste`, and rendered controls with the same labels and disabled states.
+Wire the returned `handleImageUpload` and `handlePaste` to the existing file input and paste target. Keep rendered controls with the same labels and disabled states.
 
 - [ ] **Step 7: Run targeted and relevant tests**
 
@@ -2300,6 +2787,7 @@ import {
   buildGenerationReferenceData,
   buildImagePlaceholderData,
   buildPromptGenerationEdges,
+  createPromptGenerationRunner,
 } from './usePromptGeneration';
 
 const referenceImage = { data: 'base64', mimeType: 'image/png', url: 'data:image/png;base64,base64' };
@@ -2358,6 +2846,269 @@ test('buildPromptGenerationEdges creates one edge per generated image node', () 
       { id: 'e-prompt-1-image-2', source: 'prompt-1', target: 'image-2' },
     ]
   );
+});
+
+test('prompt generation runner ignores empty prompt without side effects', async () => {
+  const calls: string[] = [];
+  const runner = createPromptGenerationRunner({
+    generateImage: async () => {
+      calls.push('generate');
+      return 'data:image/png;base64,result';
+    },
+    addNode: () => {
+      calls.push('add');
+      return 'image-1';
+    },
+    deleteNode: (nodeId) => calls.push(`delete:${nodeId}`),
+    updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
+    setEdges: (edges) => calls.push(`edges:${edges.length}`),
+    commitPrompt: () => calls.push('commit'),
+    now: () => '2026-04-27T00:00:00.000Z',
+  });
+
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: '   ',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+
+  assert.deepEqual(calls, []);
+});
+
+test('prompt generation runner blocks concurrent runs', async () => {
+  const calls: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const runner = createPromptGenerationRunner({
+    generateImage: async () => {
+      calls.push('generate');
+      await gate;
+      return 'data:image/png;base64,result';
+    },
+    addNode: () => {
+      calls.push('add');
+      return 'image-1';
+    },
+    deleteNode: (nodeId) => calls.push(`delete:${nodeId}`),
+    updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
+    setEdges: (edges) => calls.push(`edges:${edges.length}`),
+    commitPrompt: () => calls.push('commit'),
+    now: () => '2026-04-27T00:00:00.000Z',
+  });
+
+  const first = runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw again',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+  release();
+  await first;
+
+  assert.equal(calls.filter((call) => call === 'generate').length, 1);
+});
+
+test('prompt generation runner blocks pending reference hydration', async () => {
+  const calls: string[] = [];
+  const runner = createPromptGenerationRunner({
+    generateImage: async () => 'data:image/png;base64,result',
+    addNode: () => 'image-1',
+    deleteNode: (nodeId) => calls.push(`delete:${nodeId}`),
+    updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
+    setEdges: (edges) => calls.push(`edges:${edges.length}`),
+    commitPrompt: () => calls.push('commit'),
+    now: () => '2026-04-27T00:00:00.000Z',
+  });
+
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: ['asset-1'],
+    referenceImages: [],
+    hasPendingReferenceHydration: true,
+    nodePosition: { x: 0, y: 0 },
+  });
+
+  assert.deepEqual(calls, ['update:prompt-1:{"error":"参考图仍在加载中，请稍候"}']);
+});
+
+test('prompt generation runner creates batch placeholders, edges, and final images', async () => {
+  const calls: string[] = [];
+  const runner = createPromptGenerationRunner({
+    generateImage: async ({ prompt }) => `data:image/png;base64,${prompt}`,
+    addNode: (_type, position, data) => {
+      const id = `image-${calls.filter((call) => call.startsWith('add:')).length + 1}`;
+      calls.push(`add:${id}:${position.x},${position.y}:${data.generationTitle}`);
+      return id;
+    },
+    deleteNode: (nodeId) => calls.push(`delete:${nodeId}`),
+    updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
+    setEdges: (edges) => calls.push(`edges:${edges.map((edge) => edge.target).join(',')}`),
+    commitPrompt: () => calls.push('commit'),
+    now: () => '2026-04-27T00:00:00.000Z',
+  });
+
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 2,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 10, y: 20 },
+  });
+
+  assert.deepEqual(calls.slice(0, 4), [
+    'commit',
+    'update:prompt-1:{"isLoading":true,"error":undefined}',
+    'add:image-1:410,20:Banana | draw',
+    'add:image-2:410,450:Banana | draw',
+  ]);
+  assert.ok(calls.includes('edges:image-1,image-2'));
+  assert.ok(calls.some((call) => call.includes('"imageUrl":"data:image/png;base64,draw"')));
+  assert.ok(calls.includes('update:prompt-1:{"isLoading":false}'));
+});
+
+test('prompt generation runner deletes placeholders on abort', async () => {
+  const calls: string[] = [];
+  const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });
+  const runner = createPromptGenerationRunner({
+    generateImage: async () => {
+      throw abortError;
+    },
+    addNode: () => {
+      calls.push('add:image-1');
+      return 'image-1';
+    },
+    deleteNode: (nodeId) => calls.push(`delete:${nodeId}`),
+    updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
+    setEdges: (edges) => calls.push(`edges:${edges.length}`),
+    commitPrompt: () => calls.push('commit'),
+    now: () => '2026-04-27T00:00:00.000Z',
+  });
+
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+
+  assert.ok(calls.includes('delete:image-1'));
+  assert.ok(calls.includes('update:prompt-1:{"isLoading":false}'));
+});
+
+test('prompt generation runner marks provider failures on placeholder and source node', async () => {
+  const calls: string[] = [];
+  const runner = createPromptGenerationRunner({
+    generateImage: async () => {
+      throw new Error('provider failed');
+    },
+    addNode: () => 'image-1',
+    deleteNode: (nodeId) => calls.push(`delete:${nodeId}`),
+    updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
+    setEdges: (edges) => calls.push(`edges:${edges.length}`),
+    commitPrompt: () => calls.push('commit'),
+    now: () => '2026-04-27T00:00:00.000Z',
+  });
+
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+
+  assert.ok(calls.some((call) => call === 'update:image-1:{"isLoading":false,"error":"provider failed"}'));
+  assert.ok(calls.some((call) => call === 'update:prompt-1:{"error":"provider failed"}'));
+});
+
+test('prompt generation runner handles invalid Banana key and always clears loading', async () => {
+  const calls: string[] = [];
+  const runner = createPromptGenerationRunner({
+    generateImage: async () => {
+      throw new Error('API key not valid. Please pass a valid API key.');
+    },
+    addNode: () => 'image-1',
+    deleteNode: (nodeId) => calls.push(`delete:${nodeId}`),
+    updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
+    setEdges: (edges) => calls.push(`edges:${edges.length}`),
+    commitPrompt: () => calls.push('commit'),
+    removeApiKey: (key) => calls.push(`remove-key:${key}`),
+    openSelectKey: () => calls.push('open-key-picker'),
+    now: () => '2026-04-27T00:00:00.000Z',
+  });
+
+  await runner.run({
+    nodeId: 'prompt-1',
+    prompt: 'draw',
+    imageModel: 'banana',
+    imageModelLabel: 'Banana',
+    aspectRatio: '1:1',
+    imageSize: '1K',
+    batchCount: 1,
+    referenceImageIds: [],
+    referenceImages: [],
+    hasPendingReferenceHydration: false,
+    nodePosition: { x: 0, y: 0 },
+  });
+
+  assert.ok(calls.includes('remove-key:custom_gemini_api_key'));
+  assert.ok(calls.includes('open-key-picker'));
+  assert.ok(calls.includes('update:prompt-1:{"isLoading":false}'));
 });
 ```
 
@@ -2492,6 +3243,149 @@ export function buildPromptGenerationEdges(sourceId: string, targetIds: string[]
   return targetIds.map((nodeId) => ({ id: `e-${sourceId}-${nodeId}`, source: sourceId, target: nodeId }));
 }
 
+export type PromptGenerationRunInput = {
+  nodeId: string;
+  prompt: string;
+  imageModel: ImageModelId;
+  imageModelLabel: string;
+  aspectRatio: string;
+  imageSize: string;
+  bananaOptions?: BananaOptions;
+  image2Options?: Image2Options;
+  batchCount: number;
+  referenceImageIds: string[];
+  referenceImages: InlineImageData[];
+  hasPendingReferenceHydration: boolean;
+  nodePosition?: { x: number; y: number };
+};
+
+export type PromptGenerationRunnerDeps = {
+  generateImage: (input: {
+    prompt: string;
+    imageModel: ImageModelId;
+    aspectRatio: string;
+    imageSize: string;
+    bananaOptions?: BananaOptions;
+    image2Options?: Image2Options;
+    referenceImages?: Array<{ data: string; mimeType: string }>;
+    referenceImageIds?: string[];
+    signal?: AbortSignal;
+  }) => Promise<string>;
+  addNode: (type: 'imageNode', position: { x: number; y: number }, data: AppNode['data']) => string;
+  deleteNode: (nodeId: string) => void;
+  updateNodeData: (nodeId: string, patch: Partial<AppNode['data']>) => void;
+  setEdges: (edges: ReturnType<typeof buildPromptGenerationEdges>) => void;
+  commitPrompt: () => void;
+  now: () => string;
+  createAbortController?: () => AbortController;
+  removeApiKey?: (key: string) => void;
+  openSelectKey?: () => void;
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '图像生成失败';
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function isInvalidBananaKeyError(error: unknown) {
+  return error instanceof Error && /API key not valid|API_KEY_INVALID|invalid api key/i.test(error.message);
+}
+
+export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
+  let isGenerating = false;
+  let abortController: AbortController | null = null;
+
+  return {
+    get abortController() {
+      return abortController;
+    },
+    async run(input: PromptGenerationRunInput) {
+      const prompt = input.prompt.trim();
+      if (!prompt || isGenerating) return;
+      if (input.hasPendingReferenceHydration) {
+        deps.updateNodeData(input.nodeId, { error: '参考图仍在加载中，请稍候' });
+        return;
+      }
+
+      isGenerating = true;
+      abortController = deps.createAbortController?.() ?? new AbortController();
+      const createdNodeIds: string[] = [];
+
+      try {
+        deps.commitPrompt();
+        deps.updateNodeData(input.nodeId, { isLoading: true, error: undefined });
+        const referenceData = buildGenerationReferenceData({
+          referenceImageIds: input.referenceImageIds,
+          referenceImages: input.referenceImages,
+        });
+        const baseX = input.nodePosition ? input.nodePosition.x + 400 : 0;
+        const baseY = input.nodePosition ? input.nodePosition.y : 0;
+        const batchCount = Math.max(1, Math.floor(input.batchCount));
+
+        for (let index = 0; index < batchCount; index += 1) {
+          const nodeId = deps.addNode(
+            'imageNode',
+            { x: baseX, y: baseY + index * 430 },
+            buildImagePlaceholderData({
+              prompt,
+              imageModel: input.imageModel,
+              imageModelLabel: input.imageModelLabel,
+              aspectRatio: input.aspectRatio,
+              imageSize: input.imageSize,
+              bananaOptions: input.bananaOptions,
+              image2Options: input.image2Options,
+              createdAt: deps.now(),
+              referenceData,
+            })
+          );
+          createdNodeIds.push(nodeId);
+        }
+
+        deps.setEdges(buildPromptGenerationEdges(input.nodeId, createdNodeIds));
+
+        await Promise.all(createdNodeIds.map(async (nodeId) => {
+          try {
+            const imageUrl = await deps.generateImage({
+              prompt,
+              imageModel: input.imageModel,
+              aspectRatio: input.aspectRatio,
+              imageSize: input.imageSize,
+              bananaOptions: input.bananaOptions,
+              image2Options: input.image2Options,
+              referenceImages: input.referenceImages.map((image) => ({ data: image.data, mimeType: image.mimeType })),
+              referenceImageIds: input.referenceImageIds,
+              signal: abortController?.signal,
+            });
+            deps.updateNodeData(nodeId, { imageUrl, isLoading: false, error: undefined });
+          } catch (error) {
+            if (isAbortError(error)) {
+              deps.deleteNode(nodeId);
+              return;
+            }
+            const message = getErrorMessage(error);
+            deps.updateNodeData(nodeId, { isLoading: false, error: message });
+            deps.updateNodeData(input.nodeId, { error: message });
+            if (input.imageModel === 'banana' && isInvalidBananaKeyError(error)) {
+              deps.removeApiKey?.('custom_gemini_api_key');
+              deps.openSelectKey?.();
+            }
+          }
+        }));
+      } finally {
+        deps.updateNodeData(input.nodeId, { isLoading: false });
+        abortController = null;
+        isGenerating = false;
+      }
+    },
+    abort() {
+      abortController?.abort();
+    },
+  };
+}
+
 export function usePromptGeneration({
   nodeId,
   nodePosition,
@@ -2499,6 +3393,7 @@ export function usePromptGeneration({
   addNode,
   deleteNode,
   setEdges,
+  commitPrompt,
 }: {
   nodeId: string;
   nodePosition?: { x: number; y: number };
@@ -2506,31 +3401,34 @@ export function usePromptGeneration({
   addNode: (type: 'imageNode', position: { x: number; y: number }, data: AppNode['data']) => string;
   deleteNode: (nodeId: string) => void;
   setEdges: (edges: ReturnType<typeof buildPromptGenerationEdges>) => void;
+  commitPrompt: () => void;
 }) {
   const [generatedCount, setGeneratedCount] = useState(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const isGeneratingRef = useRef(false);
+  const runnerRef = useRef<ReturnType<typeof createPromptGenerationRunner> | null>(null);
+  if (!runnerRef.current) {
+    runnerRef.current = createPromptGenerationRunner({
+      generateImage,
+      updateNodeData,
+      addNode,
+      deleteNode,
+      setEdges,
+      commitPrompt,
+      now: () => new Date().toISOString(),
+      removeApiKey: (key) => localStorage.removeItem(key),
+      openSelectKey: () => window.aistudio?.openSelectKey?.(),
+    });
+  }
 
   return {
     generatedCount,
-    abortControllerRef,
-    isGeneratingRef,
     setGeneratedCount,
-    generateImage,
-    buildRunContext({ batchCount }: { batchCount: number }) {
-      const baseX = nodePosition ? nodePosition.x + 400 : 0;
-      const baseY = nodePosition ? nodePosition.y : 0;
-      return Array.from({ length: batchCount }).map((_, index) => ({ x: baseX, y: baseY + index * 430 }));
-    },
-    updateNodeData,
-    addNode,
-    deleteNode,
-    setEdges,
+    runGeneration: (input: Omit<PromptGenerationRunInput, 'nodeId' | 'nodePosition'>) => runnerRef.current!.run({ ...input, nodeId, nodePosition }),
+    abortGeneration: () => runnerRef.current?.abort(),
   };
 }
 ```
 
-Move the remaining async generation body from `PromptNode.tsx` into this hook in the same task. Keep these behaviors unchanged:
+Refactor `PromptNode.tsx` so `handleGenerate` only collects current node settings and calls `runGeneration`. The hook module owns the async generation runner, abort handling, placeholder creation, provider calls, error updates, and loading cleanup. Keep these behaviors unchanged and covered by the runner tests above:
 
 - empty prompt does not generate
 - concurrent generate calls are ignored
