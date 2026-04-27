@@ -51,11 +51,14 @@ Existing model parameter builders and normalizers remain in `src/lib/imageModels
 
 Generation request validation will run before dispatching to Banana or Image2. It will reject malformed requests with `400` responses and clear error messages. Provider failures will continue to return `500` with a request ID.
 
+The current API behavior gives `referenceImages` precedence over `referenceImage`: when `referenceImages` exists, `referenceImage` is ignored rather than appended. This maintenance pass will preserve that edge-case behavior. Validation should operate on the effective reference input path only, and the effective reference list is capped at four images.
+
 Validation rules:
 
 - `prompt`, when present, must be a string.
 - `imageModel` is normalized with existing model rules.
-- `referenceImage` and `referenceImages` are accepted, but the combined reference list must contain at most four images.
+- `referenceImage` and `referenceImages` are accepted, preserving current precedence where `referenceImages` wins when present.
+- The effective reference image list must contain at most four images.
 - Each reference image must have `data` and `mimeType` strings.
 - Image MIME types must start with `image/`.
 - Base64 data must be non-empty and decodable.
@@ -105,6 +108,8 @@ The extraction must keep store mutations compatible with existing tests and pers
 - `test`: `tsx --test "src/**/*.test.ts" "src/**/*.test.tsx"`
 - `check`: `npm run lint && npm test && npm run build`
 
+`package-lock.json` will also be updated so the package rename is reflected consistently in dependency metadata.
+
 `npm install` will remain a setup step, not part of `check`. Install commands mutate `node_modules` and can modify dependency metadata; verification commands should be repeatable and avoid changing the working tree. Fresh environments should run `npm ci` when a lockfile is present, or `npm install` for local setup, before running `npm run check`.
 
 README will document `npm test` and `npm run check`, while keeping the existing initial dependency installation instructions.
@@ -113,12 +118,15 @@ README will document `npm test` and `npm run check`, while keeping the existing 
 
 Implementation will follow test-driven development.
 
+The existing test suite uses `node:test` plus server tests and static React markup assertions. This pass will not add jsdom, happy-dom, Testing Library, or another browser-like DOM dependency. Dialog and hook behavior should be tested through extracted pure logic and callback helpers where possible, with rendered structure covered through `renderToStaticMarkup`.
+
 Targeted tests:
 
 - `requestValidation` unit tests for invalid prompt types, too many reference images, malformed image payloads, invalid mask usage, and valid normalized payloads.
 - Route-level tests where practical for `400` vs `500` response behavior without calling real providers.
-- Dialog component tests for create, rename, delete, cancel, Escape, and empty-name submission behavior.
-- Hook tests for reference image limits, prompt generation placeholder creation, rerun reference resolution, and shared mask generation behavior.
+- Pure logic tests for dialog state helpers and extracted callbacks covering create, rename, delete, cancel, Escape, and empty-name submission behavior.
+- `renderToStaticMarkup` tests for rendered dialog markup, labels, destructive state, and accessible button/form structure.
+- Pure logic tests for reference image limits, prompt generation placeholder creation, rerun reference resolution, and shared mask generation behavior.
 - Existing image model, project storage, project repository, canvas state, and node tests must keep passing.
 
 Final verification:
