@@ -1,9 +1,9 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore } from '../../store';
 import type { AppNode } from '../../store';
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Edit3, Image as ImageIcon, Loader2, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
-import { resolveReferenceImages, type InlineImageData } from '../../lib/canvasState';
+import { type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
 import { generateImage, optimizePrompt } from '../../services/gemini';
 import { PromptTextarea } from './PromptTextarea';
@@ -21,23 +21,8 @@ import {
 import { BananaOptionsPanel } from './BananaOptionsPanel';
 import { Image2OptionsPanel } from './Image2OptionsPanel';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
-
-async function readImageFile(file: File): Promise<{ data: string; mimeType: string; url: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64String = event.target?.result as string;
-      const match = base64String.match(/^data:(image\/[a-z]+);base64,(.+)$/);
-      if (match) {
-        resolve({ mimeType: match[1], data: match[2], url: base64String });
-      } else {
-        reject(new Error('Invalid image format'));
-      }
-    };
-    reader.onerror = () => reject(new Error('读取图片失败'));
-    reader.readAsDataURL(file);
-  });
-}
+import { useReferenceImages } from './useReferenceImages';
+import { buildPromptMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
 
 const aspectRatioLabels: Record<BananaAspectRatio, string> = {
   '1:1': '1:1 (正方形)',
@@ -77,19 +62,27 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const [prompt, setPrompt] = useState(data.prompt || '');
   const [showSettings, setShowSettings] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [isReadingFile, setIsReadingFile] = useState(false);
   const [generatedCount, setGeneratedCount] = useState(0);
   const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isGeneratingRef = useRef(false);
-  const referenceImages = resolveReferenceImages(data, assets);
-  const rawReferenceImageIds = data.referenceImageIds ?? [];
-  const referenceImageIds = assetsHydrated
-    ? rawReferenceImageIds.filter((referenceImageId) => assets[referenceImageId])
-    : rawReferenceImageIds;
-  const usesReferenceImageIds = data.referenceImageIds != null;
-  const hasPendingReferenceHydration = !assetsHydrated && rawReferenceImageIds.length > 0;
+  const {
+    fileInputRef,
+    isReadingFile,
+    referenceImages,
+    referenceImageIds,
+    hasPendingReferenceHydration,
+    removeReferenceImage,
+    handleImageUpload,
+    handlePaste,
+  } = useReferenceImages({
+    nodeId: id,
+    data,
+    assets,
+    assetsHydrated,
+    updateNodeData,
+  });
+  const { generateMaskImage } = useMaskGeneration();
   const aspectRatio = normalizeBananaAspectRatio(data.aspectRatio) ?? '1:1';
   const imageSize = normalizeBananaImageSize(data.imageSize) ?? '1K';
   const batchCount = data.batchCount || 1;
@@ -102,44 +95,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     setPrompt(data.prompt || '');
   }, [data.prompt]);
 
-  const appendReferenceImage = (nextImage: { data: string; mimeType: string; url: string }) => {
-    if (hasPendingReferenceHydration) return;
-    if (referenceImages.length >= 4) return;
-
-    if (usesReferenceImageIds) {
-      updateNodeData(id, {
-        referenceImageIds,
-        referenceImages: [nextImage],
-        referenceImage: undefined,
-      });
-      return;
-    }
-
-    updateNodeData(id, {
-      referenceImages: [...referenceImages, nextImage].slice(0, 4),
-      referenceImageIds: undefined,
-      referenceImage: undefined,
-    });
-  };
-
-  const removeReferenceImage = (index: number) => {
-    if (hasPendingReferenceHydration) return;
-    if (usesReferenceImageIds) {
-      updateNodeData(id, {
-        referenceImageIds: referenceImageIds.filter((_, currentIndex) => currentIndex !== index),
-        referenceImages: undefined,
-        referenceImage: undefined,
-      });
-      return;
-    }
-
-    updateNodeData(id, {
-      referenceImages: referenceImages.filter((_, currentIndex) => currentIndex !== index),
-      referenceImageIds: undefined,
-      referenceImage: undefined,
-    });
-  };
-
   const commitPrompt = (nextPrompt: string) => {
     if (nextPrompt !== (data.prompt || '')) {
       updateNodeData(id, { prompt: nextPrompt });
@@ -150,23 +105,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     deleteNode(id);
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset input so the same file can be re-selected later
-    e.target.value = '';
-
-    setIsReadingFile(true);
-    try {
-      const newRefImage = await readImageFile(file);
-      appendReferenceImage(newRefImage);
-    } catch {
-      alert('读取图片失败，请重试');
-    } finally {
-      setIsReadingFile(false);
-    }
-  };
-
   const handleRemoveImage = (index: number) => {
     removeReferenceImage(index);
   };
@@ -174,10 +112,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const handleMaskGenerate = async ({ prompt: maskPrompt, maskImage, sourceImage }: MaskGeneratePayload) => {
     if (!maskEditorSource) return;
 
-    const editReferences = [
-      sourceImage,
-      ...referenceImages.filter((_, index) => index !== maskEditorSource.index),
-    ].slice(0, 4);
     const baseX = nodePosition ? nodePosition.x + 400 : 0;
     const baseY = nodePosition ? nodePosition.y : 0;
     const createdAt = new Date().toISOString();
@@ -208,15 +142,16 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     }));
 
     try {
-      const url = await generateImage({
-        prompt: maskPrompt,
-        imageModel: 'image2',
+      const url = await generateMaskImage(buildPromptMaskGenerationPayload({
+        maskPrompt,
+        maskImage,
+        sourceImage,
+        sourceIndex: maskEditorSource.index,
+        referenceImages,
         aspectRatio,
         imageSize,
         image2Options,
-        referenceImages: editReferences.map((image) => ({ data: image.data, mimeType: image.mimeType })),
-        maskImage,
-      });
+      }));
 
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
@@ -408,29 +343,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       isGeneratingRef.current = false;
       abortControllerRef.current = null;
       updateNodeData(id, { isLoading: false });
-    }
-  };
-
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
-        if (!file) continue;
-
-        if (referenceImages.length >= 4) break;
-
-        setIsReadingFile(true);
-        try {
-          const newRefImage = await readImageFile(file);
-          appendReferenceImage(newRefImage);
-        } catch {
-          alert('读取剪贴板图片失败');
-        } finally {
-          setIsReadingFile(false);
-        }
-        break;
-      }
     }
   };
 

@@ -19,6 +19,7 @@ import { getImageModelConfig, normalizeImageModel } from '../../lib/imageModels'
 import { GeneratingImagePlaceholder } from './GeneratingImagePlaceholder';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { MaskCompareModal } from '../mask/MaskCompareModal';
+import { buildImageMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
 
 export function canRerunImageNode(data: AppNode['data']) {
   return Boolean(data.prompt) && data.generationMode !== 'mask-edit';
@@ -43,6 +44,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   const rerunAbortRef = useRef<AbortController | null>(null);
+  const { generateMaskImage } = useMaskGeneration();
   const deleteNode = useStore((state) => state.deleteNode);
   const addNode = useStore((state) => state.addNode);
   const assets = useStore((state) => state.assets);
@@ -219,15 +221,14 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     }));
 
     try {
-      const url = await generateImage({
-        prompt: maskPrompt,
-        imageModel: 'image2',
+      const url = await generateMaskImage(buildImageMaskGenerationPayload({
+        maskPrompt,
+        maskImage,
+        sourceImage,
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
         image2Options: data.image2Options,
-        referenceImages: [{ data: sourceImage.data, mimeType: sourceImage.mimeType }],
-        maskImage,
-      });
+      }));
 
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
