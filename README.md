@@ -210,10 +210,17 @@ http://localhost:3000
 │  │  └─ edges/
 │  │     └─ DeletableEdge.tsx      # 可悬停删除的边
 │  ├─ pages/                       # 项目列表页与项目画布页
+│  ├─ server/
+│  │  ├─ app.ts                    # Express app factory and API route mounting
+│  │  ├─ projectsRoutes.ts         # 本地项目 CRUD/import API
+│  │  ├─ generationRoutes.ts       # 生图与提示词优化 API
+│  │  ├─ requestValidation.ts      # 生图请求校验与规范化
+│  │  ├─ proxy.ts                  # 代理、undici agent 与 fetch 包装
+│  │  └─ providers/                # Banana 与 Image2 provider 调用
 │  ├─ services/gemini.ts           # 前端调用后端接口
 │  ├─ store.ts                     # 画布状态和历史记录
 │  └─ lib/                         # 模型参数、项目存储、资产归档、路由等
-├─ server.ts                       # Express API 与 Vite 中间件入口
+├─ server.ts                       # 环境加载、Vite/static 中间件和监听入口
 ├─ metadata.json                   # AI Studio 元数据
 └─ .env.example                    # 示例环境变量
 ```
