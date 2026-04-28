@@ -130,7 +130,16 @@ http://localhost:3000
 - 前端仍使用 `zustand + zundo` 管理画布状态和最多 50 步历史记录。
 - 如果 `/api/projects` 不可用，会回退到 IndexedDB，并可在本地 API 可用时迁移旧浏览器项目。
 - 未被当前画布或历史引用的图片资产会自动清理，避免无限膨胀。
+- 本地文件存储会为图片资产记录 `byteLength` 和 `sha256`，重复保存未变化资产时会复用已有文件；如果同一资产 ID 的内容确实变化，会重新写入。
 - `data/` 已被 `.gitignore` 忽略，避免误提交用户本地项目图片。
+
+### 性能与资源注意事项
+
+- 常规项目加载和空画布首屏开销较小；Canvas 代码按路由懒加载。
+- 项目自动保存会 debounce，并且不会重复写入未变化的本地图片文件。
+- 当前保存接口仍会发送完整画布快照；包含大量大图的项目在节点移动或文本修改时仍可能产生较大的 JSON 请求。后续如果要进一步优化，需要把图片资产上传和画布元数据保存拆成增量协议。
+- Image2 局部编辑的画笔移动不会反复扫描整张 mask 画布；大图撤销历史会按约 32 MB 内存预算动态减少帧数，小图最多保留 10 帧。
+- 代理和 Image2 runtime 配置支持 `.env` 热重载；旧连接池由运行时 agent 缓存管理，频繁切换代理配置时建议观察连接数和内存。
 
 ### Banana2 高级参数
 
@@ -229,6 +238,8 @@ http://localhost:3000
 │  │  ├─ generationRoutes.ts       # 生图与提示词优化 API
 │  │  ├─ requestValidation.ts      # 生图请求校验与规范化
 │  │  ├─ proxy.ts                  # 代理、undici agent 与 fetch 包装
+│  │  ├─ runtimeConfig.ts          # .env 热重载、运行时配置和校验
+│  │  ├─ runtimeProxy.ts           # 运行时代理配置同步
 │  │  └─ providers/                # Banana 与 Image2 provider 调用
 │  ├─ services/gemini.ts           # 前端调用后端接口
 │  ├─ store.ts                     # 画布状态和历史记录
