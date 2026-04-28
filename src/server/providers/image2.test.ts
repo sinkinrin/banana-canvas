@@ -252,3 +252,138 @@ test('generateImage2Image downloads generated image URLs with current global fet
     }
   }
 });
+
+test('generateImage2Image reads image2 settings from hot-reloaded runtime config', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; authorization: string | null; model: string }> = [];
+
+  try {
+    globalThis.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      const body = JSON.parse(String(init?.body));
+      calls.push({
+        url: String(input),
+        authorization: headers.get('authorization'),
+        model: body.model,
+      });
+      return new Response(JSON.stringify({ data: [{ b64_json: 'abc' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    const [{ createRuntimeConfigManager }, imported] = await Promise.all([
+      import('../runtimeConfig'),
+      import(`./image2.ts?runtime-config-${Date.now()}`),
+    ]);
+    const runtimeConfig = createRuntimeConfigManager({
+      IMAGE2_BASE_URL: 'https://relay-one.example/v1',
+      IMAGE2_API_KEY: 'first-key',
+      IMAGE2_MODEL: 'gpt-image-2',
+      IMAGE2_ENDPOINT_TYPE: 'images',
+      IMAGE2_PROXY_MODE: 'direct',
+      IMAGE2_MAX_ATTEMPTS: '1',
+      IMAGE2_RETRY_DELAY_MS: '1',
+    });
+
+    await imported.generateImage2Image({
+      requestId: 'runtime-config-first',
+      prompt: 'draw',
+      images: [],
+      image2Options: {},
+      runtimeConfig,
+    });
+
+    const reload = runtimeConfig.reload({
+      IMAGE2_BASE_URL: 'https://relay-two.example/v1',
+      IMAGE2_API_KEY: 'second-key',
+      IMAGE2_MODEL: 'custom-chat-model',
+      IMAGE2_ENDPOINT_TYPE: 'chat',
+      IMAGE2_PROXY_MODE: 'direct',
+      IMAGE2_MAX_ATTEMPTS: '1',
+      IMAGE2_RETRY_DELAY_MS: '1',
+    });
+    assert.equal(reload.ok, true);
+
+    await imported.generateImage2Image({
+      requestId: 'runtime-config-second',
+      prompt: 'draw',
+      images: [],
+      image2Options: {},
+      runtimeConfig,
+    });
+
+    assert.deepEqual(calls, [
+      {
+        url: 'https://relay-one.example/v1/images/generations',
+        authorization: 'Bearer first-key',
+        model: 'gpt-image-2',
+      },
+      {
+        url: 'https://relay-two.example/v1/chat/completions',
+        authorization: 'Bearer second-key',
+        model: 'custom-chat-model',
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('generateImage2Image downloads generated image URLs through the current image2 proxy dispatcher', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; dispatcher: unknown }> = [];
+
+  try {
+    globalThis.fetch = async (input, init) => {
+      calls.push({
+        url: String(input),
+        dispatcher: (init as { dispatcher?: unknown } | undefined)?.dispatcher,
+      });
+      if (String(input).endsWith('/images/generations')) {
+        return new Response(JSON.stringify({ data: [{ url: 'https://cdn.example.test/generated.png' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+    };
+
+    const [{ createRuntimeConfigManager }, imported] = await Promise.all([
+      import('../runtimeConfig'),
+      import(`./image2.ts?generated-url-proxy-${Date.now()}`),
+    ]);
+    const runtimeConfig = createRuntimeConfigManager({
+      IMAGE2_BASE_URL: 'https://relay.example/v1',
+      IMAGE2_API_KEY: 'relay-key',
+      IMAGE2_MODEL: 'gpt-image-2',
+      IMAGE2_ENDPOINT_TYPE: 'images',
+      IMAGE2_PROXY_MODE: 'proxy',
+      IMAGE2_HTTPS_PROXY: 'http://proxy.example',
+      IMAGE2_MAX_ATTEMPTS: '1',
+      IMAGE2_RETRY_DELAY_MS: '1',
+    });
+
+    const imageUrl = await imported.generateImage2Image({
+      requestId: 'generated-url-proxy-test',
+      prompt: 'draw',
+      images: [],
+      image2Options: { responseFormat: 'url' },
+      runtimeConfig,
+    });
+
+    assert.equal(imageUrl, 'data:image/png;base64,AQID');
+    assert.deepEqual(calls.map((call) => call.url), [
+      'https://relay.example/v1/images/generations',
+      'https://cdn.example.test/generated.png',
+    ]);
+    assert.ok(calls[0].dispatcher);
+    assert.ok(calls[1].dispatcher);
+    assert.equal(calls[1].dispatcher, calls[0].dispatcher);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

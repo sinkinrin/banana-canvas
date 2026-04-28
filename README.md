@@ -57,7 +57,9 @@ IMAGE2_MODEL=你的_Image2_模型名
 
 `gpt-image-*` 模型会自动走 `/v1/images/generations` 或 `/v1/images/edits`；其他模型默认走 `/v1/chat/completions`。如需强制指定，可设置 `IMAGE2_ENDPOINT_TYPE=images` 或 `IMAGE2_ENDPOINT_TYPE=chat`。
 
-如果你在需要代理的网络环境下访问 Gemini 或 image2 中转，也可以额外设置：
+服务端启动后会监听 `.env`。`GEMINI_API_KEY` 和 Image2 相关配置可以热更新；如果新配置校验失败，服务端会记录错误并继续使用上一份有效配置。`PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 是启动期配置，变更后会提示需要重启。
+
+如果你在需要代理的网络环境下访问 image2 中转，也可以额外设置：
 
 ```bash
 HTTPS_PROXY=http://127.0.0.1:7890
@@ -161,6 +163,7 @@ http://localhost:3000
 | --- | --- |
 | `GEMINI_API_KEY` | 本地或服务端调用 Gemini API 时使用的默认 Key |
 | `IMAGE2_BASE_URL` | Image2 中转 API base URL，使用 Image2 时必须配置，例如 `https://example.com/v1` |
+| `IMAGE2_CHAT_COMPLETIONS_URL` | 可选，chat completions 完整 URL；未设置 `IMAGE2_BASE_URL` 时作为 fallback |
 | `IMAGE2_API_KEY` | Image2 中转接口 Key，使用 Image2 时必须配置 |
 | `IMAGE2_MODEL` | 发送到 Image2 中转接口的模型名，使用 Image2 时必须配置 |
 | `IMAGE2_ENDPOINT_TYPE` | 可选，`images` 或 `chat`；默认 `gpt-image-*` 走 images，其他模型走 chat |
@@ -173,10 +176,16 @@ http://localhost:3000
 | `IMAGE2_REQUEST_TIMEOUT_MS` | 可选，image2 单次请求超时，默认 `240000` |
 | `IMAGE2_RETRY_DELAY_MS` | 可选，image2 两次尝试之间的等待时间，默认 `1000` |
 | `IMAGE2_PROXY_CONNECT_TIMEOUT_MS` | 可选，image2 代理建连超时，默认 `60000` |
-| `BANANA_DATA_DIR` | 可选，本地项目文件存储目录，默认 `./data` |
-| `HTTPS_PROXY` | 可选，为服务端请求配置 HTTPS 代理；banana 和 image2 都会复用 |
-| `HTTP_PROXY` | 可选，为服务端请求配置 HTTP 代理；banana 和 image2 都会复用 |
+| `IMAGE2_DIRECT_CONNECT_TIMEOUT_MS` | 可选，image2 直连建连超时，默认 `60000` |
+| `IMAGE2_DIRECT_ALLOW_H2` | 可选，是否允许 image2 直连 HTTP/2，默认 `true` |
+| `PORT` | 可选，服务端监听端口，默认 `3000`；启动期配置，修改后需重启 |
+| `NODE_ENV` | 可选，`production` 时使用静态构建产物；启动期配置，修改后需重启 |
+| `BANANA_DATA_DIR` | 可选，本地项目文件存储目录，默认 `./data`；启动期配置，修改后需重启 |
+| `HTTPS_PROXY` | 可选，为 image2 服务端请求配置 HTTPS 代理 |
+| `HTTP_PROXY` | 可选，为 image2 服务端请求配置 HTTP 代理 |
 | `APP_URL` | `.env.example` 中保留的 AI Studio 模板变量，当前主要流程未直接使用 |
+
+除 `PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 外，上表中的服务端运行时变量会从 `.env` 热更新。URL、整数、布尔值和枚举值会在初始加载和每次 reload 时统一校验。
 
 ## 可用脚本
 

@@ -11,6 +11,7 @@ import type {
   Image2Options,
   ReferenceImageInput,
 } from '../lib/imageModels';
+import { getRuntimeConfig, type RuntimeConfigManager } from './runtimeConfig';
 
 export type BananaGenerateInput = {
   prompt: string;
@@ -57,8 +58,8 @@ function sendValidationFailure(res: express.Response, error: string) {
   res.status(400).json({ error });
 }
 
-function resolveApiKey(request: ValidGenerateImageRequest) {
-  return request.customKey || process.env.GEMINI_API_KEY;
+function resolveApiKey(request: ValidGenerateImageRequest, runtimeConfig: RuntimeConfigManager) {
+  return request.customKey || runtimeConfig.get().geminiApiKey;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -67,7 +68,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export function mountGenerationRoutes(
   app: express.Express,
-  { providers }: { providers: GenerationProviders }
+  {
+    providers,
+    runtimeConfig = { get: getRuntimeConfig, reload: () => ({ ok: true, config: getRuntimeConfig() }) },
+  }: { providers: GenerationProviders; runtimeConfig?: RuntimeConfigManager }
 ) {
   app.post('/api/generate-image', async (req, res) => {
     const requestId = createRequestId();
@@ -78,7 +82,7 @@ export function mountGenerationRoutes(
     }
 
     const body = validation.value;
-    const apiKey = resolveApiKey(body);
+    const apiKey = resolveApiKey(body, runtimeConfig);
     if (body.provider === 'gemini' && !apiKey) {
       res.status(401).json({ error: '需要 API Key' });
       return;
@@ -119,7 +123,7 @@ export function mountGenerationRoutes(
     try {
       const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
       const customKey = typeof req.body?.customKey === 'string' ? req.body.customKey : undefined;
-      const apiKey = customKey || process.env.GEMINI_API_KEY;
+      const apiKey = customKey || runtimeConfig.get().geminiApiKey;
       if (!apiKey) {
         res.status(401).json({ error: '需要 API Key' });
         return;

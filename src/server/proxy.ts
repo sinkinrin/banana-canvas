@@ -3,6 +3,7 @@ import {
   resolveImage2AllowH2,
   resolveImage2ProxyMode,
 } from '../lib/imageModels';
+import { getRuntimeConfig } from './runtimeConfig';
 
 export type FetchInitWithDispatcher = RequestInit & { dispatcher?: unknown };
 export type EnvLike = Record<string, string | undefined>;
@@ -11,14 +12,18 @@ export const DEFAULT_IMAGE2_REQUEST_TIMEOUT_MS = 240_000;
 export const DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS = 60_000;
 
 let proxyAgent: ProxyAgent | null = null;
-let proxyAgentUrl = '';
+let proxyAgentKey = '';
 let image2DirectAgent: Agent | null = null;
+let image2DirectAgentKey = '';
+let originalGlobalFetch: typeof fetch | null = null;
+let globalProxyFetchUrl = '';
+let globalProxyFetchEnv: EnvLike = {};
 
-export function getConfiguredProxyUrl(env: EnvLike = process.env) {
+export function getConfiguredProxyUrl(env: EnvLike = getRuntimeConfig().env) {
   return env.IMAGE2_HTTPS_PROXY || env.HTTPS_PROXY || env.HTTP_PROXY || '';
 }
 
-export function getImage2ProxyMode(proxyUrl = getConfiguredProxyUrl(), env: EnvLike = process.env) {
+export function getImage2ProxyMode(proxyUrl = getConfiguredProxyUrl(), env: EnvLike = getRuntimeConfig().env) {
   return resolveImage2ProxyMode(env.IMAGE2_PROXY_MODE, Boolean(proxyUrl));
 }
 
@@ -71,33 +76,33 @@ export function redactProxyUrl(proxyUrl: string) {
   }
 }
 
-export function getProxyAgent(proxyUrl: string, env: EnvLike = process.env) {
-  if (!proxyAgent || proxyAgentUrl !== proxyUrl) {
+export function getProxyAgent(proxyUrl: string, env: EnvLike = getRuntimeConfig().env) {
+  const proxyConnectTimeoutMs = readPositiveIntEnv(
+    env,
+    'IMAGE2_PROXY_CONNECT_TIMEOUT_MS',
+    DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS
+  );
+  const requestTimeoutMs = readPositiveIntEnv(
+    env,
+    'IMAGE2_REQUEST_TIMEOUT_MS',
+    DEFAULT_IMAGE2_REQUEST_TIMEOUT_MS
+  );
+  const nextProxyAgentKey = `${proxyUrl}|${proxyConnectTimeoutMs}|${requestTimeoutMs}`;
+
+  if (!proxyAgent || proxyAgentKey !== nextProxyAgentKey) {
     proxyAgent = new ProxyAgent({
       uri: proxyUrl,
-      connectTimeout: readPositiveIntEnv(
-        env,
-        'IMAGE2_PROXY_CONNECT_TIMEOUT_MS',
-        DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS
-      ),
-      headersTimeout: readPositiveIntEnv(
-        env,
-        'IMAGE2_REQUEST_TIMEOUT_MS',
-        DEFAULT_IMAGE2_REQUEST_TIMEOUT_MS
-      ),
-      bodyTimeout: readPositiveIntEnv(
-        env,
-        'IMAGE2_REQUEST_TIMEOUT_MS',
-        DEFAULT_IMAGE2_REQUEST_TIMEOUT_MS
-      ),
+      connectTimeout: proxyConnectTimeoutMs,
+      headersTimeout: requestTimeoutMs,
+      bodyTimeout: requestTimeoutMs,
     });
-    proxyAgentUrl = proxyUrl;
+    proxyAgentKey = nextProxyAgentKey;
   }
 
   return proxyAgent;
 }
 
-export function getImage2DirectAgent(env: EnvLike = process.env) {
+export function getImage2DirectAgent(env: EnvLike = getRuntimeConfig().env) {
   const requestTimeoutMs = readPositiveIntEnv(
     env,
     'IMAGE2_REQUEST_TIMEOUT_MS',
@@ -109,14 +114,16 @@ export function getImage2DirectAgent(env: EnvLike = process.env) {
     DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS
   );
   const allowH2 = resolveImage2AllowH2(env.IMAGE2_DIRECT_ALLOW_H2);
+  const nextDirectAgentKey = `${allowH2}|${connectTimeoutMs}|${requestTimeoutMs}`;
 
-  if (!image2DirectAgent) {
+  if (!image2DirectAgent || image2DirectAgentKey !== nextDirectAgentKey) {
     image2DirectAgent = new Agent({
       allowH2,
       connectTimeout: connectTimeoutMs,
       headersTimeout: requestTimeoutMs,
       bodyTimeout: requestTimeoutMs,
     });
+    image2DirectAgentKey = nextDirectAgentKey;
   }
 
   return image2DirectAgent;
@@ -124,13 +131,38 @@ export function getImage2DirectAgent(env: EnvLike = process.env) {
 
 export function applyGlobalProxyFetch({
   proxyUrl,
-  directFetch = globalThis.fetch.bind(globalThis),
+  directFetch,
+  env = getRuntimeConfig().env,
 }: {
   proxyUrl: string;
   directFetch?: typeof fetch;
+  env?: EnvLike;
 }) {
-  const agent = getProxyAgent(proxyUrl);
+  if (!proxyUrl) {
+    if (originalGlobalFetch) {
+      globalThis.fetch = originalGlobalFetch;
+      originalGlobalFetch = null;
+      globalProxyFetchUrl = '';
+      globalProxyFetchEnv = {};
+    }
+    return;
+  }
+
+  if (!originalGlobalFetch) {
+    originalGlobalFetch = directFetch ?? globalThis.fetch;
+  }
+  globalProxyFetchEnv = env;
+  if (globalProxyFetchUrl === proxyUrl) return;
+
+  const sourceFetch = originalGlobalFetch;
+  globalProxyFetchUrl = proxyUrl;
   globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    return directFetch(input, { ...(init ?? {}), dispatcher: agent } as FetchInitWithDispatcher);
+    const requestInit = init as FetchInitWithDispatcher | undefined;
+    if (requestInit?.dispatcher) {
+      return sourceFetch(input, init);
+    }
+
+    const agent = getProxyAgent(proxyUrl, globalProxyFetchEnv);
+    return sourceFetch(input, { ...(init ?? {}), dispatcher: agent } as FetchInitWithDispatcher);
   };
 }

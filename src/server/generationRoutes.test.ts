@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 
 import { mountGenerationRoutes, type GenerationProviders } from './generationRoutes';
+import { createRuntimeConfigManager } from './runtimeConfig';
 
 async function requestJson(app: express.Express, path: string, body: unknown) {
   const server = app.listen(0);
@@ -34,6 +35,14 @@ function createApp(providers: GenerationProviders) {
   app.use(express.json({ limit: '50mb' }));
   mountGenerationRoutes(app, { providers });
   return app;
+}
+
+function createAppWithRuntimeConfig(providers: GenerationProviders, env: Record<string, string | undefined>) {
+  const app = express();
+  app.use(express.json({ limit: '50mb' }));
+  const runtimeConfig = createRuntimeConfigManager(env);
+  mountGenerationRoutes(app, { providers, runtimeConfig });
+  return { app, runtimeConfig };
 }
 
 test('generate-image returns 400 for validation failures without calling providers', async () => {
@@ -125,4 +134,34 @@ test('optimize-prompt returns stable response shape through injected optimizer w
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, { optimizedPrompt: 'expanded prompt' });
   assert.equal(imageProviderCalled, false);
+});
+
+test('generation routes read Gemini API key from hot-reloaded runtime config', async () => {
+  const seenKeys: string[] = [];
+  const { app, runtimeConfig } = createAppWithRuntimeConfig({
+    generateBananaImage: async ({ apiKey }) => {
+      seenKeys.push(apiKey);
+      return 'data:image/png;base64,banana';
+    },
+    generateImage2Image: async () => 'data:image/png;base64,image2',
+    optimizePrompt: async ({ apiKey }) => {
+      seenKeys.push(apiKey);
+      return apiKey;
+    },
+  }, { GEMINI_API_KEY: 'old-key' });
+
+  const first = await requestJson(app, '/api/optimize-prompt', { prompt: 'short prompt' });
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.body, { optimizedPrompt: 'old-key' });
+
+  const reload = runtimeConfig.reload({ GEMINI_API_KEY: 'new-key' });
+  assert.equal(reload.ok, true);
+
+  const second = await requestJson(app, '/api/generate-image', {
+    prompt: 'draw',
+    imageModel: 'banana',
+  });
+
+  assert.equal(second.status, 200);
+  assert.deepEqual(seenKeys, ['old-key', 'new-key']);
 });

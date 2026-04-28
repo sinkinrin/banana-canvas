@@ -29,6 +29,7 @@ import {
   type Image2ProxyMode,
   type ReferenceImageInput,
 } from '../../lib/imageModels';
+import { getRuntimeConfig, type RuntimeConfigManager } from '../runtimeConfig';
 
 const directFetch = globalThis.fetch.bind(globalThis);
 
@@ -283,6 +284,7 @@ async function runImage2Attempt({
   proxyUrl,
   timeoutMs,
   controller,
+  env,
 }: {
   requestId: string;
   attemptNumber: number;
@@ -293,6 +295,7 @@ async function runImage2Attempt({
   proxyUrl: string;
   timeoutMs: number;
   controller: AbortController;
+  env: EnvLike;
 }): Promise<Image2AttemptResult> {
   const timeout = setTimeout(() => {
     controller.abort(new DOMException(`image2 attempt timed out after ${timeoutMs}ms`, 'TimeoutError'));
@@ -310,8 +313,8 @@ async function runImage2Attempt({
       init: { ...createInit(), signal: controller.signal },
       attempts: [attempt],
       fetchImpl: async (requestUrl, requestInit) => directFetch(requestUrl, requestInit),
-      getProxyDispatcher: () => getProxyAgent(proxyUrl),
-      getDirectDispatcher: () => getImage2DirectAgent(),
+      getProxyDispatcher: () => getProxyAgent(proxyUrl, env),
+      getDirectDispatcher: () => getImage2DirectAgent(env),
     });
     const elapsedMs = Date.now() - startedAt;
     console.info(
@@ -361,7 +364,7 @@ async function fetchImage2ProviderResponse(
   requestId: string,
   endpoint: string,
   createInit: () => RequestInit,
-  env: EnvLike = process.env
+  env: EnvLike = getRuntimeConfig().env
 ) {
   const proxyUrl = getConfiguredProxyUrl(env);
   const proxyMode = getImage2ProxyMode(proxyUrl, env);
@@ -446,6 +449,7 @@ async function fetchImage2ProviderResponse(
           proxyUrl,
           timeoutMs,
           controller,
+          env,
         }).then((result) => {
           activeControllers.delete(controller);
           activeAttempts -= 1;
@@ -493,13 +497,32 @@ async function fetchImage2ProviderResponse(
   });
 }
 
-async function normalizeGeneratedImageUrl(imageUrl: string) {
+async function fetchGeneratedImageUrl(imageUrl: string, env: EnvLike) {
+  const proxyUrl = getConfiguredProxyUrl(env);
+  const proxyMode = getImage2ProxyMode(proxyUrl, env);
+  const maxAttempts = readPositiveIntEnv(env, 'IMAGE2_MAX_ATTEMPTS', DEFAULT_IMAGE2_MAX_ATTEMPTS, 8);
+  const attempts = expandImage2AttemptPlan(
+    getImage2AttemptPlan({ proxyMode, hasProxy: Boolean(proxyUrl) }),
+    maxAttempts
+  );
+
+  return await fetchImage2WithNetworkFallback({
+    url: imageUrl,
+    init: { method: 'GET' },
+    attempts,
+    fetchImpl: async (requestUrl, requestInit) => globalThis.fetch(requestUrl, requestInit),
+    getProxyDispatcher: () => getProxyAgent(proxyUrl, env),
+    getDirectDispatcher: () => getImage2DirectAgent(env),
+  });
+}
+
+async function normalizeGeneratedImageUrl(imageUrl: string, env: EnvLike) {
   if (imageUrl.startsWith('data:image/')) return imageUrl;
   if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) return imageUrl;
 
   let response: Response;
   try {
-    response = await globalThis.fetch(imageUrl);
+    response = await fetchGeneratedImageUrl(imageUrl, env);
   } catch (error) {
     const { code, message } = summarizeNetworkError(error);
     console.warn(`[image2] generated image url download failed code=${code} message=${message}; returning original url`);
@@ -554,6 +577,7 @@ export async function generateImage2Image({
   images,
   maskImage,
   image2Options,
+  runtimeConfig,
 }: {
   requestId: string;
   prompt: string;
@@ -562,17 +586,19 @@ export async function generateImage2Image({
   images: ReferenceImageInput[];
   maskImage?: ReferenceImageInput;
   image2Options: Image2Options;
+  runtimeConfig?: RuntimeConfigManager;
 }) {
-  const image2Config = createImage2Config(process.env);
+  const env = runtimeConfig?.get().env ?? getRuntimeConfig().env;
+  const image2Config = createImage2Config(env);
   if (image2Config.missingKeys.length > 0) {
     throw new Error(`image2 配置缺失：请在 .env 中设置 ${image2Config.missingKeys.join(', ')}`);
   }
 
   const normalizedImage2Options = normalizeImage2Options(image2Options);
-  const streamImages = image2Config.endpointType === 'images' && readBooleanEnv(process.env, 'IMAGE2_STREAM');
+  const streamImages = image2Config.endpointType === 'images' && readBooleanEnv(env, 'IMAGE2_STREAM');
   const partialImages = streamImages
     ? normalizedImage2Options.partialImages ?? readNonNegativeIntEnv(
-        process.env,
+        env,
         'IMAGE2_PARTIAL_IMAGES',
         DEFAULT_IMAGE2_STREAM_PARTIAL_IMAGES,
         3
@@ -662,7 +688,7 @@ export async function generateImage2Image({
     };
   };
 
-  const response = await fetchImage2ProviderResponse(requestId, endpoint, createRequestInit);
+  const response = await fetchImage2ProviderResponse(requestId, endpoint, createRequestInit, env);
 
   const responseText = await response.text();
   const responseJson = tryParseJson(responseText);
@@ -682,7 +708,7 @@ export async function generateImage2Image({
     throw new Error('image2 响应中未找到图像数据。');
   }
 
-  const normalizedImageUrl = await normalizeGeneratedImageUrl(imageUrl);
+  const normalizedImageUrl = await normalizeGeneratedImageUrl(imageUrl, env);
   console.info(`[image2:${requestId}] image extracted type=${normalizedImageUrl.startsWith('data:image/') ? 'data-url' : 'url'}`);
   return normalizedImageUrl;
 }

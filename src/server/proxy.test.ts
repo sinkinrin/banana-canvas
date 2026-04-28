@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  applyGlobalProxyFetch,
   getConfiguredProxyUrl,
   getImage2ProxyMode,
   readBooleanEnv,
@@ -44,4 +45,57 @@ test('getImage2ProxyMode reads mode using the configured proxy presence', () => 
   assert.equal(getImage2ProxyMode('http://proxy', { IMAGE2_PROXY_MODE: 'proxy' }), 'proxy');
   assert.equal(getImage2ProxyMode('', { IMAGE2_PROXY_MODE: 'auto' }), 'auto');
   assert.equal(getImage2ProxyMode('http://proxy', { IMAGE2_PROXY_MODE: 'bad' }), 'direct');
+});
+
+test('applyGlobalProxyFetch can change proxies without stacking wrappers', async () => {
+  const originalFetch = globalThis.fetch;
+  const dispatchers: unknown[] = [];
+  const directFetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    dispatchers.push((init as { dispatcher?: unknown } | undefined)?.dispatcher);
+    return new Response('{}', { status: 200 });
+  };
+
+  try {
+    globalThis.fetch = directFetch;
+    applyGlobalProxyFetch({ proxyUrl: 'http://proxy-one.example' });
+    await globalThis.fetch('https://relay.example/one');
+
+    applyGlobalProxyFetch({ proxyUrl: 'http://proxy-two.example' });
+    await globalThis.fetch('https://relay.example/two');
+
+    assert.equal(dispatchers.length, 2);
+    assert.ok(dispatchers[0]);
+    assert.ok(dispatchers[1]);
+    assert.notEqual(dispatchers[0], dispatchers[1]);
+
+    applyGlobalProxyFetch({ proxyUrl: '' });
+    assert.equal(globalThis.fetch, directFetch);
+  } finally {
+    applyGlobalProxyFetch({ proxyUrl: '' });
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('applyGlobalProxyFetch preserves explicit dispatchers supplied by callers', async () => {
+  const originalFetch = globalThis.fetch;
+  const directDispatcher = { name: 'direct-dispatcher' };
+  const dispatchers: unknown[] = [];
+  const directFetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    dispatchers.push((init as { dispatcher?: unknown } | undefined)?.dispatcher);
+    return new Response('{}', { status: 200 });
+  };
+
+  try {
+    globalThis.fetch = directFetch;
+    applyGlobalProxyFetch({ proxyUrl: 'http://proxy.example' });
+
+    await globalThis.fetch('https://relay.example/direct', {
+      dispatcher: directDispatcher,
+    } as RequestInit & { dispatcher: unknown });
+
+    assert.deepEqual(dispatchers, [directDispatcher]);
+  } finally {
+    applyGlobalProxyFetch({ proxyUrl: '' });
+    globalThis.fetch = originalFetch;
+  }
 });

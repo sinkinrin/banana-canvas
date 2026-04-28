@@ -6,43 +6,55 @@ import { getLocalDataWatchIgnoreGlobs } from './src/lib/devServerWatch';
 import { createApp } from './src/server/app';
 import { generateBananaImage } from './src/server/providers/banana';
 import { generateImage2Image } from './src/server/providers/image2';
+import { syncRuntimeGlobalProxy } from './src/server/runtimeProxy';
 import {
-  applyGlobalProxyFetch,
-  getConfiguredProxyUrl,
-  getImage2ProxyMode,
-  redactProxyUrl,
-} from './src/server/proxy';
+  createRuntimeConfigManager,
+  watchRuntimeEnvFile,
+  type RuntimeConfigLogger,
+} from './src/server/runtimeConfig';
 
+const baseProcessEnv = { ...process.env };
 dotenv.config();
 
-function getLocalDataDir() {
-  const configured = process.env.BANANA_DATA_DIR?.trim();
-  return configured ? path.resolve(configured) : path.join(process.cwd(), 'data');
-}
+const runtimeLogger: RuntimeConfigLogger = (entry) => {
+  if (entry.level === 'error') {
+    console.error(entry.message);
+  } else if (entry.level === 'warn') {
+    console.warn(entry.message);
+  } else {
+    console.info(entry.message);
+  }
+};
 
 async function startServer() {
-  const proxyUrl = getConfiguredProxyUrl();
-  const image2ProxyMode = getImage2ProxyMode(proxyUrl);
-  if (proxyUrl) {
-    console.log(`[Proxy] Using proxy: ${redactProxyUrl(proxyUrl)} image2Mode=${image2ProxyMode}`);
-    applyGlobalProxyFetch({ proxyUrl });
-  }
+  const runtimeConfig = createRuntimeConfigManager(process.env, { logger: runtimeLogger });
+  const config = runtimeConfig.get();
+  syncRuntimeGlobalProxy(runtimeConfig, { logger: runtimeLogger });
 
   const app = createApp({
-    dataDir: getLocalDataDir(),
+    dataDir: config.startup.dataDir,
     providers: {
       generateBananaImage,
-      generateImage2Image,
+      generateImage2Image: (input) => generateImage2Image({ ...input, runtimeConfig }),
     },
+    runtimeConfig,
   });
-  const PORT = Number(process.env.PORT || 3000);
+  const PORT = config.startup.port;
 
-  if (process.env.NODE_ENV !== 'production') {
+  watchRuntimeEnvFile({
+    envFilePath: path.resolve(process.cwd(), '.env'),
+    manager: runtimeConfig,
+    baseEnv: baseProcessEnv,
+    logger: runtimeLogger,
+    onReloadSuccess: () => syncRuntimeGlobalProxy(runtimeConfig, { logger: runtimeLogger }),
+  });
+
+  if (config.startup.nodeEnv !== 'production') {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
         watch: {
-          ignored: getLocalDataWatchIgnoreGlobs(),
+          ignored: getLocalDataWatchIgnoreGlobs(config.startup.dataDir),
         },
       },
       appType: 'spa',
