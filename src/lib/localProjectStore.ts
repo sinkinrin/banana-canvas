@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 
 import {
@@ -13,6 +14,8 @@ type StoredAsset = {
   id: string;
   mimeType: string;
   fileName: string;
+  byteLength?: number;
+  sha256?: string;
 };
 
 type StoredProjectSnapshot = {
@@ -80,6 +83,10 @@ function mimeTypeFromFileName(fileName: string) {
   return 'image/png';
 }
 
+function hashBuffer(value: Buffer) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
 async function readJsonFile<T>(path: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -111,6 +118,13 @@ async function writeBinaryFile(path: string, value: Buffer) {
     await rm(tempPath, { force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+async function fileExists(path: string) {
+  return await stat(path).then(() => true, (error: any) => {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  });
 }
 
 function isProjectMeta(value: unknown): value is ProjectMeta {
@@ -145,6 +159,8 @@ function normalizeStoredSnapshot(value: unknown): StoredProjectSnapshot {
           id: asset.id,
           mimeType: asset.mimeType,
           fileName: asset.fileName,
+          byteLength: typeof asset.byteLength === 'number' ? asset.byteLength : undefined,
+          sha256: typeof asset.sha256 === 'string' ? asset.sha256 : undefined,
         };
       }
     }
@@ -183,6 +199,9 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
     const dir = projectDir(projectId);
     const assetDir = assetsDir(projectId);
     await mkdir(assetDir, { recursive: true });
+    const previousSnapshot = normalizeStoredSnapshot(
+      await readJsonFile<unknown>(projectJsonPath(projectId), { nodes: [], edges: [], assets: {} })
+    );
 
     const referencedAssets = pruneAssets(
       snapshot.assets,
@@ -195,11 +214,42 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
       const fileName = `${assetId}.${assetExtension(asset.mimeType)}`;
       const filePath = join(assetDir, fileName);
       ensureInside(assetDir, filePath);
-      await writeBinaryFile(filePath, Buffer.from(asset.data, 'base64'));
+      const previousAsset = previousSnapshot.assets[assetId];
+      const assetBytes = Buffer.from(asset.data, 'base64');
+      const assetSha256 = hashBuffer(assetBytes);
+      const hasMatchingStoredMetadata =
+        previousAsset?.mimeType === asset.mimeType &&
+        previousAsset.fileName === fileName &&
+        previousAsset.byteLength === assetBytes.byteLength &&
+        previousAsset.sha256 === assetSha256;
+      const hasMatchingLegacyContent = async () => {
+        if (
+          previousAsset?.mimeType !== asset.mimeType ||
+          previousAsset.fileName !== fileName ||
+          (previousAsset.sha256 && typeof previousAsset.byteLength === 'number')
+        ) {
+          return false;
+        }
+
+        return await readFile(filePath).then((bytes) => bytes.equals(assetBytes), (error: any) => {
+          if (error?.code === 'ENOENT') return false;
+          throw error;
+        });
+      };
+      const canReuseStoredAsset = hasMatchingStoredMetadata
+        ? await fileExists(filePath)
+        : await hasMatchingLegacyContent();
+
+      if (!canReuseStoredAsset) {
+        await writeBinaryFile(filePath, assetBytes);
+      }
+
       storedAssets[assetId] = {
         id: asset.id,
         mimeType: asset.mimeType,
         fileName,
+        byteLength: assetBytes.byteLength,
+        sha256: assetSha256,
       };
     }
 
@@ -211,9 +261,10 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
 
     try {
       const existingFiles = await readdir(assetDir);
+      const storedFileNames = new Set(Object.values(storedAssets).map((asset) => asset.fileName));
       await Promise.all(
         existingFiles
-          .filter((fileName) => !Object.values(storedAssets).some((asset) => asset.fileName === fileName))
+          .filter((fileName) => !storedFileNames.has(fileName))
           .map((fileName) => {
             const filePath = join(assetDir, fileName);
             ensureInside(assetDir, filePath);

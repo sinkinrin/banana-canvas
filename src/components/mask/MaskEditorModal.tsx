@@ -20,6 +20,24 @@ type MaskEditorModalProps = {
 };
 
 type MaskTool = 'brush' | 'eraser';
+type DrawPhase = 'move' | 'stop';
+
+const MAX_UNDO_FRAMES = 10;
+const UNDO_MEMORY_BUDGET_BYTES = 32 * 1024 * 1024;
+
+export function getMaskUndoFrameLimit(
+  width: number,
+  height: number,
+  memoryBudgetBytes = UNDO_MEMORY_BUDGET_BYTES
+) {
+  const frameBytes = width * height * 4;
+  if (frameBytes <= 0) return MAX_UNDO_FRAMES;
+  return Math.max(1, Math.min(MAX_UNDO_FRAMES, Math.floor(memoryBudgetBytes / frameBytes)));
+}
+
+export function shouldScanMaskAfterDraw(tool: MaskTool, phase: DrawPhase) {
+  return tool === 'eraser' && phase === 'stop';
+}
 
 function dataUrlToImageInput(dataUrl: string): { data: string; mimeType: 'image/png' } {
   const match = dataUrl.match(/^data:(image\/png);base64,(.+)$/);
@@ -76,8 +94,10 @@ export function MaskEditorModal({
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !context || canvas.width === 0 || canvas.height === 0) return;
+    const frameLimit = getMaskUndoFrameLimit(canvas.width, canvas.height);
+    const retainedFrames = frameLimit > 1 ? undoStackRef.current.slice(-(frameLimit - 1)) : [];
     undoStackRef.current = [
-      ...undoStackRef.current.slice(-9),
+      ...retainedFrames,
       context.getImageData(0, 0, canvas.width, canvas.height),
     ];
     setUndoCount(undoStackRef.current.length);
@@ -121,7 +141,7 @@ export function MaskEditorModal({
     lastPointRef.current = point;
     event.currentTarget.setPointerCapture(event.pointerId);
     drawTo(point);
-    updateHasMask();
+    if (tool === 'brush') setHasMask(true);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -129,7 +149,7 @@ export function MaskEditorModal({
     const point = pointFromEvent(event);
     if (!point) return;
     drawTo(point);
-    updateHasMask();
+    if (tool === 'brush') setHasMask(true);
   };
 
   const stopDrawing = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -138,7 +158,7 @@ export function MaskEditorModal({
     }
     drawingRef.current = false;
     lastPointRef.current = null;
-    updateHasMask();
+    if (shouldScanMaskAfterDraw(tool, 'stop')) updateHasMask();
   };
 
   const handleUndo = () => {
@@ -157,7 +177,7 @@ export function MaskEditorModal({
     if (!canvas || !context) return;
     pushUndo();
     context.clearRect(0, 0, canvas.width, canvas.height);
-    updateHasMask();
+    setHasMask(false);
   };
 
   const exportMask = () => {

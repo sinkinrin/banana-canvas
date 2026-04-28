@@ -84,6 +84,96 @@ test('hasProjectSnapshotChanged detects real project changes', () => {
   );
 });
 
+test('hasProjectSnapshotChanged does not stringify full snapshots for identical asset references', () => {
+  const createSnapshot = () => ({
+    nodes: [
+      {
+        id: 'image-1',
+        type: 'imageNode',
+        position: { x: 0, y: 0 },
+        data: { imageAssetId: 'asset-1' },
+      },
+    ],
+    edges: [],
+    toJSON() {
+      throw new Error('snapshot should not be stringified');
+    },
+    assets: {
+      'asset-1': {
+        id: 'asset-1',
+        mimeType: 'image/png',
+        data: 'same-data',
+      },
+    },
+  });
+
+  assert.equal(
+    hasProjectSnapshotChanged(
+      createSnapshot() as any,
+      createSnapshot() as any
+    ),
+    false
+  );
+});
+
+test('hasProjectSnapshotChanged detects same-id asset content changes', () => {
+  assert.equal(
+    hasProjectSnapshotChanged(
+      {
+        nodes: [
+          {
+            id: 'image-1',
+            type: 'imageNode',
+            position: { x: 0, y: 0 },
+            data: { imageAssetId: 'asset-1' },
+          },
+        ],
+        edges: [],
+        assets: {
+          'asset-1': { id: 'asset-1', mimeType: 'image/png', data: 'old-data' },
+        },
+      },
+      {
+        nodes: [
+          {
+            id: 'image-1',
+            type: 'imageNode',
+            position: { x: 0, y: 0 },
+            data: { imageAssetId: 'asset-1' },
+          },
+        ],
+        edges: [],
+        assets: {
+          'asset-1': { id: 'asset-1', mimeType: 'image/png', data: 'new-data' },
+        },
+      }
+    ),
+    true
+  );
+});
+
+test('hasProjectSnapshotChanged detects asset reference changes from metadata', () => {
+  assert.equal(
+    hasProjectSnapshotChanged(
+      {
+        nodes: [],
+        edges: [],
+        assets: {
+          'asset-1': { id: 'asset-1', mimeType: 'image/png', data: 'old' },
+        },
+      },
+      {
+        nodes: [],
+        edges: [],
+        assets: {
+          'asset-2': { id: 'asset-2', mimeType: 'image/png', data: 'new' },
+        },
+      }
+    ),
+    true
+  );
+});
+
 test('project canvas rename dialog renders with project name input', () => {
   const html = renderToStaticMarkup(
     <ProjectNameDialog

@@ -3,6 +3,7 @@ import { ArrowLeft, Pencil, Save } from 'lucide-react';
 
 import { MissingProjectState } from '../components/projects/MissingProjectState';
 import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
+import { areHistoryStatesEqual } from '../lib/canvasState';
 import { createEmptyProjectSnapshot, type ProjectSnapshot } from '../lib/projectSession';
 import type { ProjectMeta } from '../lib/projects';
 import { createProjectRepository } from '../lib/projectRepository';
@@ -44,7 +45,28 @@ function getErrorMessage(error: unknown) {
 
 export function hasProjectSnapshotChanged(previous: ProjectSnapshot | null, current: ProjectSnapshot) {
   if (!previous) return true;
-  return JSON.stringify(previous) !== JSON.stringify(current);
+  if (
+    !areHistoryStatesEqual(
+      { nodes: previous.nodes, edges: previous.edges },
+      { nodes: current.nodes, edges: current.edges }
+    )
+  ) {
+    return true;
+  }
+
+  const previousAssetIds = Object.keys(previous.assets);
+  const currentAssetIds = Object.keys(current.assets);
+  if (previousAssetIds.length !== currentAssetIds.length) return true;
+
+  return previousAssetIds.some((assetId) => {
+    const previousAsset = previous.assets[assetId];
+    const currentAsset = current.assets[assetId];
+    if (!currentAsset) return true;
+    if (previousAsset.id !== currentAsset.id) return true;
+    if (previousAsset.mimeType !== currentAsset.mimeType) return true;
+    if (previousAsset.data.length !== currentAsset.data.length) return true;
+    return previousAsset.data !== currentAsset.data;
+  });
 }
 
 export function ProjectCanvasPageView({

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -71,6 +71,130 @@ test('local project store writes assets as files and restores base64 assets', as
     mimeType: 'image/png',
     data: Buffer.from('fake-png').toString('base64'),
   });
+});
+
+test('local project store does not rewrite unchanged asset files on repeated snapshot saves', async () => {
+  const { rootDir, store } = await createTempStore();
+  const assetData = Buffer.from('same-asset').toString('base64');
+  const snapshot = {
+    nodes: [
+      {
+        id: 'img-node',
+        type: 'imageNode',
+        position: { x: 0, y: 0 },
+        data: { imageAssetId: 'asset-png' },
+      },
+    ],
+    edges: [],
+    assets: {
+      'asset-png': {
+        id: 'asset-png',
+        mimeType: 'image/png',
+        data: assetData,
+      },
+    },
+  };
+
+  const project = await store.createProject('重复保存', snapshot);
+  const assetPath = join(rootDir, 'projects', project.id, 'assets', 'asset-png.png');
+  const oldTime = new Date('2026-01-01T00:00:00.000Z');
+  await utimes(assetPath, oldTime, oldTime);
+
+  await store.saveProjectSnapshot(project.id, snapshot);
+
+  assert.equal((await stat(assetPath)).mtime.getTime(), oldTime.getTime());
+});
+
+test('local project store rewrites same-id assets when content changes', async () => {
+  const { rootDir, store } = await createTempStore();
+  const project = await store.createProject('同 ID 资源更新', {
+    nodes: [
+      {
+        id: 'img-node',
+        type: 'imageNode',
+        position: { x: 0, y: 0 },
+        data: { imageAssetId: 'asset-png' },
+      },
+    ],
+    edges: [],
+    assets: {
+      'asset-png': {
+        id: 'asset-png',
+        mimeType: 'image/png',
+        data: Buffer.from('old').toString('base64'),
+      },
+    },
+  });
+
+  await store.saveProjectSnapshot(project.id, {
+    nodes: [
+      {
+        id: 'img-node',
+        type: 'imageNode',
+        position: { x: 0, y: 0 },
+        data: { imageAssetId: 'asset-png' },
+      },
+    ],
+    edges: [],
+    assets: {
+      'asset-png': {
+        id: 'asset-png',
+        mimeType: 'image/png',
+        data: Buffer.from('new').toString('base64'),
+      },
+    },
+  });
+
+  const assetPath = join(rootDir, 'projects', project.id, 'assets', 'asset-png.png');
+  const loaded = await store.loadProject(project.id);
+
+  assert.equal((await readFile(assetPath)).toString(), 'new');
+  assert.equal(loaded?.snapshot.assets['asset-png'].data, Buffer.from('new').toString('base64'));
+});
+
+test('local project store writes newly referenced assets and prunes removed assets', async () => {
+  const { rootDir, store } = await createTempStore();
+  const project = await store.createProject('新增资源', {
+    nodes: [
+      {
+        id: 'img-node',
+        type: 'imageNode',
+        position: { x: 0, y: 0 },
+        data: { imageAssetId: 'old-asset' },
+      },
+    ],
+    edges: [],
+    assets: {
+      'old-asset': {
+        id: 'old-asset',
+        mimeType: 'image/png',
+        data: Buffer.from('old').toString('base64'),
+      },
+    },
+  });
+
+  await store.saveProjectSnapshot(project.id, {
+    nodes: [
+      {
+        id: 'img-node',
+        type: 'imageNode',
+        position: { x: 0, y: 0 },
+        data: { imageAssetId: 'new-asset' },
+      },
+    ],
+    edges: [],
+    assets: {
+      'new-asset': {
+        id: 'new-asset',
+        mimeType: 'image/png',
+        data: Buffer.from('new').toString('base64'),
+      },
+    },
+  });
+
+  const assetDir = join(rootDir, 'projects', project.id, 'assets');
+  await assert.rejects(() => stat(join(assetDir, 'old-asset.png')));
+  assert.equal((await readFile(join(assetDir, 'new-asset.png'))).toString(), 'new');
 });
 
 test('local project store deletes a project directory and index entry', async () => {

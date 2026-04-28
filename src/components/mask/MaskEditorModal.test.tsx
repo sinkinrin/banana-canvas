@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { MaskCompareModal } from './MaskCompareModal';
-import { MaskEditorModal } from './MaskEditorModal';
+import { MaskEditorModal, getMaskUndoFrameLimit, shouldScanMaskAfterDraw } from './MaskEditorModal';
 
 const sourceImage = {
   data: 'b3JpZ2luYWw=',
@@ -29,6 +29,22 @@ test('MaskEditorModal renders mask controls and disables generate until ready', 
   assert.match(html, /生成局部修改/);
   assert.match(html, /涂抹区域会作为透明区域发送/);
   assert.match(html, /disabled=""/);
+});
+
+test('mask undo frame limit preserves the small-canvas history depth', () => {
+  assert.equal(getMaskUndoFrameLimit(512, 512), 10);
+});
+
+test('mask undo frame limit shrinks for large canvases under a memory budget', () => {
+  assert.equal(getMaskUndoFrameLimit(4096, 4096), 1);
+  assert.equal(getMaskUndoFrameLimit(2048, 2048), 2);
+});
+
+test('mask scanning is skipped during brush movement and delayed until eraser stops', () => {
+  assert.equal(shouldScanMaskAfterDraw('brush', 'move'), false);
+  assert.equal(shouldScanMaskAfterDraw('brush', 'stop'), false);
+  assert.equal(shouldScanMaskAfterDraw('eraser', 'move'), false);
+  assert.equal(shouldScanMaskAfterDraw('eraser', 'stop'), true);
 });
 
 test('MaskCompareModal renders original and generated images side by side', () => {
