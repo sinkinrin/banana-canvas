@@ -70,12 +70,29 @@ function summarizeNetworkError(error: unknown) {
 }
 
 export function toImage2Size(aspectRatio?: string, imageSize?: string) {
-  if (aspectRatio === '16:9') return '1536x1024';
-  if (aspectRatio === '9:16') return '1024x1536';
-  if (aspectRatio === '4:3') return '1536x1024';
-  if (aspectRatio === '3:4') return '1024x1536';
-  if (imageSize === '512px' || imageSize === '512') return '1024x1024';
-  return '1024x1024';
+  const isLandscape = aspectRatio === '16:9' || aspectRatio === '4:3';
+  const isPortrait = aspectRatio === '9:16' || aspectRatio === '3:4';
+
+  if (imageSize === '4K') {
+    if (isLandscape) return '3584x2048';
+    if (isPortrait) return '2048x3584';
+    return '2816x2816';
+  }
+
+  let width = 1024;
+  let height = 1024;
+
+  if (isLandscape) {
+    width = 1536;
+  } else if (isPortrait) {
+    height = 1536;
+  }
+
+  if (imageSize === '2K') {
+    return `${width * 2}x${height * 2}`;
+  }
+
+  return `${width}x${height}`;
 }
 
 export function base64ToBlob(image: ReferenceImageInput) {

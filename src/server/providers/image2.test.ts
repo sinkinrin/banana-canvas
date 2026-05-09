@@ -25,6 +25,14 @@ test('toImage2Size preserves existing aspect and size mapping', () => {
   assert.equal(toImage2Size(undefined, undefined), '1024x1024');
 });
 
+test('toImage2Size scales Image2 requests by selected image size', () => {
+  assert.equal(toImage2Size('1:1', '2K'), '2048x2048');
+  assert.equal(toImage2Size('1:1', '4K'), '2816x2816');
+  assert.equal(toImage2Size('16:9', '2K'), '3072x2048');
+  assert.equal(toImage2Size('16:9', '4K'), '3584x2048');
+  assert.equal(toImage2Size('9:16', '4K'), '2048x3584');
+});
+
 test('previewResponseBody truncates long relay responses', () => {
   assert.equal(previewResponseBody('a'.repeat(501)), `${'a'.repeat(500)}...`);
 });
