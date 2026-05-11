@@ -1,5 +1,5 @@
 <div align="center">
-  <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img src="docs/images/canvas-workflow.png" alt="香蕉画图画布工作流预览" width="1200" />
 </div>
 
 # 香蕉画图
@@ -8,8 +8,20 @@
 
 一个类似 Flowith 的无限画布 AI 图像生成工具。你可以在画布上搭建提示词节点和图片节点，把一轮生成的结果继续作为下一轮参考图，逐步迭代出更复杂的视觉方案。
 
-AI Studio 应用入口：
-https://ai.studio/apps/5748be9b-3523-4bad-a3fa-e138965b1069
+## 项目预览
+
+<img src="docs/images/project-list.png" alt="香蕉画图项目列表" width="900" />
+
+<img src="docs/images/prompt-settings.png" alt="提示词节点和模型参数设置" width="900" />
+
+<img src="docs/images/mask-editor.png" alt="Image2 局部编辑蒙版界面" width="900" />
+
+## 适合场景
+
+- 多轮视觉探索：把满意的生成结果继续作为参考图，逐步收敛风格、构图和细节。
+- 海报、KV、角色设定、概念图等方案推演：用画布保留不同分支和中间结果。
+- 局部编辑工作流：在已有图片上涂出需要修改的区域，再用 Image2 生成局部变化。
+- 本地项目管理：按项目保存画布、节点关系和图片资产，便于回看和继续创作。
 
 ## 核心功能
 
@@ -22,7 +34,7 @@ https://ai.studio/apps/5748be9b-3523-4bad-a3fa-e138965b1069
 - 图片节点操作：支持全屏查看、复制图片、复制提示词、下载、重新生成，以及“以此为参考新建节点”。
 - 画布辅助：支持撤销/重做、适应视口、右键菜单、新建节点、自动布局、清空画布。
 - 本地项目持久化：项目索引、画布快照和图片资产默认保存到仓库本地 `data/projects/`；无本地 API 时会回退到 IndexedDB。
-- API Key 处理：优先支持 AI Studio 的官方授权，也支持手动输入 Gemini API Key。
+- API Key 处理：本地服务端读取 `.env` 中的默认 Key，也支持前端手动输入自定义 Gemini API Key。
 
 ## 运行环境
 
@@ -44,6 +56,8 @@ npm install
 ```bash
 GEMINI_API_KEY=你的_Gemini_API_Key
 ```
+
+只浏览项目、整理画布和查看已有截图不需要 API Key；调用提示词优化或实际生图时才需要配置对应模型的 Key。
 
 如果要使用 `Image2` 模型，还需要配置 OpenAI-compatible chat completions 中转：
 
@@ -192,8 +206,6 @@ http://localhost:3000
 | `BANANA_DATA_DIR` | 可选，本地项目文件存储目录，默认 `./data`；启动期配置，修改后需重启 |
 | `HTTPS_PROXY` | 可选，为 image2 服务端请求配置 HTTPS 代理 |
 | `HTTP_PROXY` | 可选，为 image2 服务端请求配置 HTTP 代理 |
-| `APP_URL` | `.env.example` 中保留的 AI Studio 模板变量，当前主要流程未直接使用 |
-
 除 `PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 外，上表中的服务端运行时变量会从 `.env` 热更新。URL、整数、布尔值和枚举值会在初始加载和每次 reload 时统一校验。
 
 ## 可用脚本
@@ -245,7 +257,7 @@ http://localhost:3000
 │  ├─ store.ts                     # 画布状态和历史记录
 │  └─ lib/                         # 模型参数、项目存储、资产归档、路由等
 ├─ server.ts                       # 环境加载、Vite/static 中间件和监听入口
-├─ metadata.json                   # AI Studio 元数据
+├─ metadata.json                   # 应用元数据
 └─ .env.example                    # 示例环境变量
 ```
 
@@ -267,4 +279,4 @@ npm test
 - 后端：Express
 - AI SDK：`@google/genai`
 
-前端通过 `/api/projects` 读写本地项目，通过 `/api/generate-image` 和 `/api/optimize-prompt` 调用后端，再由后端统一请求 Gemini 或 Image2 中转。这样本地开发和 AI Studio 部署可以共用一套交互逻辑。
+前端通过 `/api/projects` 读写本地项目，通过 `/api/generate-image` 和 `/api/optimize-prompt` 调用后端，再由后端统一请求 Gemini 或 Image2 中转。这样前端交互、项目存储和模型调用可以保持清晰分层。
