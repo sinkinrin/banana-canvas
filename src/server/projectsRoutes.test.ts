@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import express from 'express';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -110,6 +111,127 @@ test('project routes create, rename, save, load, import, list, delete, and retur
       const missing = await fetch(`${baseUrl}/api/projects/${createdBody.project.id}`);
       assert.equal(missing.status, 404);
       assert.deepEqual(await missing.json(), { error: '项目不存在' });
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('project routes save assets separately before lightweight snapshots reference them', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'banana-project-routes-'));
+  try {
+    const app = express();
+    app.use(express.json({ limit: '50mb' }));
+    mountProjectRoutes(app, createLocalProjectStore(dir));
+
+    await withServer(app, async (baseUrl) => {
+      const created = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Assets', snapshot: { nodes: [], edges: [], assets: {} } }),
+      });
+      const createdBody = await created.json() as any;
+      const projectId = createdBody.project.id;
+      const assetData = Buffer.from('separate-asset').toString('base64');
+
+      const uploaded = await fetch(`${baseUrl}/api/projects/${projectId}/assets/asset-png`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset: {
+            id: 'asset-png',
+            mimeType: 'image/png',
+            data: assetData,
+          },
+        }),
+      });
+      assert.equal(uploaded.status, 200);
+      assert.deepEqual(await uploaded.json(), { ok: true });
+
+      const saved = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes: [
+            {
+              id: 'image-1',
+              type: 'imageNode',
+              position: { x: 0, y: 0 },
+              data: { imageAssetId: 'asset-png' },
+            },
+          ],
+          edges: [],
+          assets: {},
+        }),
+      });
+      assert.equal(saved.status, 200);
+
+      const loaded = await fetch(`${baseUrl}/api/projects/${projectId}`);
+      const loadedBody = await loaded.json() as any;
+
+      assert.equal(loadedBody.snapshot.assets['asset-png'].data, assetData);
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('project routes reject lightweight snapshots when asset refs do not match stored files', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'banana-project-routes-'));
+  try {
+    const app = express();
+    app.use(express.json({ limit: '50mb' }));
+    mountProjectRoutes(app, createLocalProjectStore(dir));
+
+    await withServer(app, async (baseUrl) => {
+      const created = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Assets', snapshot: { nodes: [], edges: [], assets: {} } }),
+      });
+      const createdBody = await created.json() as any;
+      const projectId = createdBody.project.id;
+
+      await fetch(`${baseUrl}/api/projects/${projectId}/assets/asset-png`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset: {
+            id: 'asset-png',
+            mimeType: 'image/png',
+            data: Buffer.from('actual-asset').toString('base64'),
+          },
+        }),
+      });
+
+      const saved = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes: [
+            {
+              id: 'image-1',
+              type: 'imageNode',
+              position: { x: 0, y: 0 },
+              data: { imageAssetId: 'asset-png' },
+            },
+          ],
+          edges: [],
+          assets: {},
+          assetRefs: {
+            'asset-png': {
+              id: 'asset-png',
+              mimeType: 'image/png',
+              byteLength: Buffer.byteLength('expected-asset'),
+              sha256: createHash('sha256').update('expected-asset').digest('hex'),
+            },
+          },
+        }),
+      });
+
+      assert.equal(saved.status, 400);
+      const body = await saved.json() as any;
+      assert.match(body.error, /Project asset mismatch: asset-png/);
     });
   } finally {
     await rm(dir, { recursive: true, force: true });

@@ -1,3 +1,4 @@
+import { collectReferencedAssetIdsFromHistory } from './canvasState';
 import { createEmptyProjectSnapshot, type ProjectSnapshot } from './projectSession';
 import { createProjectMeta, renameProject, type ProjectMeta } from './projects';
 import {
@@ -60,12 +61,144 @@ function shouldFallbackToIndexedDb(error: unknown) {
   return true;
 }
 
+type AssetSignatureMap = Map<string, string>;
+
+type ProjectAssetRef = {
+  id: string;
+  mimeType: string;
+  byteLength: number;
+  sha256: string;
+};
+
+function createAssetSignature(asset: ProjectSnapshot['assets'][string]) {
+  return `${asset.mimeType}:${asset.data.length}:${asset.data}`;
+}
+
+function bytesToHex(bytes: Uint8Array) {
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function base64ToBytes(base64: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function createAssetRef(asset: ProjectSnapshot['assets'][string]): Promise<ProjectAssetRef> {
+  const bytes = base64ToBytes(asset.data);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+
+  return {
+    id: asset.id,
+    mimeType: asset.mimeType,
+    byteLength: bytes.byteLength,
+    sha256: bytesToHex(new Uint8Array(digest)),
+  };
+}
+
+async function createLightweightSnapshot(snapshot: ProjectSnapshot): Promise<ProjectSnapshot & {
+  assetRefs: Record<string, ProjectAssetRef>;
+}> {
+  const assetRefs = Object.fromEntries(
+    await Promise.all(
+      getReferencedProjectAssets(snapshot).map(async (asset) => [asset.id, await createAssetRef(asset)] as const)
+    )
+  );
+
+  return {
+    nodes: snapshot.nodes,
+    edges: snapshot.edges,
+    assets: {},
+    assetRefs,
+  };
+}
+
+function getReferencedProjectAssets(snapshot: ProjectSnapshot) {
+  const referencedAssetIds = collectReferencedAssetIdsFromHistory([{ nodes: snapshot.nodes }]);
+  return [...referencedAssetIds]
+    .map((assetId) => snapshot.assets[assetId])
+    .filter((asset): asset is ProjectSnapshot['assets'][string] => Boolean(asset));
+}
+
+function isMissingProjectAssetError(error: unknown) {
+  return (
+    error instanceof LocalApiResponseError &&
+    error.status === 400 &&
+    (
+      error.message.includes('Project asset missing') ||
+      error.message.includes('Project asset file missing') ||
+      error.message.includes('Project asset mismatch')
+    )
+  );
+}
+
 export function createProjectRepository({
   fetcher = fetch,
   storageAdapter = idbStorageAdapter,
 }: ProjectRepositoryOptions = {}): ProjectRepository {
   let mode: RepositoryMode | null = null;
   let migrationAttempted = false;
+  const localAssetSignaturesByProject = new Map<string, AssetSignatureMap>();
+
+  const rememberLocalAssetSignatures = (projectId: string, assets: ProjectSnapshot['assets']) => {
+    const signatures = localAssetSignaturesByProject.get(projectId) ?? new Map<string, string>();
+    Object.values(assets).forEach((asset) => {
+      signatures.set(asset.id, createAssetSignature(asset));
+    });
+    localAssetSignaturesByProject.set(projectId, signatures);
+  };
+
+  const pruneLocalAssetSignatures = (projectId: string, snapshot: ProjectSnapshot) => {
+    const signatures = localAssetSignaturesByProject.get(projectId);
+    if (!signatures) return;
+
+    const referencedAssetIds = collectReferencedAssetIdsFromHistory([{ nodes: snapshot.nodes }]);
+    for (const assetId of signatures.keys()) {
+      if (!referencedAssetIds.has(assetId)) {
+        signatures.delete(assetId);
+      }
+    }
+  };
+
+  const uploadChangedLocalAssets = async (
+    projectId: string,
+    snapshot: ProjectSnapshot,
+    { force = false }: { force?: boolean } = {}
+  ) => {
+    const signatures = localAssetSignaturesByProject.get(projectId) ?? new Map<string, string>();
+
+    for (const asset of getReferencedProjectAssets(snapshot)) {
+      const signature = createAssetSignature(asset);
+      if (!force && signatures.get(asset.id) === signature) continue;
+
+      await readJson<{ ok: true }>(
+        await fetcher(`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(asset.id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asset }),
+        })
+      );
+      signatures.set(asset.id, signature);
+    }
+
+    localAssetSignaturesByProject.set(projectId, signatures);
+  };
+
+  const saveLightweightLocalSnapshot = async (projectId: string, snapshot: ProjectSnapshot) => {
+    await readJson<{ ok: true }>(
+      await fetcher(`/api/projects/${encodeURIComponent(projectId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(await createLightweightSnapshot(snapshot)),
+      })
+    );
+    pruneLocalAssetSignatures(projectId, snapshot);
+  };
 
   const fetchLocalProjects = async () => {
     const body = await readJson<{ projects: ProjectMeta[] }>(await fetcher('/api/projects'));
@@ -153,7 +286,9 @@ export function createProjectRepository({
       if (await useLocal()) {
         const response = await fetcher(`/api/projects/${encodeURIComponent(projectId)}`);
         if (response.status === 404) return null;
-        return await readJson<{ project: ProjectMeta; snapshot: ProjectSnapshot }>(response);
+        const loaded = await readJson<{ project: ProjectMeta; snapshot: ProjectSnapshot }>(response);
+        rememberLocalAssetSignatures(projectId, loaded.snapshot.assets);
+        return loaded;
       }
 
       const projects = await loadProjectIndex(storageAdapter);
@@ -167,13 +302,14 @@ export function createProjectRepository({
 
     async saveProjectSnapshot(projectId, snapshot) {
       if (await useLocal()) {
-        await readJson<{ ok: true }>(
-          await fetcher(`/api/projects/${encodeURIComponent(projectId)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(snapshot),
-          })
-        );
+        await uploadChangedLocalAssets(projectId, snapshot);
+        try {
+          await saveLightweightLocalSnapshot(projectId, snapshot);
+        } catch (error) {
+          if (!isMissingProjectAssetError(error)) throw error;
+          await uploadChangedLocalAssets(projectId, snapshot, { force: true });
+          await saveLightweightLocalSnapshot(projectId, snapshot);
+        }
         return;
       }
 

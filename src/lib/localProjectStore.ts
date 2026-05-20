@@ -4,7 +4,6 @@ import { dirname, extname, join, resolve, sep } from 'node:path';
 
 import {
   collectReferencedAssetIdsFromHistory,
-  pruneAssets,
   type CanvasImageAsset,
 } from './canvasState';
 import { createProjectMeta, renameProject, type ProjectMeta } from './projects';
@@ -24,6 +23,17 @@ type StoredProjectSnapshot = {
   assets: Record<string, StoredAsset>;
 };
 
+type ProjectAssetRef = {
+  id: string;
+  mimeType: string;
+  byteLength: number;
+  sha256: string;
+};
+
+type ProjectSnapshotWithAssetRefs = ProjectSnapshot & {
+  assetRefs?: Record<string, ProjectAssetRef>;
+};
+
 type ProjectImportEntry = {
   project: ProjectMeta;
   snapshot: ProjectSnapshot;
@@ -36,6 +46,7 @@ export type LocalProjectStore = {
   importProject: (project: ProjectMeta, snapshot: ProjectSnapshot) => Promise<void>;
   importProjects: (entries: ProjectImportEntry[]) => Promise<void>;
   loadProject: (projectId: string) => Promise<{ project: ProjectMeta; snapshot: ProjectSnapshot } | null>;
+  saveProjectAsset: (projectId: string, asset: CanvasImageAsset) => Promise<void>;
   saveProjectSnapshot: (projectId: string, snapshot: ProjectSnapshot) => Promise<void>;
   renameProject: (projectId: string, nextName: string) => Promise<ProjectMeta | null>;
   deleteProject: (projectId: string) => Promise<void>;
@@ -195,7 +206,58 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
     return await current;
   };
 
-  const writeProjectSnapshotFiles = async (projectId: string, snapshot: ProjectSnapshot) => {
+  const writeProjectAssetFile = async (
+    projectId: string,
+    asset: CanvasImageAsset,
+    previousAssets: Record<string, StoredAsset>
+  ): Promise<StoredAsset> => {
+    validateAssetId(asset.id);
+    const assetDir = assetsDir(projectId);
+    await mkdir(assetDir, { recursive: true });
+
+    const fileName = `${asset.id}.${assetExtension(asset.mimeType)}`;
+    const filePath = join(assetDir, fileName);
+    ensureInside(assetDir, filePath);
+    const previousAsset = previousAssets[asset.id];
+    const assetBytes = Buffer.from(asset.data, 'base64');
+    const assetSha256 = hashBuffer(assetBytes);
+    const hasMatchingStoredMetadata =
+      previousAsset?.mimeType === asset.mimeType &&
+      previousAsset.fileName === fileName &&
+      previousAsset.byteLength === assetBytes.byteLength &&
+      previousAsset.sha256 === assetSha256;
+    const hasMatchingLegacyContent = async () => {
+      if (
+        previousAsset?.mimeType !== asset.mimeType ||
+        previousAsset.fileName !== fileName ||
+        (previousAsset.sha256 && typeof previousAsset.byteLength === 'number')
+      ) {
+        return false;
+      }
+
+      return await readFile(filePath).then((bytes) => bytes.equals(assetBytes), (error: any) => {
+        if (error?.code === 'ENOENT') return false;
+        throw error;
+      });
+    };
+    const canReuseStoredAsset = hasMatchingStoredMetadata
+      ? await fileExists(filePath)
+      : await hasMatchingLegacyContent();
+
+    if (!canReuseStoredAsset) {
+      await writeBinaryFile(filePath, assetBytes);
+    }
+
+    return {
+      id: asset.id,
+      mimeType: asset.mimeType,
+      fileName,
+      byteLength: assetBytes.byteLength,
+      sha256: assetSha256,
+    };
+  };
+
+  const writeProjectSnapshotFiles = async (projectId: string, snapshot: ProjectSnapshotWithAssetRefs) => {
     const dir = projectDir(projectId);
     const assetDir = assetsDir(projectId);
     await mkdir(assetDir, { recursive: true });
@@ -203,54 +265,42 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
       await readJsonFile<unknown>(projectJsonPath(projectId), { nodes: [], edges: [], assets: {} })
     );
 
-    const referencedAssets = pruneAssets(
-      snapshot.assets,
-      collectReferencedAssetIdsFromHistory([{ nodes: snapshot.nodes }])
-    );
+    const referencedAssetIds = collectReferencedAssetIdsFromHistory([{ nodes: snapshot.nodes }]);
     const storedAssets: Record<string, StoredAsset> = {};
 
-    for (const [assetId, asset] of Object.entries(referencedAssets)) {
+    for (const assetId of referencedAssetIds) {
       validateAssetId(assetId);
-      const fileName = `${assetId}.${assetExtension(asset.mimeType)}`;
-      const filePath = join(assetDir, fileName);
-      ensureInside(assetDir, filePath);
-      const previousAsset = previousSnapshot.assets[assetId];
-      const assetBytes = Buffer.from(asset.data, 'base64');
-      const assetSha256 = hashBuffer(assetBytes);
-      const hasMatchingStoredMetadata =
-        previousAsset?.mimeType === asset.mimeType &&
-        previousAsset.fileName === fileName &&
-        previousAsset.byteLength === assetBytes.byteLength &&
-        previousAsset.sha256 === assetSha256;
-      const hasMatchingLegacyContent = async () => {
-        if (
-          previousAsset?.mimeType !== asset.mimeType ||
-          previousAsset.fileName !== fileName ||
-          (previousAsset.sha256 && typeof previousAsset.byteLength === 'number')
-        ) {
-          return false;
-        }
-
-        return await readFile(filePath).then((bytes) => bytes.equals(assetBytes), (error: any) => {
-          if (error?.code === 'ENOENT') return false;
-          throw error;
-        });
-      };
-      const canReuseStoredAsset = hasMatchingStoredMetadata
-        ? await fileExists(filePath)
-        : await hasMatchingLegacyContent();
-
-      if (!canReuseStoredAsset) {
-        await writeBinaryFile(filePath, assetBytes);
+      const providedAsset = snapshot.assets[assetId];
+      if (providedAsset?.data) {
+        storedAssets[assetId] = await writeProjectAssetFile(projectId, providedAsset, previousSnapshot.assets);
+        continue;
       }
 
-      storedAssets[assetId] = {
-        id: asset.id,
-        mimeType: asset.mimeType,
-        fileName,
-        byteLength: assetBytes.byteLength,
-        sha256: assetSha256,
-      };
+      const previousAsset = previousSnapshot.assets[assetId];
+      if (!previousAsset) {
+        throw new Error(`Project asset missing: ${assetId}`);
+      }
+
+      const assetRef = snapshot.assetRefs?.[assetId];
+      if (
+        assetRef &&
+        (
+          assetRef.id !== previousAsset.id ||
+          assetRef.mimeType !== previousAsset.mimeType ||
+          assetRef.byteLength !== previousAsset.byteLength ||
+          assetRef.sha256 !== previousAsset.sha256
+        )
+      ) {
+        throw new Error(`Project asset mismatch: ${assetId}`);
+      }
+
+      const filePath = join(assetDir, previousAsset.fileName);
+      ensureInside(assetDir, filePath);
+      if (!await fileExists(filePath)) {
+        throw new Error(`Project asset file missing: ${assetId}`);
+      }
+
+      storedAssets[assetId] = previousAsset;
     }
 
     await writeJsonFile(join(dir, 'project.json'), {
@@ -357,6 +407,30 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
           assets,
         },
       };
+    },
+
+    async saveProjectAsset(projectId, asset) {
+      await runWriteTask(async () => {
+        validateProjectId(projectId);
+        const projects = await store.loadProjectIndex();
+        if (!projects.some((project) => project.id === projectId)) {
+          throw new Error('Project not found');
+        }
+
+        const previousSnapshot = normalizeStoredSnapshot(
+          await readJsonFile<unknown>(projectJsonPath(projectId), { nodes: [], edges: [], assets: {} })
+        );
+        const storedAsset = await writeProjectAssetFile(projectId, asset, previousSnapshot.assets);
+
+        await writeJsonFile(projectJsonPath(projectId), {
+          nodes: previousSnapshot.nodes,
+          edges: previousSnapshot.edges,
+          assets: {
+            ...previousSnapshot.assets,
+            [asset.id]: storedAsset,
+          },
+        });
+      });
     },
 
     async saveProjectSnapshot(projectId, snapshot) {

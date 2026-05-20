@@ -4,11 +4,38 @@ import type { LocalProjectStore } from '../lib/localProjectStore';
 function sendProjectRouteError(res: express.Response, error: unknown) {
   const message = error instanceof Error ? error.message : '本地项目存储失败';
   const status = message.includes('Invalid project id')
+    || message.includes('Invalid asset id')
+    || message.includes('Project asset missing')
+    || message.includes('Project asset file missing')
+    || message.includes('Project asset mismatch')
     ? 400
     : message.includes('Project not found')
       ? 404
       : 500;
   res.status(status).json({ error: message });
+}
+
+function parseProjectAssetBody(body: unknown, assetId: string) {
+  const asset = typeof body === 'object' && body !== null && 'asset' in body
+    ? (body as { asset?: unknown }).asset
+    : null;
+
+  if (
+    typeof asset !== 'object' ||
+    asset === null ||
+    !('mimeType' in asset) ||
+    !('data' in asset) ||
+    typeof (asset as { mimeType?: unknown }).mimeType !== 'string' ||
+    typeof (asset as { data?: unknown }).data !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    id: assetId,
+    mimeType: (asset as { mimeType: string }).mimeType,
+    data: (asset as { data: string }).data,
+  };
 }
 
 export function mountProjectRoutes(app: express.Express, projectStore: LocalProjectStore) {
@@ -48,6 +75,21 @@ export function mountProjectRoutes(app: express.Express, projectStore: LocalProj
         return;
       }
       res.json(project);
+    } catch (error) {
+      sendProjectRouteError(res, error);
+    }
+  });
+
+  app.put('/api/projects/:projectId/assets/:assetId', async (req, res) => {
+    try {
+      const asset = parseProjectAssetBody(req.body, req.params.assetId);
+      if (!asset) {
+        res.status(400).json({ error: 'Invalid project asset payload' });
+        return;
+      }
+
+      await projectStore.saveProjectAsset(req.params.projectId, asset);
+      res.json({ ok: true });
     } catch (error) {
       sendProjectRouteError(res, error);
     }
