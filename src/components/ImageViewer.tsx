@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ZoomIn, ZoomOut, Download, Copy, Check } from 'lucide-react';
 import { motion } from 'motion/react';
+import { copyImageToClipboard } from '../lib/clipboard';
+import { buildImageDownloadFileName } from '../lib/imageDownloads';
 
 interface ImageViewerProps {
   imageUrl: string;
@@ -64,7 +66,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
   const handleDownload = () => {
     const a = document.createElement('a');
     a.href = imageUrl;
-    a.download = `banana-art-${Date.now()}.png`;
+    a.download = buildImageDownloadFileName(Date.now(), imageUrl);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -72,13 +74,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
 
   const handleCopy = async () => {
     try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          [blob.type]: blob
-        })
-      ]);
+      await copyImageToClipboard(imageUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {

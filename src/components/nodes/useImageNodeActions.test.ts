@@ -44,6 +44,11 @@ test('buildReferenceNodeData carries current model options into a new prompt nod
   );
 });
 
-test('buildDownloadFileName uses banana-art prefix and png suffix', () => {
+test('buildDownloadFileName uses banana-art prefix and png suffix by default', () => {
   assert.equal(buildDownloadFileName(1234), 'banana-art-1234.png');
+});
+
+test('buildDownloadFileName preserves known image URL extensions', () => {
+  assert.equal(buildDownloadFileName(1234, 'https://example.com/generated.webp?token=1'), 'banana-art-1234.webp');
+  assert.equal(buildDownloadFileName(1234, 'https://example.com/generated.jpeg'), 'banana-art-1234.jpg');
 });

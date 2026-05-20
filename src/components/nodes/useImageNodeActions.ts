@@ -8,6 +8,7 @@ import {
 import { generateImage } from '../../services/gemini';
 import type { AppNode } from '../../store';
 import { normalizeImageModel } from '../../lib/imageModels';
+import { buildImageDownloadFileName } from '../../lib/imageDownloads';
 
 export function canRerunImageNode(data: Partial<AppNode['data']>) {
   return Boolean(data.prompt) && data.generationMode !== 'mask-edit';
@@ -23,8 +24,8 @@ export function getRerunReferenceImages(
     : undefined;
 }
 
-export function buildDownloadFileName(now = Date.now()) {
-  return `banana-art-${now}.png`;
+export function buildDownloadFileName(now = Date.now(), imageUrl?: string) {
+  return buildImageDownloadFileName(now, imageUrl);
 }
 
 export function buildReferenceNodeData({

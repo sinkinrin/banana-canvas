@@ -10,6 +10,7 @@ import {
   resolveSourceImageUrl,
   type InlineImageData,
 } from '../../lib/canvasState';
+import { copyImageToClipboard, copyTextToClipboard } from '../../lib/clipboard';
 import { getImageModelConfig, normalizeImageModel } from '../../lib/imageModels';
 import { GeneratingImagePlaceholder } from './GeneratingImagePlaceholder';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
@@ -64,7 +65,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     if (!imageUrl) return;
     const a = document.createElement('a');
     a.href = imageUrl;
-    a.download = buildDownloadFileName();
+    a.download = buildDownloadFileName(Date.now(), imageUrl);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -74,11 +75,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     e.stopPropagation();
     if (!imageUrl) return;
     try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({ [blob.type]: blob })
-      ]);
+      await copyImageToClipboard(imageUrl);
       setCopiedImage(true);
       setTimeout(() => setCopiedImage(false), 2000);
     } catch (err) {
@@ -86,11 +83,15 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     }
   };
 
-  const handleCopyPrompt = (e: React.MouseEvent) => {
+  const handleCopyPrompt = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(data.prompt || '');
-    setCopiedPrompt(true);
-    setTimeout(() => setCopiedPrompt(false), 2000);
+    try {
+      await copyTextToClipboard(data.prompt || '');
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy prompt:', err);
+    }
   };
 
   const handleRerun = async (e: React.MouseEvent) => {
