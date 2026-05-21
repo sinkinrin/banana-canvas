@@ -8,10 +8,8 @@ import { cn } from '../../lib/utils';
 import { optimizePrompt } from '../../services/gemini';
 import { PromptTextarea } from './PromptTextarea';
 import {
-  BANANA_ASPECT_RATIO_VALUES,
   BANANA_IMAGE_SIZE_VALUES,
   IMAGE_MODELS,
-  normalizeBananaAspectRatio,
   normalizeBananaImageSize,
   normalizeImageModel,
   type BananaAspectRatio,
@@ -24,6 +22,11 @@ import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorMod
 import { useReferenceImages } from './useReferenceImages';
 import { buildPromptMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
 import { usePromptGeneration } from './usePromptGeneration';
+import {
+  getEffectivePromptAspectRatio,
+  getImage2MaskEditAspectRatio,
+  getPromptAspectRatioOptions,
+} from './promptAspectRatios';
 
 const aspectRatioLabels: Record<BananaAspectRatio, string> = {
   '1:1': '1:1 (正方形)',
@@ -81,10 +84,11 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     updateNodeData,
   });
   const { generateMaskImage } = useMaskGeneration();
-  const aspectRatio = normalizeBananaAspectRatio(data.aspectRatio) ?? '1:1';
   const imageSize = normalizeBananaImageSize(data.imageSize) ?? '1K';
   const batchCount = data.batchCount || 1;
   const imageModel = normalizeImageModel(data.imageModel);
+  const aspectRatio = getEffectivePromptAspectRatio(imageModel, data.aspectRatio);
+  const aspectRatioOptions = getPromptAspectRatioOptions(imageModel);
   const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Banana';
   const bananaOptions = data.bananaOptions;
   const image2Options = data.image2Options;
@@ -127,13 +131,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     const baseX = nodePosition ? nodePosition.x + 400 : 0;
     const baseY = nodePosition ? nodePosition.y : 0;
     const createdAt = new Date().toISOString();
+    const maskEditAspectRatio = getImage2MaskEditAspectRatio(data.aspectRatio);
     const placeholderNodeId = addNode(
       'imageNode',
       { x: baseX, y: baseY },
       {
         prompt: maskPrompt,
         imageModel: 'image2',
-        aspectRatio,
+        aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
         isLoading: true,
@@ -160,7 +165,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         sourceImage,
         sourceIndex: maskEditorSource.index,
         referenceImages,
-        aspectRatio,
+        aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
       }));
@@ -169,7 +174,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         imageUrl: url,
         prompt: maskPrompt,
         imageModel: 'image2',
-        aspectRatio,
+        aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
         sourceImage,
@@ -410,7 +415,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
-                  {BANANA_ASPECT_RATIO_VALUES.map((ratio) => (
+                  {aspectRatioOptions.map((ratio) => (
                     <option key={ratio} value={ratio}>{aspectRatioLabels[ratio]}</option>
                   ))}
                 </select>
