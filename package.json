@@ -20,7 +20,7 @@
     "clean:release": "node -e \"require('node:fs').rmSync('release',{recursive:true,force:true})\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\" server.ts vite.config.ts",
-    "test": "tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\"",
+    "test": "node scripts/run-tests.mjs",
     "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run build:electron"
   },
   "dependencies": {

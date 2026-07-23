@@ -35,7 +35,7 @@ test('package scripts expose test and check commands', async () => {
     scripts: Record<string, string>;
   }>('package.json');
 
-  assert.equal(packageJson.scripts.test, 'tsx --test "src/**/*.test.ts" "src/**/*.test.tsx"');
+  assert.equal(packageJson.scripts.test, 'node scripts/run-tests.mjs');
   assert.equal(
     packageJson.scripts.check,
     'npm run typecheck && npm run lint && npm test && npm run build && npm run build:electron'
