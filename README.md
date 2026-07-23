@@ -39,7 +39,7 @@
 
 ## 运行环境
 
-- Node.js 20.18.1 或更高版本
+- Node.js 22.17.1 或更高版本
 - 可用的 Image2/OpenAI-compatible 中转服务；如需 Banana 或提示词优化，再配置 Gemini API Key
 
 ## 本地启动
