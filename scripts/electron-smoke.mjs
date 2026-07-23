@@ -10,7 +10,10 @@ const packagedExecutable = process.argv[2]
   ? path.resolve(rootDir, process.argv[2])
   : undefined;
 const smokeUserDataDir = mkdtempSync(path.join(tmpdir(), 'banana-electron-smoke-'));
-const child = spawn(packagedExecutable ?? electronPath, packagedExecutable ? [] : ['.'], {
+const electronArgs = packagedExecutable
+  ? []
+  : [...(process.platform === 'linux' ? ['--no-sandbox'] : []), '.'];
+const child = spawn(packagedExecutable ?? electronPath, electronArgs, {
   cwd: rootDir,
   env: {
     ...process.env,
