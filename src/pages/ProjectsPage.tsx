@@ -26,6 +26,7 @@ export type ProjectsPageViewProps = {
   onOpen: (projectId: string) => void;
   onRename: (projectId: string) => void;
   onDelete: (projectId: string) => void;
+  onOpenSettings?: () => void;
 };
 
 function navigateTo(path: string) {
@@ -45,6 +46,7 @@ export function ProjectsPageView({
   onOpen,
   onRename,
   onDelete,
+  onOpenSettings,
 }: ProjectsPageViewProps) {
   if (status === 'loading') {
     return (
@@ -92,11 +94,12 @@ export function ProjectsPageView({
       onOpen={onOpen}
       onRename={onRename}
       onDelete={onDelete}
+      onOpenSettings={onOpenSettings}
     />
   );
 }
 
-export function ProjectsPage() {
+export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const [status, setStatus] = useState<ProjectsPageStatus>('loading');
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -171,6 +174,7 @@ export function ProjectsPage() {
         onOpen={handleOpen}
         onRename={handleRename}
         onDelete={handleDelete}
+        onOpenSettings={onOpenSettings}
       />
       {dialog?.type === 'create' && (
         <ProjectNameDialog

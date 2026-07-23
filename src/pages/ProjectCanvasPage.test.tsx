@@ -26,6 +26,7 @@ test('ProjectCanvasPageView renders project navigation and saved status', () => 
   assert.match(html, /海报项目/);
   assert.match(html, /已保存/);
   assert.match(html, /画布内容/);
+  assert.match(html, /模型设置/);
 });
 
 test('ProjectCanvasPageView renders autosave failures in the header', () => {

@@ -1,5 +1,5 @@
 {
-  "name": "Remix: 香蕉画图",
-  "description": "一个类似 Flowith 的无限画布 AI 图像生成工具，支持调整各种生图参数。",
+  "name": "香蕉画图",
+  "description": "本地优先的无限画布 AI 图像创作工具，支持 npm 与 Electron 桌面运行。",
   "requestFramePermissions": []
 }

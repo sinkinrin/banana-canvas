@@ -28,6 +28,7 @@ import {
   type CanvasNodeData,
 } from './lib/canvasState';
 import { normalizeProjectSnapshot, type ProjectSnapshot } from './lib/projectSession';
+import { DEFAULT_IMAGE_MODEL } from './lib/imageModels';
 
 type BananaStoreGlobals = typeof globalThis & {
   __bananaTemporalAssetsUnsub?: () => void;
@@ -139,7 +140,10 @@ export const useStore = create<AppState>()(
             id: 'initial-node',
             type: 'promptNode',
             position: { x: 250, y: 250 },
-            data: { prompt: '一只可爱的香蕉在太空中遨游，赛博朋克风格' },
+            data: {
+              prompt: '一只可爱的香蕉在太空中遨游，赛博朋克风格',
+              imageModel: DEFAULT_IMAGE_MODEL,
+            },
           },
         ],
         edges: [],
@@ -164,7 +168,12 @@ export const useStore = create<AppState>()(
         },
         addNode: (type, position, data = {}) => {
           const newId = uuidv4();
-          const normalized = normalizeNodeDataWithAssets(data, get().assets);
+          const normalized = normalizeNodeDataWithAssets(
+            type === 'promptNode'
+              ? { imageModel: DEFAULT_IMAGE_MODEL, ...data }
+              : data,
+            get().assets
+          );
           const newNode: AppNode = {
             id: newId,
             type,

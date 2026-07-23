@@ -28,12 +28,12 @@ import {
   resolveImage2ProxyMode,
 } from './imageModels';
 
-test('normalizeImageModel falls back to banana for unknown values', () => {
-  assert.equal(DEFAULT_IMAGE_MODEL, 'banana');
+test('normalizeImageModel falls back to image2 for unknown values', () => {
+  assert.equal(DEFAULT_IMAGE_MODEL, 'image2');
   assert.equal(normalizeImageModel('image2'), 'image2');
   assert.equal(normalizeImageModel('banana'), 'banana');
-  assert.equal(normalizeImageModel('unknown-model'), 'banana');
-  assert.equal(normalizeImageModel(undefined), 'banana');
+  assert.equal(normalizeImageModel('unknown-model'), 'image2');
+  assert.equal(normalizeImageModel(undefined), 'image2');
 });
 
 test('getImageModelConfig exposes provider metadata for both image models', () => {
@@ -465,6 +465,11 @@ test('createImage2Config reads relay settings from environment values', () => {
       missingKeys: [],
     }
   );
+});
+
+test('createImage2Config defaults the relay model to gpt-image-2', () => {
+  assert.equal(createImage2Config({}).model, 'gpt-image-2');
+  assert.equal(createImage2Config({}).endpointType, 'images');
 });
 
 test('createImage2Config normalizes base URLs with nested endpoint paths', () => {

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
+import http from 'node:http';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 
@@ -33,7 +34,10 @@ async function requestJson(app: express.Express, path: string, body: unknown) {
 function createApp(providers: GenerationProviders) {
   const app = express();
   app.use(express.json({ limit: '50mb' }));
-  mountGenerationRoutes(app, { providers });
+  mountGenerationRoutes(app, {
+    providers,
+    runtimeConfig: createRuntimeConfigManager({ GEMINI_API_KEY: 'test-key' }),
+  });
   return app;
 }
 
@@ -82,7 +86,6 @@ test('generate-image returns provider result for valid Banana request', async ()
   const response = await requestJson(app, '/api/generate-image', {
     prompt: 'draw',
     imageModel: 'banana',
-    customKey: 'test-key',
   });
 
   assert.equal(response.status, 200);
@@ -104,11 +107,11 @@ test('provider failures still return 500 with a request ID', async () => {
   const response = await requestJson(app, '/api/generate-image', {
     prompt: 'draw',
     imageModel: 'banana',
-    customKey: 'test-key',
   });
 
   assert.equal(response.status, 500);
-  assert.match(response.body.error, /provider exploded/);
+  assert.match(response.body.error, /图像生成失败/);
+  assert.equal(JSON.stringify(response.body).includes('provider exploded'), false);
   assert.equal(typeof response.body.requestId, 'string');
 });
 
@@ -129,7 +132,7 @@ test('optimize-prompt returns stable response shape through injected optimizer w
     },
   });
 
-  const response = await requestJson(app, '/api/optimize-prompt', { prompt: 'short prompt', customKey: 'test-key' });
+  const response = await requestJson(app, '/api/optimize-prompt', { prompt: 'short prompt' });
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, { optimizedPrompt: 'expanded prompt' });
@@ -164,4 +167,51 @@ test('generation routes read Gemini API key from hot-reloaded runtime config', a
 
   assert.equal(second.status, 200);
   assert.deepEqual(seenKeys, ['old-key', 'new-key']);
+});
+
+test('generation route aborts the provider when the client disconnects', async () => {
+  let providerStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    providerStarted = resolve;
+  });
+  let providerAborted!: () => void;
+  const aborted = new Promise<void>((resolve) => {
+    providerAborted = resolve;
+  });
+  const app = createApp({
+    generateBananaImage: async ({ signal }) => {
+      providerStarted();
+      return await new Promise<string>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          providerAborted();
+          reject(new DOMException('aborted', 'AbortError'));
+        }, { once: true });
+      });
+    },
+    generateImage2Image: async () => 'data:image/png;base64,image2',
+  });
+  const server = app.listen(0);
+  await once(server, 'listening');
+  const address = server.address() as AddressInfo;
+  const body = JSON.stringify({ prompt: 'draw', imageModel: 'banana' });
+  const request = http.request({
+    host: '127.0.0.1',
+    port: address.port,
+    path: '/api/generate-image',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  });
+  request.on('error', () => undefined);
+  request.end(body);
+
+  try {
+    await started;
+    request.destroy();
+    await aborted;
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

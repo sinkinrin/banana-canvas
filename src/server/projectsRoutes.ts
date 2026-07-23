@@ -4,6 +4,9 @@ import type { LocalProjectStore } from '../lib/localProjectStore';
 function sendProjectRouteError(res: express.Response, error: unknown) {
   const message = error instanceof Error ? error.message : '本地项目存储失败';
   const status = message.includes('Invalid project id')
+    || message.includes('Invalid project import')
+    || message.includes('Invalid project snapshot')
+    || message.includes('Invalid project asset payload')
     || message.includes('Invalid asset id')
     || message.includes('Project asset missing')
     || message.includes('Project asset file missing')
@@ -12,6 +15,11 @@ function sendProjectRouteError(res: express.Response, error: unknown) {
     : message.includes('Project not found')
       ? 404
       : 500;
+  if (status === 500) {
+    console.error('[projects] local storage operation failed:', error);
+    res.status(500).json({ error: '本地项目存储失败' });
+    return;
+  }
   res.status(status).json({ error: message });
 }
 

@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 import { getLocalDataWatchIgnoreGlobs } from './src/lib/devServerWatch';
 
 export default defineConfig(() => {
@@ -13,8 +13,7 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // DISABLE_HMR is useful in hosted editors where file watching causes flicker.
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: {
         ignored: getLocalDataWatchIgnoreGlobs(),

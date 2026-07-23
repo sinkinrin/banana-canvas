@@ -148,7 +148,7 @@ export function createReferenceImageController({
   const referenceImageIds = assetsHydrated
     ? rawReferenceImageIds.filter((referenceImageId) => assets[referenceImageId])
     : rawReferenceImageIds;
-  const usesReferenceImageIds = data.referenceImageIds != null;
+  const usesReferenceImageIds = data.referenceImageIds !== null && data.referenceImageIds !== undefined;
   const hasPendingReferenceHydration = !assetsHydrated && rawReferenceImageIds.length > 0;
 
   const appendReferenceImage = (nextImage: InlineImageData) => {

@@ -375,7 +375,7 @@ test('prompt generation runner marks provider failures on placeholder and source
   assert.ok(calls.some((call) => call === 'update:prompt-1:{"error":"provider failed"}'));
 });
 
-test('prompt generation runner handles invalid Banana key and always clears loading', async () => {
+test('prompt generation runner reports invalid Banana key and always clears loading', async () => {
   const calls: string[] = [];
   const runner = createPromptGenerationRunner({
     generateImage: async () => {
@@ -386,8 +386,6 @@ test('prompt generation runner handles invalid Banana key and always clears load
     updateNodeData: (nodeId, patch) => calls.push(`update:${nodeId}:${JSON.stringify(patch)}`),
     setEdges: (edges) => calls.push(`edges:${edges.length}`),
     commitPrompt: () => calls.push('commit'),
-    removeApiKey: (key) => calls.push(`remove-key:${key}`),
-    openSelectKey: () => calls.push('open-key-picker'),
     now: () => '2026-04-27T00:00:00.000Z',
   });
 
@@ -405,7 +403,6 @@ test('prompt generation runner handles invalid Banana key and always clears load
     nodePosition: { x: 0, y: 0 },
   });
 
-  assert.ok(calls.includes('remove-key:custom_gemini_api_key'));
-  assert.ok(calls.includes('open-key-picker'));
+  assert.ok(calls.some((call) => call.includes('API key not valid')));
   assert.ok(calls.includes('update:prompt-1:{"isLoading":false}'));
 });

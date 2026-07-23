@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
-import { generateImage } from '../../services/gemini';
-import type { GenerateImageParams } from '../../services/gemini';
+import { generateImage, type GenerateImageParams } from '../../services/gemini';
 import type { AppNode } from '../../store';
 import type { InlineImageData } from '../../lib/canvasState';
 import type { BananaOptions, Image2Options, ImageModelId } from '../../lib/imageModels';
@@ -90,11 +89,6 @@ export type PromptGenerationRunnerDeps = {
   commitPrompt: (prompt: string) => void;
   now: () => string;
   createAbortController?: () => AbortController;
-  removeApiKey?: (key: string) => void;
-  getApiKey?: (key: string) => string | null;
-  alertInvalidApiKey?: () => void;
-  reloadWindow?: () => void;
-  openSelectKey?: () => unknown | Promise<unknown>;
   onGeneratedCountChange?: (count: number) => void;
 };
 
@@ -106,37 +100,10 @@ function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-function isInvalidBananaKeyError(message: string) {
-  return (
-    message.includes('Requested entity was not found') ||
-    message.includes('PERMISSION_DENIED') ||
-    message.includes('The caller does not have permission') ||
-    message.includes('API key not valid') ||
-    message.includes('API key is required')
-  );
-}
-
 function toReferencePayload(referenceImages: InlineImageData[]) {
   return referenceImages.length > 0
     ? referenceImages.map((image) => ({ data: image.data, mimeType: image.mimeType }))
     : undefined;
-}
-
-async function handleInvalidBananaKey(deps: PromptGenerationRunnerDeps) {
-  const keyName = 'custom_gemini_api_key';
-  const hasCustomKey = deps.getApiKey?.(keyName);
-
-  if (hasCustomKey) {
-    deps.removeApiKey?.(keyName);
-    deps.alertInvalidApiKey?.();
-    deps.reloadWindow?.();
-    return;
-  }
-
-  if (deps.removeApiKey && !deps.getApiKey) {
-    deps.removeApiKey(keyName);
-  }
-  await deps.openSelectKey?.();
 }
 
 export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
@@ -255,9 +222,6 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
           const errorMessage = getErrorMessage(failures[0].reason);
           deps.updateNodeData(input.nodeId, { error: errorMessage });
 
-          if (input.imageModel === 'banana' && isInvalidBananaKeyError(errorMessage)) {
-            await handleInvalidBananaKey(deps);
-          }
         }
       } finally {
         deps.updateNodeData(input.nodeId, { isLoading: false });
@@ -318,11 +282,6 @@ export function usePromptGeneration({
       setEdges: (edges) => depsRef.current.setEdges(edges),
       commitPrompt: (prompt) => depsRef.current.commitPrompt(prompt),
       now: () => new Date().toISOString(),
-      getApiKey: (key) => globalThis.localStorage?.getItem(key) ?? null,
-      removeApiKey: (key) => globalThis.localStorage?.removeItem(key),
-      alertInvalidApiKey: () => globalThis.alert?.('您填写的 API Key 无效或没有权限，请重新输入。'),
-      reloadWindow: () => globalThis.window?.location.reload(),
-      openSelectKey: () => globalThis.window?.aistudio?.openSelectKey?.(),
       onGeneratedCountChange: setGeneratedCount,
     });
   }

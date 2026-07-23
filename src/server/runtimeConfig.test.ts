@@ -6,6 +6,8 @@ import path from 'node:path';
 
 import {
   createRuntimeConfigManager,
+  recoverInvalidRuntimeEnv,
+  repairInvalidRuntimeEnvFile,
   watchRuntimeEnvFile,
   type RuntimeConfigLogEntry,
 } from './runtimeConfig';
@@ -48,6 +50,54 @@ test('runtime config rejects invalid reloads and keeps the previous valid config
     ),
     true
   );
+});
+
+test('runtime config recovery drops invalid inherited fields and preserves valid secrets', () => {
+  const recovered = recoverInvalidRuntimeEnv(validImage2Env({
+    IMAGE2_BASE_URL: 'not a url',
+    IMAGE2_API_KEY: 'keep-this-key',
+    IMAGE2_REQUEST_TIMEOUT_MS: 'invalid-timeout',
+  }));
+
+  assert.deepEqual(recovered.invalidKeys.sort(), [
+    'IMAGE2_BASE_URL',
+    'IMAGE2_REQUEST_TIMEOUT_MS',
+  ]);
+  assert.equal(recovered.env.IMAGE2_BASE_URL, undefined);
+  assert.equal(recovered.env.IMAGE2_REQUEST_TIMEOUT_MS, undefined);
+  assert.equal(recovered.env.IMAGE2_API_KEY, 'keep-this-key');
+  assert.equal(recovered.errors.length, 2);
+});
+
+test('runtime config repairs invalid legacy env fields without removing keys or comments', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-runtime-repair-'));
+  const envPath = path.join(tmpDir, '.env');
+  const logs: RuntimeConfigLogEntry[] = [];
+  fs.writeFileSync(envPath, [
+    '# preserve this comment',
+    'IMAGE2_BASE_URL="not a url"',
+    'IMAGE2_API_KEY="keep-this-key"',
+    'IMAGE2_MODEL="gpt-image-2"',
+  ].join('\n'));
+
+  try {
+    const result = repairInvalidRuntimeEnvFile(envPath, {
+      logger: (entry) => logs.push(entry),
+    });
+    const repaired = fs.readFileSync(envPath, 'utf8');
+
+    assert.equal(result.repaired, true);
+    assert.deepEqual(result.invalidKeys, ['IMAGE2_BASE_URL']);
+    assert.match(repaired, /# preserve this comment/);
+    assert.match(repaired, /IMAGE2_BASE_URL=""/);
+    assert.match(repaired, /IMAGE2_API_KEY="keep-this-key"/);
+    assert.equal(
+      logs.some((entry) => entry.level === 'warn' && entry.message.includes('IMAGE2_BASE_URL')),
+      true
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test('runtime config hot reloads safe values while warning for startup-only changes', () => {

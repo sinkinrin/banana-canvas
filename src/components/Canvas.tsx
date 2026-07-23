@@ -16,6 +16,7 @@ import { useStore } from '../store';
 import { PromptNode } from './nodes/PromptNode';
 import { ImageNode } from './nodes/ImageNode';
 import { DeletableEdge } from './edges/DeletableEdge';
+import { DEFAULT_IMAGE_MODEL } from '../lib/imageModels';
 import { Plus, Sparkles, Undo2, Redo2, LayoutGrid, Maximize2 } from 'lucide-react';
 
 function CanvasInner() {
@@ -50,7 +51,10 @@ function CanvasInner() {
 
   const handleAddPromptNode = useCallback(() => {
     const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    addNode('promptNode', { x: center.x - 160, y: center.y - 100 }, { prompt: '' });
+    addNode('promptNode', { x: center.x - 160, y: center.y - 100 }, {
+      prompt: '',
+      imageModel: DEFAULT_IMAGE_MODEL,
+    });
   }, [addNode, screenToFlowPosition]);
 
   const handleAutoLayout = useCallback(() => {
@@ -167,6 +171,7 @@ function CanvasInner() {
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onlyRenderVisibleElements
         fitView
         className=""
         minZoom={0.1}
@@ -252,7 +257,10 @@ function CanvasInner() {
         >
           <button
             onClick={() => {
-              addNode('promptNode', { x: contextMenu.flowX - 160, y: contextMenu.flowY - 100 }, { prompt: '' });
+              addNode('promptNode', { x: contextMenu.flowX - 160, y: contextMenu.flowY - 100 }, {
+                prompt: '',
+                imageModel: DEFAULT_IMAGE_MODEL,
+              });
               setContextMenu(null);
             }}
             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors text-left"

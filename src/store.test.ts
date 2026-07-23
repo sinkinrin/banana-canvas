@@ -4,6 +4,15 @@ import 'fake-indexeddb/auto';
 
 const { useStore } = await import('./store');
 
+test('new prompt nodes default to Image2', () => {
+  useStore.setState({ nodes: [], edges: [], assets: {}, assetsHydrated: true });
+
+  const id = useStore.getState().addNode('promptNode', { x: 10, y: 20 }, { prompt: 'draw' });
+  const node = useStore.getState().nodes.find((item) => item.id === id);
+
+  assert.equal(node?.data.imageModel, 'image2');
+});
+
 test('hydrateProject does not leave the previous project in undo history', () => {
   const temporal = useStore.temporal.getState();
 

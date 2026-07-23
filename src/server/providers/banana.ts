@@ -39,6 +39,7 @@ export async function generateBananaImage({
   imageSize,
   images,
   bananaOptions,
+  signal,
 }: {
   prompt: string;
   apiKey: string;
@@ -46,6 +47,7 @@ export async function generateBananaImage({
   imageSize?: unknown;
   images: ReferenceImageInput[];
   bananaOptions: BananaOptions;
+  signal?: AbortSignal;
 }) {
   const ai = new GoogleGenAI({ apiKey });
   const request = buildBananaProviderRequest({
@@ -55,6 +57,10 @@ export async function generateBananaImage({
     images,
     bananaOptions,
   });
+  request.config = {
+    ...request.config,
+    abortSignal: signal,
+  };
 
   const response = await ai.models.generateContent(request as any);
   const imageUrl = extractBananaProviderImageUrl(response);

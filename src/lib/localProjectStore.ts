@@ -39,6 +39,11 @@ type ProjectImportEntry = {
   snapshot: ProjectSnapshot;
 };
 
+const MAX_PROJECT_NODES = 10_000;
+const MAX_PROJECT_EDGES = 20_000;
+const MAX_PROJECT_ASSETS = 10_000;
+const MAX_PROJECT_ASSET_BYTES = 32 * 1024 * 1024;
+
 export type LocalProjectStore = {
   loadProjectIndex: () => Promise<ProjectMeta[]>;
   saveProjectIndex: (projects: ProjectMeta[]) => Promise<void>;
@@ -144,8 +149,85 @@ function isProjectMeta(value: unknown): value is ProjectMeta {
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
     typeof value.createdAt === 'string' &&
-    typeof value.updatedAt === 'string'
+    typeof value.updatedAt === 'string' &&
+    value.name.length <= 200 &&
+    Number.isFinite(Date.parse(value.createdAt)) &&
+    Number.isFinite(Date.parse(value.updatedAt))
   );
+}
+
+function validateCanvasAsset(asset: unknown, expectedId?: string): asserts asset is CanvasImageAsset {
+  if (
+    !isRecord(asset) ||
+    typeof asset.id !== 'string' ||
+    typeof asset.mimeType !== 'string' ||
+    typeof asset.data !== 'string' ||
+    (expectedId !== undefined && asset.id !== expectedId) ||
+    !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(asset.mimeType.toLowerCase()) ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(asset.data) ||
+    Buffer.from(asset.data, 'base64').byteLength > MAX_PROJECT_ASSET_BYTES
+  ) {
+    throw new Error('Invalid project asset payload');
+  }
+  validateAssetId(asset.id);
+}
+
+function validateProjectSnapshotInput(value: unknown): ProjectSnapshotWithAssetRefs {
+  if (!isRecord(value)) throw new Error('Invalid project snapshot');
+  const nodes = value.nodes;
+  const edges = value.edges;
+  const assets = value.assets;
+  if (!Array.isArray(nodes) || nodes.length > MAX_PROJECT_NODES) {
+    throw new Error(`Invalid project snapshot nodes (maximum ${MAX_PROJECT_NODES})`);
+  }
+  if (!Array.isArray(edges) || edges.length > MAX_PROJECT_EDGES) {
+    throw new Error(`Invalid project snapshot edges (maximum ${MAX_PROJECT_EDGES})`);
+  }
+  if (!isRecord(assets) || Object.keys(assets).length > MAX_PROJECT_ASSETS) {
+    throw new Error(`Invalid project snapshot assets (maximum ${MAX_PROJECT_ASSETS})`);
+  }
+
+  for (const node of nodes) {
+    if (
+      !isRecord(node) ||
+      typeof node.id !== 'string' ||
+      typeof node.type !== 'string' ||
+      !isRecord(node.position) ||
+      typeof node.position.x !== 'number' ||
+      !Number.isFinite(node.position.x) ||
+      typeof node.position.y !== 'number' ||
+      !Number.isFinite(node.position.y) ||
+      !isRecord(node.data)
+    ) {
+      throw new Error('Invalid project snapshot node');
+    }
+  }
+  for (const edge of edges) {
+    if (
+      !isRecord(edge) ||
+      typeof edge.id !== 'string' ||
+      typeof edge.source !== 'string' ||
+      typeof edge.target !== 'string'
+    ) {
+      throw new Error('Invalid project snapshot edge');
+    }
+  }
+  for (const [assetId, asset] of Object.entries(assets)) {
+    validateCanvasAsset(asset, assetId);
+  }
+
+  return value as ProjectSnapshotWithAssetRefs;
+}
+
+function validateProjectImportEntry(value: unknown): ProjectImportEntry {
+  if (!isRecord(value) || !isProjectMeta(value.project)) {
+    throw new Error('Invalid project import metadata');
+  }
+  validateProjectId(value.project.id);
+  return {
+    project: value.project,
+    snapshot: validateProjectSnapshotInput(value.snapshot),
+  };
 }
 
 function normalizeIndex(value: unknown): ProjectMeta[] {
@@ -187,6 +269,7 @@ function normalizeStoredSnapshot(value: unknown): StoredProjectSnapshot {
 export function createLocalProjectStore(rootDir: string): LocalProjectStore {
   const storageRoot = resolve(rootDir);
   const projectsDir = join(storageRoot, 'projects');
+  const trashDir = join(storageRoot, '.trash');
   const indexPath = join(projectsDir, 'index.json');
   let writeQueue: Promise<void> = Promise.resolve();
 
@@ -211,6 +294,7 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
     asset: CanvasImageAsset,
     previousAssets: Record<string, StoredAsset>
   ): Promise<StoredAsset> => {
+    validateCanvasAsset(asset);
     validateAssetId(asset.id);
     const assetDir = assetsDir(projectId);
     await mkdir(assetDir, { recursive: true });
@@ -258,6 +342,7 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
   };
 
   const writeProjectSnapshotFiles = async (projectId: string, snapshot: ProjectSnapshotWithAssetRefs) => {
+    const validatedSnapshot = validateProjectSnapshotInput(snapshot);
     const dir = projectDir(projectId);
     const assetDir = assetsDir(projectId);
     await mkdir(assetDir, { recursive: true });
@@ -265,12 +350,12 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
       await readJsonFile<unknown>(projectJsonPath(projectId), { nodes: [], edges: [], assets: {} })
     );
 
-    const referencedAssetIds = collectReferencedAssetIdsFromHistory([{ nodes: snapshot.nodes }]);
+    const referencedAssetIds = collectReferencedAssetIdsFromHistory([{ nodes: validatedSnapshot.nodes }]);
     const storedAssets: Record<string, StoredAsset> = {};
 
     for (const assetId of referencedAssetIds) {
       validateAssetId(assetId);
-      const providedAsset = snapshot.assets[assetId];
+      const providedAsset = validatedSnapshot.assets[assetId];
       if (providedAsset?.data) {
         storedAssets[assetId] = await writeProjectAssetFile(projectId, providedAsset, previousSnapshot.assets);
         continue;
@@ -281,7 +366,7 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
         throw new Error(`Project asset missing: ${assetId}`);
       }
 
-      const assetRef = snapshot.assetRefs?.[assetId];
+      const assetRef = validatedSnapshot.assetRefs?.[assetId];
       if (
         assetRef &&
         (
@@ -304,8 +389,8 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
     }
 
     await writeJsonFile(join(dir, 'project.json'), {
-      nodes: snapshot.nodes,
-      edges: snapshot.edges,
+      nodes: validatedSnapshot.nodes,
+      edges: validatedSnapshot.edges,
       assets: storedAssets,
     });
 
@@ -354,8 +439,8 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
       await runWriteTask(async () => {
         const normalizedEntries = Array.from(
           entries.reduce((map, entry) => {
-            validateProjectId(entry.project.id);
-            map.set(entry.project.id, entry);
+            const validatedEntry = validateProjectImportEntry(entry);
+            map.set(validatedEntry.project.id, validatedEntry);
             return map;
           }, new Map<string, ProjectImportEntry>()).values()
         );
@@ -471,7 +556,12 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
       await runWriteTask(async () => {
         const dir = projectDir(projectId);
         ensureInside(projectsDir, dir);
-        await rm(dir, { recursive: true, force: true });
+        if (await fileExists(dir)) {
+          await mkdir(trashDir, { recursive: true });
+          const trashedDir = join(trashDir, `${projectId}-${Date.now()}`);
+          ensureInside(trashDir, trashedDir);
+          await rename(dir, trashedDir);
+        }
         await writeJsonFile(
           indexPath,
           (await store.loadProjectIndex()).filter((project) => project.id !== projectId)

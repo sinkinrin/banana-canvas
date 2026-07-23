@@ -1,5 +1,4 @@
-import { generateImage } from '../../services/gemini';
-import type { GenerateImageParams } from '../../services/gemini';
+import { generateImage, type GenerateImageParams } from '../../services/gemini';
 import type { InlineImageData } from '../../lib/canvasState';
 import type { Image2Options } from '../../lib/imageModels';
 import type { MaskGeneratePayload } from '../mask/MaskEditorModal';

@@ -100,6 +100,18 @@ export type RuntimeConfigManager = {
   reload: (env: EnvLike) => RuntimeConfigReloadResult;
 };
 
+export type RuntimeEnvFilePrecedence = 'base' | 'file';
+
+export type RuntimeEnvRecoveryResult = {
+  env: EnvLike;
+  errors: string[];
+  invalidKeys: string[];
+};
+
+export type RuntimeEnvFileRepairResult = RuntimeEnvRecoveryResult & {
+  repaired: boolean;
+};
+
 function defaultLogger(entry: RuntimeConfigLogEntry) {
   if (entry.level === 'error') {
     console.error(entry.message);
@@ -328,6 +340,41 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
   };
 }
 
+function getValidationErrorKey(error: string) {
+  return RUNTIME_ENV_KEYS.find((key) => error.startsWith(`${key} `));
+}
+
+export function recoverInvalidRuntimeEnv(envInput: EnvLike): RuntimeEnvRecoveryResult {
+  const candidate = { ...envInput };
+  const errors: string[] = [];
+  const invalidKeys = new Set<string>();
+
+  for (let attempt = 0; attempt <= RUNTIME_ENV_KEYS.length; attempt += 1) {
+    const result = validateRuntimeEnv(candidate);
+    if (result.ok) {
+      return {
+        env: result.config.env,
+        errors,
+        invalidKeys: [...invalidKeys],
+      };
+    }
+
+    let removedAny = false;
+    for (const error of result.errors) {
+      if (!errors.includes(error)) errors.push(error);
+      const key = getValidationErrorKey(error);
+      if (!key) continue;
+      invalidKeys.add(key);
+      delete candidate[key];
+      removedAny = true;
+    }
+
+    if (!removedAny) break;
+  }
+
+  return { env: {}, errors, invalidKeys: [...invalidKeys] };
+}
+
 function getChangedStartupKeys(previous: RuntimeConfig, next: RuntimeConfig) {
   const changed: string[] = [];
   if (previous.startup.port !== next.startup.port) changed.push('PORT');
@@ -411,25 +458,73 @@ function readDotEnvFile(envFilePath: string) {
   return dotenv.parse(fs.readFileSync(envFilePath));
 }
 
-function mergeDotEnvWithBaseEnv(envFilePath: string, baseEnv: EnvLike) {
+export function loadRuntimeEnvFile(
+  envFilePath: string,
+  baseEnv: EnvLike,
+  precedence: RuntimeEnvFilePrecedence = 'base'
+) {
   const parsed = readDotEnvFile(envFilePath);
-  return { ...parsed, ...baseEnv };
+  return precedence === 'file'
+    ? { ...baseEnv, ...parsed }
+    : { ...parsed, ...baseEnv };
+}
+
+function clearInvalidEnvFileKeys(text: string, invalidKeys: string[]) {
+  const keys = new Set(invalidKeys);
+  return text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => {
+      const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+      const key = match?.[1];
+      return key && keys.has(key) ? `${key}=""` : line;
+    })
+    .join('\n');
+}
+
+export function repairInvalidRuntimeEnvFile(
+  envFilePath: string,
+  { logger = defaultLogger }: { logger?: RuntimeConfigLogger } = {}
+): RuntimeEnvFileRepairResult {
+  const resolvedPath = path.resolve(envFilePath);
+  if (!fs.existsSync(resolvedPath)) {
+    return { repaired: false, env: {}, errors: [], invalidKeys: [] };
+  }
+
+  const recovery = recoverInvalidRuntimeEnv(readDotEnvFile(resolvedPath));
+  if (recovery.invalidKeys.length === 0) {
+    return { repaired: false, ...recovery };
+  }
+
+  const previousText = fs.readFileSync(resolvedPath, 'utf8');
+  const nextText = clearInvalidEnvFileKeys(previousText, recovery.invalidKeys);
+  fs.writeFileSync(resolvedPath, nextText, { encoding: 'utf8', mode: 0o600 });
+  logger({
+    level: 'warn',
+    message: `Cleared invalid runtime settings from ${resolvedPath}: ${recovery.errors.join('; ')}`,
+  });
+
+  return { repaired: true, ...recovery };
 }
 
 export function watchRuntimeEnvFile({
   envFilePath = path.resolve(process.cwd(), '.env'),
   manager = getRuntimeConfigManager(),
   baseEnv = process.env,
+  envFilePrecedence = 'base',
   debounceMs = 250,
   logger = defaultLogger,
   onReloadSuccess,
+  envOverlay,
 }: {
   envFilePath?: string;
   manager?: RuntimeConfigManager;
   baseEnv?: EnvLike;
+  envFilePrecedence?: RuntimeEnvFilePrecedence;
   debounceMs?: number;
   logger?: RuntimeConfigLogger;
   onReloadSuccess?: (manager: RuntimeConfigManager) => void;
+  envOverlay?: () => EnvLike;
 } = {}) {
   let timer: NodeJS.Timeout | undefined;
   const resolvedEnvFilePath = path.resolve(envFilePath);
@@ -440,7 +535,10 @@ export function watchRuntimeEnvFile({
 
   const reload = () => {
     try {
-      const result = manager.reload(mergeDotEnvWithBaseEnv(resolvedEnvFilePath, baseEnv));
+      const result = manager.reload({
+        ...loadRuntimeEnvFile(resolvedEnvFilePath, baseEnv, envFilePrecedence),
+        ...(envOverlay?.() ?? {}),
+      });
       if (result.ok) onReloadSuccess?.(manager);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

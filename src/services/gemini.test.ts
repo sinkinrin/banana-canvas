@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createGenerateImagePayload, getGenerateImageTimeoutMs } from './gemini';
 
-test('createGenerateImagePayload includes the selected image model and custom key', () => {
+test('createGenerateImagePayload includes the selected image model without browser secrets', () => {
   assert.deepEqual(
     createGenerateImagePayload(
       {
@@ -20,8 +20,7 @@ test('createGenerateImagePayload includes the selected image model and custom ke
           partialImages: 2,
           user: 'ignored-end-user',
         } as any,
-      },
-      'AIza-test-key'
+      }
     ),
     {
       prompt: '画一只香蕉机器人',
@@ -34,7 +33,6 @@ test('createGenerateImagePayload includes the selected image model and custom ke
         outputCompression: 75,
         partialImages: 2,
       },
-      customKey: 'AIza-test-key',
     }
   );
 });
@@ -47,15 +45,13 @@ test('createGenerateImagePayload includes mask images for Image2 edits', () => {
         imageModel: 'image2',
         referenceImages: [{ data: 'original', mimeType: 'image/png' }],
         maskImage: { data: 'mask', mimeType: 'image/png' },
-      },
-      null
+      }
     ),
     {
       prompt: '把帽子改成红色',
       imageModel: 'image2',
       referenceImages: [{ data: 'original', mimeType: 'image/png' }],
       maskImage: { data: 'mask', mimeType: 'image/png' },
-      customKey: null,
     }
   );
 });
@@ -79,8 +75,7 @@ test('createGenerateImagePayload includes normalized Banana2 advanced options', 
           },
           outputFormat: 'png',
         } as any,
-      },
-      'AIza-test-key'
+      }
     ),
     {
       prompt: '画一只香蕉机器人',
@@ -92,23 +87,20 @@ test('createGenerateImagePayload includes normalized Banana2 advanced options', 
         mediaResolution: 'MEDIA_RESOLUTION_MEDIUM',
         searchGrounding: true,
       },
-      customKey: 'AIza-test-key',
     }
   );
 });
 
-test('createGenerateImagePayload normalizes missing model selection to banana', () => {
+test('createGenerateImagePayload normalizes missing model selection to image2', () => {
   assert.deepEqual(
     createGenerateImagePayload(
       {
         prompt: '画一只香蕉机器人',
-      },
-      null
+      }
     ),
     {
       prompt: '画一只香蕉机器人',
-      imageModel: 'banana',
-      customKey: null,
+      imageModel: 'image2',
     }
   );
 });

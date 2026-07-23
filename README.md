@@ -4,7 +4,7 @@
 
 # 香蕉画图
 
-当前版本：`0.1.0`
+当前版本：`0.2.1`
 
 一个类似 Flowith 的无限画布 AI 图像生成工具。你可以在画布上搭建提示词节点和图片节点，把一轮生成的结果继续作为下一轮参考图，逐步迭代出更复杂的视觉方案。
 
@@ -29,17 +29,18 @@
 - 创作节点：输入提示词后可直接生成图片，也可以先用 Gemini 3.1 Pro 优化提示词。
 - 参考图输入：支持上传图片和 `Ctrl+V` 粘贴图片，单节点最多挂载 4 张参考图。
 - 多参数生图：支持调整画幅比例、输出尺寸、单次生成数量、节点颜色，以及模型专属高级参数。
-- 多模型生图：每个创作节点都可以选择 `Banana` 或 `Image2`，生成出的图片节点会记录当次使用的模型。
+- 多模型生图：新创作节点默认使用 `Image2`，也可以切换到 `Banana`；生成出的图片节点会记录当次使用的模型。
 - 批量生成：单个提示词节点一次可生成 `1`、`2` 或 `4` 张图片，并自动连到新图片节点。
 - 图片节点操作：支持全屏查看、复制图片、复制提示词、下载、重新生成，以及“以此为参考新建节点”。
 - 画布辅助：支持撤销/重做、适应视口、右键菜单、新建节点、自动布局、清空画布。
 - 本地项目持久化：项目索引、画布快照和图片资产默认保存到仓库本地 `data/projects/`；无本地 API 时会回退到 IndexedDB。
-- API Key 处理：本地服务端读取 `.env` 中的默认 Key，也支持前端手动输入自定义 Gemini API Key。
+- 应用内连接设置：项目列表和画布顶部都可以打开“模型设置”，直接配置 Image2 URL、API Key、模型、接口类型、代理和超时参数。
+- 安全自动加载：桌面版使用 Electron `safeStorage` 加密保存 API Key，其他连接参数保存在当前用户的应用数据目录；界面只读取密钥是否已配置，不会把已保存的 Key 回传到浏览器。npm 模式继续使用仓库 `.env`。
 
 ## 运行环境
 
 - Node.js 20.18.1 或更高版本
-- 可用的 Gemini API Key
+- 可用的 Image2/OpenAI-compatible 中转服务；如需 Banana 或提示词优化，再配置 Gemini API Key
 
 ## 本地启动
 
@@ -49,17 +50,11 @@
 npm install
 ```
 
-2. 配置环境变量
+2. 配置模型连接
 
-本地运行时建议复制一份 `.env.example` 为 `.env`，至少配置：
+启动应用后点击“模型设置”即可直接填写 Image2 Base URL、API Key 和模型名。保存后立即生效，后续启动会自动加载。
 
-```bash
-GEMINI_API_KEY=你的_Gemini_API_Key
-```
-
-只浏览项目、整理画布和查看已有截图不需要 API Key；调用提示词优化或实际生图时才需要配置对应模型的 Key。
-
-如果要使用 `Image2` 模型，还需要配置 OpenAI-compatible chat completions 中转：
+开发环境也可以复制一份 `.env.example` 为 `.env`，使用环境变量作为配置来源：
 
 ```bash
 IMAGE2_BASE_URL=你的_Image2_Base_URL
@@ -67,11 +62,19 @@ IMAGE2_API_KEY=你的_Image2_Key
 IMAGE2_MODEL=你的_Image2_模型名
 ```
 
+如需使用 Banana 模型或 Gemini 提示词优化，再配置：
+
+```bash
+GEMINI_API_KEY=你的_Gemini_API_Key
+```
+
+只浏览项目、整理画布和查看已有截图不需要 API Key。
+
 `IMAGE2_BASE_URL` 填 API base URL，例如 `https://example.com/v1`。如果误填成 `https://example.com/v1/chat/completions`，服务端也会自动解析回 `https://example.com/v1`。
 
 `gpt-image-*` 模型会自动走 `/v1/images/generations` 或 `/v1/images/edits`；其他模型默认走 `/v1/chat/completions`。如需强制指定，可设置 `IMAGE2_ENDPOINT_TYPE=images` 或 `IMAGE2_ENDPOINT_TYPE=chat`。
 
-服务端启动后会监听 `.env`。`GEMINI_API_KEY` 和 Image2 相关配置可以热更新；如果新配置校验失败，服务端会记录错误并继续使用上一份有效配置。`PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 是启动期配置，变更后会提示需要重启。
+服务端启动后会监听 `.env`。应用内保存和手动编辑 `.env` 都会热更新；如果新配置校验失败，服务端会拒绝保存并继续使用上一份有效配置。`PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 是启动期配置，变更后会提示需要重启。
 
 如果你在需要代理的网络环境下访问 image2 中转，也可以额外设置：
 
@@ -99,14 +102,25 @@ http://localhost:3000
 
 `npm run dev` 会启动 `server.ts`，同时挂载 Express API 和 Vite 中间件，适合本地完整调试。
 
+服务默认只监听 `127.0.0.1`。只有明确需要局域网访问时才设置 `HOST=0.0.0.0`；当前项目接口不包含面向公网部署所需的用户认证层。
+
+如需从源码直接启动 Electron 桌面版：
+
+```bash
+npm run electron
+```
+
+该命令会先构建前端和 Electron 主进程，再以桌面窗口运行同一套 Express API。npm 模式使用仓库根目录的 `.env` 和 `data/`；Electron 模式使用当前 Windows 用户的应用数据目录，安装目录保持只读。
+
 ## 使用方式
 
-1. 点击底部“新建创作节点”，或在画布空白处右键创建新节点。
-2. 输入提示词；需要时可上传参考图，或直接在文本框里 `Ctrl+V` 粘贴图片。
-3. 可先点击“优化”让 Gemini 3.1 Pro 改写提示词，再点击“开始生成”。
-4. 生成结果会作为新的图片节点出现在当前节点右侧，并自动建立连线。
-5. 悬停图片节点可执行复制、下载、全屏、重新生成、继续作为参考图等操作。
-6. 当画布变复杂后，可以使用自动布局和适应视口快速整理结构。
+1. 首次使用先在项目列表点击“模型设置”，填写 Image2 连接参数。
+2. 点击底部“新建创作节点”，或在画布空白处右键创建新节点；新节点默认选择 Image2。
+3. 输入提示词；需要时可上传参考图，或直接在文本框里 `Ctrl+V` 粘贴图片。
+4. 可先点击“优化”让 Gemini 3.1 Pro 改写提示词，再点击“开始生成”。
+5. 生成结果会作为新的图片节点出现在当前节点右侧，并自动建立连线。
+6. 悬停图片节点可执行复制、下载、全屏、重新生成、继续作为参考图等操作。
+7. 当画布变复杂后，可以使用自动布局和适应视口快速整理结构。
 
 ## 快捷键
 
@@ -126,7 +140,7 @@ http://localhost:3000
 - Banana2 支持的分辨率：`512`、`1K`、`2K`、`4K`；旧项目中的 `512px` 会自动按官方 `512` 发送
 - 支持的批量数量：`1`、`2`、`4`
 - 参考图上限：4 张
-- 生成模型：`Banana` 使用 `gemini-3.1-flash-image-preview`；`Image2` 使用 `.env` 中配置的 OpenAI-compatible chat completions 中转
+- 默认生成模型：`Image2`；`Banana` 使用 `gemini-3.1-flash-image-preview`，`Image2` 使用应用内设置或 `.env` 中配置的 OpenAI-compatible 中转
 - 提示词优化模型：`gemini-3.1-pro-preview`
 
 ### 图片节点
@@ -140,10 +154,14 @@ http://localhost:3000
 ### 本地状态
 
 - 本地开发默认把项目索引、画布快照和图片资产保存到 `data/projects/`。
+- 桌面版把项目和模型连接配置保存到系统用户数据目录，不会写入安装目录；模型设置在启动时自动加载。
+- npm 模式允许显式进程环境变量覆盖仓库 `.env`；Electron 模式则以用户数据目录中的 `.env` 为准，不会被安装器或父进程中的同名变量意外覆盖。
+- npm 模式遇到非法 `.env` 会拒绝启动且不会改写文件；Electron 会迁移旧版无效字段，并把旧明文 API Key 转移到系统加密存储。
 - 可用 `BANANA_DATA_DIR` 改变本地项目存储目录；相对路径会从项目根目录解析。
 - 前端仍使用 `zustand + zundo` 管理画布状态和最多 50 步历史记录。
 - 如果 `/api/projects` 不可用，会回退到 IndexedDB，并可在本地 API 可用时迁移旧浏览器项目。
 - 未被当前画布或历史引用的图片资产会自动清理，避免无限膨胀。
+- 本地删除项目时会先移入数据目录下的 `.trash/`，便于误删后的人工恢复；项目列表索引会立即移除该项目。
 - 本地文件存储会为图片资产记录 `byteLength` 和 `sha256`，重复保存未变化资产时会复用已有文件；如果同一资产 ID 的内容确实变化，会重新写入。
 - `data/` 已被 `.gitignore` 忽略，避免误提交用户本地项目图片。
 
@@ -204,9 +222,10 @@ http://localhost:3000
 | `PORT` | 可选，服务端监听端口，默认 `3000`；启动期配置，修改后需重启 |
 | `NODE_ENV` | 可选，`production` 时使用静态构建产物；启动期配置，修改后需重启 |
 | `BANANA_DATA_DIR` | 可选，本地项目文件存储目录，默认 `./data`；启动期配置，修改后需重启 |
+| `HOST` | 可选，服务监听地址，默认 `127.0.0.1`；仅在明确需要局域网访问时设置 `0.0.0.0` |
 | `HTTPS_PROXY` | 可选，为 image2 服务端请求配置 HTTPS 代理 |
 | `HTTP_PROXY` | 可选，为 image2 服务端请求配置 HTTP 代理 |
-除 `PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 外，上表中的服务端运行时变量会从 `.env` 热更新。URL、整数、布尔值和枚举值会在初始加载和每次 reload 时统一校验。
+除 `PORT`、`NODE_ENV`、`BANANA_DATA_DIR`、`HOST` 外，上表中的服务端运行时变量会从 `.env` 热更新。URL、整数、布尔值和枚举值会在初始加载和每次 reload 时统一校验。
 
 ## 可用脚本
 
@@ -214,11 +233,28 @@ http://localhost:3000
 | --- | --- |
 | `npm run dev` | 启动 Express + Vite 开发环境，包含图像生成和提示词优化接口 |
 | `npm run build` | 构建前端静态资源到 `dist/` |
-| `npm run lint` | 运行 TypeScript 类型检查 |
+| `npm run build:electron` | 构建 Electron 主进程到 `build/electron/main.cjs` |
+| `npm run electron` | 构建并从源码启动 Electron 桌面版 |
+| `npm run smoke:electron` | 构建后启动隐藏 Electron 窗口，验证页面、设置 API 与 Renderer |
+| `npm run smoke:electron:packaged` | 验证 `release/win-unpacked` 中的已打包桌面程序 |
+| `npm run dist:win` | 构建 Windows x64 NSIS 安装包到 `release/` |
+| `npm run typecheck` | 运行 TypeScript 类型检查 |
+| `npm run lint` | 运行 ESLint 静态检查 |
 | `npm test` | 运行全部 `src/**/*.test.ts` 和 `src/**/*.test.tsx` 测试 |
-| `npm run check` | 依次运行类型检查、测试和构建 |
+| `npm run check` | 依次运行类型检查、ESLint、测试、Web 构建和 Electron 主进程构建 |
 | `npm run preview` | 仅预览 Vite 构建产物，不包含 Express API |
 | `npm run clean` | 删除 `dist/` 目录 |
+| `npm run clean:release` | 删除旧的 `release/` 打包产物，避免更新元数据与旧安装包混用 |
+
+## Windows 打包
+
+```bash
+npm run dist:win
+```
+
+安装包输出为 `release/banana-canvas-setup-<version>.exe`。Windows 打包会先在系统临时目录完成 Electron 资源编辑，再把产物复制回 `release/`，避免桌面目录实时扫描导致新生成的 EXE 被短暂锁定。应用图标来自 `assets/icon.ico`，可以运行 `python scripts/generate_icon.py` 从确定性的图标源重新生成 PNG/ICO。
+
+正式公开发布建议配置代码签名证书。`electron-builder` 会自动读取常见的 `CSC_LINK`、`CSC_KEY_PASSWORD` 等签名环境变量；未配置证书时仍可生成本地测试安装包，但 Windows SmartScreen 可能提示未知发布者。
 
 ## 主要目录
 
@@ -227,7 +263,6 @@ http://localhost:3000
 ├─ src/
 │  ├─ components/
 │  │  ├─ Canvas.tsx                # 画布、右键菜单、快捷键、自动布局
-│  │  ├─ ApiKeyCheck.tsx           # API Key 检测与手动录入
 │  │  ├─ nodes/
 │  │  │  ├─ PromptNode.tsx         # 提示词节点
 │  │  │  ├─ ImageNode.tsx          # 图片节点

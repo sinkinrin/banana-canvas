@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { ApiKeyCheck } from './components/ApiKeyCheck';
+import { RuntimeSettingsDialog } from './components/settings/RuntimeSettingsDialog';
 import { parseAppRoute, type AppRoute } from './lib/routes';
 import { ProjectCanvasPage } from './pages/ProjectCanvasPage';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -17,22 +17,21 @@ function getCurrentRoute() {
 
 export function AppRouter({
   route,
-  requireApiKey = true,
+  onOpenSettings = () => {},
 }: {
   route: AppRoute;
-  requireApiKey?: boolean;
+  onOpenSettings?: () => void;
 }) {
   if (route.name === 'project') {
-    const page = <ProjectCanvasPage projectId={route.projectId} />;
-
-    return requireApiKey ? <ApiKeyCheck>{page}</ApiKeyCheck> : page;
+    return <ProjectCanvasPage projectId={route.projectId} onOpenSettings={onOpenSettings} />;
   }
 
-  return <ProjectsPage />;
+  return <ProjectsPage onOpenSettings={onOpenSettings} />;
 }
 
 export default function App() {
   const [route, setRoute] = useState<AppRoute>(() => getCurrentRoute());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const handleRouteChange = () => setRoute(getCurrentRoute());
@@ -42,6 +41,9 @@ export default function App() {
   }, []);
 
   return (
-    <AppRouter route={route} />
+    <>
+      <AppRouter route={route} onOpenSettings={() => setIsSettingsOpen(true)} />
+      {isSettingsOpen && <RuntimeSettingsDialog onClose={() => setIsSettingsOpen(false)} />}
+    </>
   );
 }

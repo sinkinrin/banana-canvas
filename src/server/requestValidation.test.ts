@@ -77,7 +77,6 @@ test('returns normalized provider options and effective generation fields', () =
     imageSize: '1K',
     referenceImage: { data: png, mimeType: 'image/png' },
     image2Options: { quality: 'high', outputFormat: 'webp', outputCompression: 80 },
-    customKey: 'test-key',
   });
 
   assert.equal(result.ok, true);
@@ -87,7 +86,6 @@ test('returns normalized provider options and effective generation fields', () =
     assert.equal(result.value.provider, 'openai-chat');
     assert.equal(result.value.aspectRatio, '16:9');
     assert.equal(result.value.imageSize, '1K');
-    assert.equal(result.value.customKey, 'test-key');
     assert.deepEqual(result.value.referenceImages, [{ data: png, mimeType: 'image/png' }]);
     assert.deepEqual(result.value.image2Options, {
       quality: 'high',
@@ -95,6 +93,18 @@ test('returns normalized provider options and effective generation fields', () =
       outputCompression: 80,
     });
   }
+});
+
+test('rejects oversized prompts and unsupported image MIME types', () => {
+  const oversizedPrompt = validateGenerateImageRequest({ prompt: 'x'.repeat(20_001) });
+  assert.equal(oversizedPrompt.ok, false);
+  if (!oversizedPrompt.ok) assert.match(oversizedPrompt.error, /at most 20000/);
+
+  const unsupportedImage = validateGenerateImageRequest({
+    referenceImages: [{ data: png, mimeType: 'image/svg+xml' }],
+  });
+  assert.equal(unsupportedImage.ok, false);
+  if (!unsupportedImage.ok) assert.match(unsupportedImage.error, /png, jpeg, webp, or gif/);
 });
 
 test('normalizes generation dimensions and omits invalid values', () => {

@@ -1,3 +1,6 @@
+import { lookup } from 'node:dns/promises';
+import { BlockList } from 'node:net';
+
 import {
   DEFAULT_IMAGE2_REQUEST_TIMEOUT_MS,
   getConfiguredProxyUrl,
@@ -37,6 +40,25 @@ const DEFAULT_IMAGE2_MAX_ATTEMPTS = 1;
 const DEFAULT_IMAGE2_RETRY_DELAY_MS = 1_000;
 const DEFAULT_IMAGE2_STREAM_PARTIAL_IMAGES = 1;
 const IMAGE2_HEDGED_CANCEL_REASON = 'image2-hedged-winner';
+const MAX_GENERATED_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGE2_RESPONSE_BYTES = 50 * 1024 * 1024;
+const MAX_GENERATED_IMAGE_REDIRECTS = 3;
+const blockedRemoteAddresses = new BlockList();
+
+blockedRemoteAddresses.addSubnet('0.0.0.0', 8, 'ipv4');
+blockedRemoteAddresses.addSubnet('10.0.0.0', 8, 'ipv4');
+blockedRemoteAddresses.addSubnet('100.64.0.0', 10, 'ipv4');
+blockedRemoteAddresses.addSubnet('127.0.0.0', 8, 'ipv4');
+blockedRemoteAddresses.addSubnet('169.254.0.0', 16, 'ipv4');
+blockedRemoteAddresses.addSubnet('172.16.0.0', 12, 'ipv4');
+blockedRemoteAddresses.addSubnet('192.0.0.0', 24, 'ipv4');
+blockedRemoteAddresses.addSubnet('192.168.0.0', 16, 'ipv4');
+blockedRemoteAddresses.addSubnet('198.18.0.0', 15, 'ipv4');
+blockedRemoteAddresses.addSubnet('224.0.0.0', 4, 'ipv4');
+blockedRemoteAddresses.addAddress('::', 'ipv6');
+blockedRemoteAddresses.addAddress('::1', 'ipv6');
+blockedRemoteAddresses.addSubnet('fc00::', 7, 'ipv6');
+blockedRemoteAddresses.addSubnet('fe80::', 10, 'ipv6');
 
 export function previewResponseBody(text: string) {
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;
@@ -67,6 +89,76 @@ function summarizeNetworkError(error: unknown) {
   const code = getImage2NetworkErrorCode(error) || 'unknown';
   const message = error instanceof Error ? error.message : String(error);
   return { code, message };
+}
+
+function toAbortError(reason: unknown) {
+  if (reason instanceof Error) return reason;
+  return new DOMException('The operation was aborted', 'AbortError');
+}
+
+function isBlockedRemoteAddress(address: string, family: 4 | 6) {
+  if (family === 6 && address.toLowerCase().startsWith('::ffff:')) {
+    return blockedRemoteAddresses.check(address.slice(7), 'ipv4');
+  }
+  return blockedRemoteAddresses.check(address, family === 4 ? 'ipv4' : 'ipv6');
+}
+
+export async function assertSafeGeneratedImageUrl(imageUrl: string, allowedOrigin?: string) {
+  const url = new URL(imageUrl);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('生成图片 URL 必须使用 HTTP 或 HTTPS。');
+  }
+  if (url.username || url.password) {
+    throw new Error('生成图片 URL 不允许包含凭据。');
+  }
+  if (allowedOrigin && url.origin === allowedOrigin) return url;
+
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+    throw new Error('生成图片 URL 不允许访问本机地址。');
+  }
+
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  if (addresses.length === 0) throw new Error('生成图片 URL 无法解析。');
+  if (addresses.some(({ address, family }) => isBlockedRemoteAddress(address, family === 6 ? 6 : 4))) {
+    throw new Error('生成图片 URL 不允许访问私有或保留网络地址。');
+  }
+  return url;
+}
+
+async function readBodyWithLimit(response: Response, maxBytes: number) {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error(`生成图片超过 ${maxBytes} 字节限制。`);
+  }
+
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error(`生成图片超过 ${maxBytes} 字节限制。`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
 }
 
 export function toImage2Size(aspectRatio?: string, imageSize?: string) {
@@ -263,7 +355,8 @@ export async function fetchImage2WithNetworkFallback({
 
 async function previewResponse(response: Response) {
   try {
-    return previewResponseBody(await response.clone().text());
+    const bytes = await readBodyWithLimit(response.clone(), 4_096);
+    return previewResponseBody(new TextDecoder().decode(bytes));
   } catch {
     return '';
   }
@@ -351,7 +444,13 @@ async function runImage2Attempt({
         : undefined,
     };
   } catch (error) {
-    if (controller.signal.aborted && controller.signal.reason === IMAGE2_HEDGED_CANCEL_REASON) {
+    if (
+      controller.signal.aborted &&
+      (
+        controller.signal.reason === IMAGE2_HEDGED_CANCEL_REASON ||
+        (controller.signal.reason instanceof Error && controller.signal.reason.name === 'AbortError')
+      )
+    ) {
       return { type: 'cancelled', attempt: attemptNumber, channel: attempt.label };
     }
 
@@ -381,7 +480,8 @@ async function fetchImage2ProviderResponse(
   requestId: string,
   endpoint: string,
   createInit: () => RequestInit,
-  env: EnvLike = getRuntimeConfig().env
+  env: EnvLike = getRuntimeConfig().env,
+  signal?: AbortSignal
 ) {
   const proxyUrl = getConfiguredProxyUrl(env);
   const proxyMode = getImage2ProxyMode(proxyUrl, env);
@@ -402,20 +502,28 @@ async function fetchImage2ProviderResponse(
   let settled = false;
   let lastRetryableResponse: Response | null = null;
   const activeControllers = new Set<AbortController>();
+  const retryTimers = new Set<NodeJS.Timeout>();
 
   return await new Promise<Response>((resolve, reject) => {
-    const abortActiveAttempts = () => {
+    const abortActiveAttempts = (reason: unknown = IMAGE2_HEDGED_CANCEL_REASON) => {
       for (const controller of activeControllers) {
         if (!controller.signal.aborted) {
-          controller.abort(IMAGE2_HEDGED_CANCEL_REASON);
+          controller.abort(reason);
         }
       }
       activeControllers.clear();
     };
 
+    const cleanup = () => {
+      signal?.removeEventListener('abort', finishWithAbort);
+      for (const timer of retryTimers) clearTimeout(timer);
+      retryTimers.clear();
+    };
+
     const finishWithResponse = (response: Response) => {
       if (settled) return;
       settled = true;
+      cleanup();
       abortActiveAttempts();
       resolve(response);
     };
@@ -423,9 +531,18 @@ async function fetchImage2ProviderResponse(
     const finishWithError = () => {
       if (settled) return;
       settled = true;
+      cleanup();
       abortActiveAttempts();
       reject(new Error(`image2 请求失败，尝试记录：${failures.join(' | ')}`));
     };
+
+    function finishWithAbort() {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      abortActiveAttempts(signal?.reason);
+      reject(toAbortError(signal?.reason));
+    }
 
     const maybeFinish = () => {
       if (settled || activeAttempts > 0 || nextAttemptIndex < attempts.length) return;
@@ -502,11 +619,22 @@ async function fetchImage2ProviderResponse(
       };
 
       if (retryDelayMs > 0 && attemptNumber > concurrency) {
-        setTimeout(launch, retryDelayMs).unref?.();
+        const timer = setTimeout(() => {
+          retryTimers.delete(timer);
+          launch();
+        }, retryDelayMs);
+        retryTimers.add(timer);
+        timer.unref?.();
       } else {
         launch();
       }
     };
+
+    if (signal?.aborted) {
+      finishWithAbort();
+      return;
+    }
+    signal?.addEventListener('abort', finishWithAbort, { once: true });
 
     for (let index = 0; index < concurrency; index += 1) {
       launchNext();
@@ -514,7 +642,12 @@ async function fetchImage2ProviderResponse(
   });
 }
 
-async function fetchGeneratedImageUrl(imageUrl: string, env: EnvLike) {
+async function fetchGeneratedImageUrl(
+  imageUrl: string,
+  env: EnvLike,
+  allowedOrigin: string,
+  signal?: AbortSignal
+) {
   const proxyUrl = getConfiguredProxyUrl(env);
   const proxyMode = getImage2ProxyMode(proxyUrl, env);
   const maxAttempts = readPositiveIntEnv(env, 'IMAGE2_MAX_ATTEMPTS', DEFAULT_IMAGE2_MAX_ATTEMPTS, 8);
@@ -523,35 +656,46 @@ async function fetchGeneratedImageUrl(imageUrl: string, env: EnvLike) {
     maxAttempts
   );
 
-  return await fetchImage2WithNetworkFallback({
-    url: imageUrl,
-    init: { method: 'GET' },
-    attempts,
-    fetchImpl: async (requestUrl, requestInit) => globalThis.fetch(requestUrl, requestInit),
-    getProxyDispatcher: () => getProxyAgent(proxyUrl, env),
-    getDirectDispatcher: () => getImage2DirectAgent(env),
-  });
+  let currentUrl = imageUrl;
+  for (let redirectCount = 0; redirectCount <= MAX_GENERATED_IMAGE_REDIRECTS; redirectCount += 1) {
+    const safeUrl = await assertSafeGeneratedImageUrl(currentUrl, allowedOrigin);
+    const response = await fetchImage2WithNetworkFallback({
+      url: safeUrl.toString(),
+      init: { method: 'GET', redirect: 'manual', signal },
+      attempts,
+      fetchImpl: async (requestUrl, requestInit) => globalThis.fetch(requestUrl, requestInit),
+      getProxyDispatcher: () => getProxyAgent(proxyUrl, env),
+      getDirectDispatcher: () => getImage2DirectAgent(env),
+    });
+
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get('location');
+    if (!location) throw new Error('生成图片下载重定向缺少 Location。');
+    currentUrl = new URL(location, safeUrl).toString();
+  }
+
+  throw new Error('生成图片下载重定向次数过多。');
 }
 
-async function normalizeGeneratedImageUrl(imageUrl: string, env: EnvLike) {
+async function normalizeGeneratedImageUrl(
+  imageUrl: string,
+  env: EnvLike,
+  allowedOrigin: string,
+  signal?: AbortSignal
+) {
   if (imageUrl.startsWith('data:image/')) return imageUrl;
   if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) return imageUrl;
 
-  let response: Response;
-  try {
-    response = await fetchGeneratedImageUrl(imageUrl, env);
-  } catch (error) {
-    const { code, message } = summarizeNetworkError(error);
-    console.warn(`[image2] generated image url download failed code=${code} message=${message}; returning original url`);
-    return imageUrl;
+  const response = await fetchGeneratedImageUrl(imageUrl, env, allowedOrigin, signal);
+
+  if (!response.ok) throw new Error(`生成图片下载失败 (${response.status})。`);
+
+  const contentType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+  if (!contentType || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(contentType)) {
+    throw new Error('生成图片下载返回了不支持的内容类型。');
   }
 
-  if (!response.ok) return imageUrl;
-
-  const contentType = response.headers.get('content-type') || 'image/png';
-  if (!contentType.startsWith('image/')) return imageUrl;
-
-  const buffer = Buffer.from(await response.arrayBuffer());
+  const buffer = Buffer.from(await readBodyWithLimit(response, MAX_GENERATED_IMAGE_BYTES));
   return `data:${contentType};base64,${buffer.toString('base64')}`;
 }
 
@@ -595,6 +739,7 @@ export async function generateImage2Image({
   maskImage,
   image2Options,
   runtimeConfig,
+  signal,
 }: {
   requestId: string;
   prompt: string;
@@ -604,6 +749,7 @@ export async function generateImage2Image({
   maskImage?: ReferenceImageInput;
   image2Options: Image2Options;
   runtimeConfig?: RuntimeConfigManager;
+  signal?: AbortSignal;
 }) {
   const env = runtimeConfig?.get().env ?? getRuntimeConfig().env;
   const image2Config = createImage2Config(env);
@@ -705,9 +851,11 @@ export async function generateImage2Image({
     };
   };
 
-  const response = await fetchImage2ProviderResponse(requestId, endpoint, createRequestInit, env);
+  const response = await fetchImage2ProviderResponse(requestId, endpoint, createRequestInit, env, signal);
 
-  const responseText = await response.text();
+  const responseText = new TextDecoder().decode(
+    await readBodyWithLimit(response, MAX_IMAGE2_RESPONSE_BYTES)
+  );
   const responseJson = tryParseJson(responseText);
   console.info(`[image2:${requestId}] relay status=${response.status} ok=${response.ok}`);
 
@@ -725,7 +873,12 @@ export async function generateImage2Image({
     throw new Error('image2 响应中未找到图像数据。');
   }
 
-  const normalizedImageUrl = await normalizeGeneratedImageUrl(imageUrl, env);
+  const normalizedImageUrl = await normalizeGeneratedImageUrl(
+    imageUrl,
+    env,
+    new URL(image2Config.baseUrl).origin,
+    signal
+  );
   console.info(`[image2:${requestId}] image extracted type=${normalizedImageUrl.startsWith('data:image/') ? 'data-url' : 'url'}`);
   return normalizedImageUrl;
 }

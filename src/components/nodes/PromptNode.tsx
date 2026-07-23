@@ -1,6 +1,5 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { useStore } from '../../store';
-import type { AppNode } from '../../store';
+import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
 import { Edit3, Image as ImageIcon, Loader2, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
@@ -89,7 +88,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const imageModel = normalizeImageModel(data.imageModel);
   const aspectRatio = getEffectivePromptAspectRatio(imageModel, data.aspectRatio);
   const aspectRatioOptions = getPromptAspectRatioOptions(imageModel);
-  const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Banana';
+  const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Image2';
   const bananaOptions = data.bananaOptions;
   const image2Options = data.image2Options;
 

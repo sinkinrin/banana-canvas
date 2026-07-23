@@ -70,8 +70,10 @@ type ProjectAssetRef = {
   sha256: string;
 };
 
-function createAssetSignature(asset: ProjectSnapshot['assets'][string]) {
-  return `${asset.mimeType}:${asset.data.length}:${asset.data}`;
+const assetRefCache = new WeakMap<object, Promise<ProjectAssetRef>>();
+
+function createAssetSignature(assetRef: ProjectAssetRef) {
+  return `${assetRef.mimeType}:${assetRef.byteLength}:${assetRef.sha256}`;
 }
 
 function bytesToHex(bytes: Uint8Array) {
@@ -90,15 +92,22 @@ function base64ToBytes(base64: string) {
 }
 
 async function createAssetRef(asset: ProjectSnapshot['assets'][string]): Promise<ProjectAssetRef> {
-  const bytes = base64ToBytes(asset.data);
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  const cached = assetRefCache.get(asset);
+  if (cached) return await cached;
 
-  return {
-    id: asset.id,
-    mimeType: asset.mimeType,
-    byteLength: bytes.byteLength,
-    sha256: bytesToHex(new Uint8Array(digest)),
-  };
+  const pending = (async () => {
+    const bytes = base64ToBytes(asset.data);
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+
+    return {
+      id: asset.id,
+      mimeType: asset.mimeType,
+      byteLength: bytes.byteLength,
+      sha256: bytesToHex(new Uint8Array(digest)),
+    };
+  })();
+  assetRefCache.set(asset, pending);
+  return await pending;
 }
 
 async function createLightweightSnapshot(snapshot: ProjectSnapshot): Promise<ProjectSnapshot & {
@@ -145,11 +154,14 @@ export function createProjectRepository({
   let migrationAttempted = false;
   const localAssetSignaturesByProject = new Map<string, AssetSignatureMap>();
 
-  const rememberLocalAssetSignatures = (projectId: string, assets: ProjectSnapshot['assets']) => {
+  const rememberLocalAssetSignatures = async (
+    projectId: string,
+    assets: ProjectSnapshot['assets']
+  ) => {
     const signatures = localAssetSignaturesByProject.get(projectId) ?? new Map<string, string>();
-    Object.values(assets).forEach((asset) => {
-      signatures.set(asset.id, createAssetSignature(asset));
-    });
+    await Promise.all(Object.values(assets).map(async (asset) => {
+      signatures.set(asset.id, createAssetSignature(await createAssetRef(asset)));
+    }));
     localAssetSignaturesByProject.set(projectId, signatures);
   };
 
@@ -173,7 +185,7 @@ export function createProjectRepository({
     const signatures = localAssetSignaturesByProject.get(projectId) ?? new Map<string, string>();
 
     for (const asset of getReferencedProjectAssets(snapshot)) {
-      const signature = createAssetSignature(asset);
+      const signature = createAssetSignature(await createAssetRef(asset));
       if (!force && signatures.get(asset.id) === signature) continue;
 
       await readJson<{ ok: true }>(
@@ -287,7 +299,7 @@ export function createProjectRepository({
         const response = await fetcher(`/api/projects/${encodeURIComponent(projectId)}`);
         if (response.status === 404) return null;
         const loaded = await readJson<{ project: ProjectMeta; snapshot: ProjectSnapshot }>(response);
-        rememberLocalAssetSignatures(projectId, loaded.snapshot.assets);
+        await rememberLocalAssetSignatures(projectId, loaded.snapshot.assets);
         return loaded;
       }
 

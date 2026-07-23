@@ -1,10 +1,12 @@
 node_modules/
 build/
 dist/
+release/
 coverage/
 data/
 .DS_Store
 *.log
+/canvas/
 .env*
 !.env.example
 .superpowers/

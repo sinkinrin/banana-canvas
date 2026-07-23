@@ -2,9 +2,9 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, Edit3, GitCompare } from 'lucide-react';
 import React, { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { useShallow } from 'zustand/react/shallow';
 import { ImageViewer } from '../ImageViewer';
-import { useStore } from '../../store';
-import type { AppNode } from '../../store';
+import { useStore, type AppNode } from '../../store';
 import {
   resolveImageUrl,
   resolveSourceImageUrl,
@@ -46,7 +46,20 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const { generateMaskImage } = useMaskGeneration();
   const deleteNode = useStore((state) => state.deleteNode);
   const addNode = useStore((state) => state.addNode);
-  const assets = useStore((state) => state.assets);
+  const assets = useStore(useShallow((state) => {
+    const assetIds = [
+      data.imageAssetId,
+      data.sourceImageAssetId,
+      ...(data.referenceImageIds ?? []),
+    ].filter((assetId): assetId is string => Boolean(assetId));
+
+    const selectedAssets: typeof state.assets = {};
+    for (const assetId of assetIds) {
+      const asset = state.assets[assetId];
+      if (asset) selectedAssets[assetId] = asset;
+    }
+    return selectedAssets;
+  }));
   const updateNodeData = useStore((state) => state.updateNodeData);
   const imageUrl = resolveImageUrl(data, assets);
   const sourceImageUrl = resolveSourceImageUrl(data, assets);

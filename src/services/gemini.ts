@@ -24,7 +24,6 @@ export interface GenerateImageParams {
 
 export type GenerateImagePayload = Omit<GenerateImageParams, 'signal' | 'imageModel'> & {
   imageModel: ImageModelId;
-  customKey: string | null;
 };
 
 export function getGenerateImageTimeoutMs(imageModel?: ImageModelId) {
@@ -32,8 +31,7 @@ export function getGenerateImageTimeoutMs(imageModel?: ImageModelId) {
 }
 
 export function createGenerateImagePayload(
-  params: GenerateImageParams,
-  customKey: string | null
+  params: GenerateImageParams
 ): GenerateImagePayload {
   const { signal, imageModel, bananaOptions, image2Options, ...restParams } = params;
   void signal;
@@ -45,13 +43,11 @@ export function createGenerateImagePayload(
     ...(Object.keys(normalizedBananaOptions).length > 0 ? { bananaOptions: normalizedBananaOptions } : {}),
     ...(Object.keys(normalizedImage2Options).length > 0 ? { image2Options: normalizedImage2Options } : {}),
     imageModel: normalizeImageModel(imageModel),
-    customKey,
   };
 }
 
 export async function generateImage(params: GenerateImageParams): Promise<string> {
   const { signal: externalSignal } = params;
-  const customKey = localStorage.getItem('custom_gemini_api_key');
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(
     () => timeoutController.abort(),
@@ -78,7 +74,7 @@ export async function generateImage(params: GenerateImageParams): Promise<string
         'Content-Type': 'application/json',
       },
       signal,
-      body: JSON.stringify(createGenerateImagePayload(params, customKey)),
+      body: JSON.stringify(createGenerateImagePayload(params)),
     });
     clearTimeout(timeoutId);
 
@@ -107,10 +103,16 @@ export async function generateImage(params: GenerateImageParams): Promise<string
   }
 }
 
-export async function optimizePrompt(prompt: string): Promise<string> {
-  const customKey = localStorage.getItem('custom_gemini_api_key');
+export async function optimizePrompt(prompt: string, externalSignal?: AbortSignal): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+  const signal = externalSignal && AbortSignal.any
+    ? AbortSignal.any([controller.signal, externalSignal])
+    : controller.signal;
+  const abortFromExternal = () => controller.abort();
+  if (externalSignal && !AbortSignal.any) {
+    externalSignal.addEventListener('abort', abortFromExternal, { once: true });
+  }
 
   try {
     const response = await fetch('/api/optimize-prompt', {
@@ -118,11 +120,8 @@ export async function optimizePrompt(prompt: string): Promise<string> {
       headers: {
         'Content-Type': 'application/json',
       },
-      signal: controller.signal,
-      body: JSON.stringify({
-        prompt,
-        customKey,
-      }),
+      signal,
+      body: JSON.stringify({ prompt }),
     });
     clearTimeout(timeoutId);
 
@@ -144,5 +143,7 @@ export async function optimizePrompt(prompt: string): Promise<string> {
     clearTimeout(timeoutId);
     console.error("Error optimizing prompt:", error);
     throw error;
+  } finally {
+    externalSignal?.removeEventListener('abort', abortFromExternal);
   }
 }

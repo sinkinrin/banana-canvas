@@ -12,7 +12,7 @@ test('AppRouter renders the projects page at the index route', () => {
 
 test('AppRouter renders the requested project canvas route', () => {
   const html = renderToStaticMarkup(
-    <AppRouter route={{ name: 'project', projectId: 'project-1' }} requireApiKey={false} />
+    <AppRouter route={{ name: 'project', projectId: 'project-1' }} />
   );
 
   assert.match(html, /加载项目中/);

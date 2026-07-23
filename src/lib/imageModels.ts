@@ -1,4 +1,4 @@
-export const DEFAULT_IMAGE_MODEL = 'banana';
+export const DEFAULT_IMAGE_MODEL = 'image2';
 
 export const IMAGE_MODELS = [
   {
@@ -89,6 +89,7 @@ export const IMAGE2_MODERATION_VALUES = ['auto', 'low'] as const;
 export const IMAGE2_RESPONSE_FORMAT_VALUES = ['b64_json', 'url'] as const;
 export const IMAGE2_STREAM_VALUES = ['server', 'on', 'off'] as const;
 export const IMAGE2_INPUT_FIDELITY_VALUES = ['low', 'high'] as const;
+export const DEFAULT_IMAGE2_MODEL = 'gpt-image-2';
 export const IMAGE2_FIXED_BACKGROUND: Image2Background = 'opaque';
 export const IMAGE2_FIXED_MODERATION: Image2Moderation = 'low';
 
@@ -431,12 +432,11 @@ export function createImage2Config(env: Image2Env): Image2Config {
   const rawBaseUrl = env.IMAGE2_BASE_URL?.trim() || env.IMAGE2_CHAT_COMPLETIONS_URL?.trim() || '';
   const baseUrl = rawBaseUrl ? normalizeImage2BaseUrl(rawBaseUrl) : '';
   const apiKey = env.IMAGE2_API_KEY?.trim() ?? '';
-  const model = env.IMAGE2_MODEL?.trim() ?? '';
+  const model = env.IMAGE2_MODEL?.trim() || DEFAULT_IMAGE2_MODEL;
   const endpointType = normalizeImage2EndpointType(env.IMAGE2_ENDPOINT_TYPE, model);
   const missingKeys = [
     baseUrl ? null : 'IMAGE2_BASE_URL',
     apiKey ? null : 'IMAGE2_API_KEY',
-    model ? null : 'IMAGE2_MODEL',
   ].filter((key): key is string => Boolean(key));
 
   return {

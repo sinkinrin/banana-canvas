@@ -1,4 +1,4 @@
-import { FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FolderOpen, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
 
 import type { ProjectMeta } from '../../lib/projects';
 
@@ -8,6 +8,7 @@ export type ProjectsListProps = {
   onOpen: (projectId: string) => void;
   onRename: (projectId: string) => void;
   onDelete: (projectId: string) => void;
+  onOpenSettings?: () => void;
 };
 
 function formatProjectTime(value: string) {
@@ -31,6 +32,7 @@ export function ProjectsList({
   onOpen,
   onRename,
   onDelete,
+  onOpenSettings = () => {},
 }: ProjectsListProps) {
   return (
     <section className="min-h-screen px-6 py-8" style={{ background: '#16130F', color: '#EEE4CE' }}>
@@ -42,15 +44,26 @@ export function ProjectsList({
               本地项目
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onCreate}
-            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-            style={{ background: '#F2C14E', color: '#16130F' }}
-          >
-            <Plus size={16} />
-            新建项目
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              style={{ background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE' }}
+            >
+              <Settings size={16} />
+              模型设置
+            </button>
+            <button
+              type="button"
+              onClick={onCreate}
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              style={{ background: '#F2C14E', color: '#16130F' }}
+            >
+              <Plus size={16} />
+              新建项目
+            </button>
+          </div>
         </header>
 
         {projects.length === 0 ? (

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat, utimes } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, stat, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -197,7 +197,7 @@ test('local project store writes newly referenced assets and prunes removed asse
   assert.equal((await readFile(join(assetDir, 'new-asset.png'))).toString(), 'new');
 });
 
-test('local project store deletes a project directory and index entry', async () => {
+test('local project store moves deleted projects to recoverable trash and removes the index entry', async () => {
   const { rootDir, store } = await createTempStore();
   const project = await store.createProject('删除项目');
 
@@ -205,6 +205,7 @@ test('local project store deletes a project directory and index entry', async ()
 
   const index = await store.loadProjectIndex();
   await assert.rejects(() => stat(join(rootDir, 'projects', project.id)));
+  assert.ok((await readdir(join(rootDir, '.trash'))).some((name) => name.startsWith(`${project.id}-`)));
   assert.deepEqual(index, []);
 });
 
@@ -276,6 +277,16 @@ test('local project store imports multiple projects in a single index update', a
 
   assert.deepEqual(index.map((project) => project.id), ['bulk-one', 'bulk-two']);
   assert.equal(loaded?.snapshot.nodes[0].data.prompt, 'banana');
+});
+
+test('local project store rejects malformed project imports before writing', async () => {
+  const { store } = await createTempStore();
+
+  await assert.rejects(
+    () => store.importProjects([{} as never]),
+    /Invalid project import metadata/
+  );
+  assert.deepEqual(await store.loadProjectIndex(), []);
 });
 
 test('local project store rejects saving snapshots for projects missing from the index', async () => {

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, Pencil, Save } from 'lucide-react';
+import { ArrowLeft, Pencil, Save, Settings } from 'lucide-react';
 
 import { MissingProjectState } from '../components/projects/MissingProjectState';
 import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
@@ -24,6 +24,7 @@ export type ProjectCanvasPageViewProps = {
   saveStatus: SaveStatus;
   onBack: () => void;
   onRename: () => void;
+  onOpenSettings?: () => void;
   children?: ReactNode;
 };
 
@@ -74,6 +75,7 @@ export function ProjectCanvasPageView({
   saveStatus,
   onBack,
   onRename,
+  onOpenSettings = () => {},
   children,
 }: ProjectCanvasPageViewProps) {
   return (
@@ -107,13 +109,28 @@ export function ProjectCanvasPageView({
           <Save size={14} />
           {saveStatusText(saveStatus)}
         </div>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
+          style={{ background: '#141210', color: '#EEE4CE' }}
+        >
+          <Settings size={14} />
+          模型设置
+        </button>
       </div>
       {children}
     </main>
   );
 }
 
-export function ProjectCanvasPage({ projectId }: { projectId: string }) {
+export function ProjectCanvasPage({
+  projectId,
+  onOpenSettings,
+}: {
+  projectId: string;
+  onOpenSettings?: () => void;
+}) {
   const [status, setStatus] = useState<ProjectLoadStatus>('loading');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('loading');
   const [project, setProject] = useState<ProjectMeta | null>(null);
@@ -267,6 +284,7 @@ export function ProjectCanvasPage({ projectId }: { projectId: string }) {
         saveStatus={saveStatus}
         onBack={navigateToProjects}
         onRename={handleRename}
+        onOpenSettings={onOpenSettings}
       >
         <Suspense
           fallback={

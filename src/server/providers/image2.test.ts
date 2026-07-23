@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  assertSafeGeneratedImageUrl,
   base64ToBlob,
   buildImage2MultipartRequest,
   extractImage2GeneratedUrl,
@@ -15,6 +16,24 @@ import {
 
 const attemptLabels = (attempts: ReturnType<typeof getImage2AttemptPlan>) =>
   attempts.map((attempt) => attempt.label);
+
+test('generated image URL validation blocks credentials and local network targets', async () => {
+  await assert.rejects(
+    assertSafeGeneratedImageUrl('http://127.0.0.1/private.png', 'https://relay.example'),
+    /私有或保留网络|本机地址/
+  );
+  await assert.rejects(
+    assertSafeGeneratedImageUrl('https://user:pass@example.com/image.png', 'https://example.com'),
+    /不允许包含凭据/
+  );
+  assert.equal(
+    (await assertSafeGeneratedImageUrl(
+      'http://127.0.0.1:8080/generated.png',
+      'http://127.0.0.1:8080'
+    )).origin,
+    'http://127.0.0.1:8080'
+  );
+});
 
 test('toImage2Size preserves existing aspect and size mapping', () => {
   assert.equal(toImage2Size('16:9', '1K'), '1536x1024');
@@ -225,7 +244,7 @@ test('generateImage2Image downloads generated image URLs with current global fet
 
     globalThis.fetch = async (input) => {
       assert.equal(String(input), 'https://api.openai.com/v1/images/generations');
-      return new Response(JSON.stringify({ data: [{ url: 'https://cdn.example.test/generated.png' }] }), {
+      return new Response(JSON.stringify({ data: [{ url: 'https://api.openai.com/generated.png' }] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -234,7 +253,7 @@ test('generateImage2Image downloads generated image URLs with current global fet
     const imported = await import(`./image2.ts?global-fetch-${Date.now()}`);
 
     globalThis.fetch = async (input) => {
-      assert.equal(String(input), 'https://cdn.example.test/generated.png');
+      assert.equal(String(input), 'https://api.openai.com/generated.png');
       return new Response(new Uint8Array([1, 2, 3]), {
         status: 200,
         headers: { 'content-type': 'image/png' },
@@ -349,7 +368,7 @@ test('generateImage2Image downloads generated image URLs through the current ima
         dispatcher: (init as { dispatcher?: unknown } | undefined)?.dispatcher,
       });
       if (String(input).endsWith('/images/generations')) {
-        return new Response(JSON.stringify({ data: [{ url: 'https://cdn.example.test/generated.png' }] }), {
+        return new Response(JSON.stringify({ data: [{ url: 'https://relay.example/generated.png' }] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -386,11 +405,101 @@ test('generateImage2Image downloads generated image URLs through the current ima
     assert.equal(imageUrl, 'data:image/png;base64,AQID');
     assert.deepEqual(calls.map((call) => call.url), [
       'https://relay.example/v1/images/generations',
-      'https://cdn.example.test/generated.png',
+      'https://relay.example/generated.png',
     ]);
     assert.ok(calls[0].dispatcher);
     assert.ok(calls[1].dispatcher);
     assert.equal(calls[1].dispatcher, calls[0].dispatcher);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('generateImage2Image propagates external cancellation to the active provider fetch', async () => {
+  const originalFetch = globalThis.fetch;
+  let started!: () => void;
+  const fetchStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+
+  try {
+    globalThis.fetch = async (_input, init) => {
+      started();
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('aborted', 'AbortError'));
+        }, { once: true });
+      });
+    };
+    const [{ createRuntimeConfigManager }, imported] = await Promise.all([
+      import('../runtimeConfig'),
+      import(`./image2.ts?abort-${Date.now()}`),
+    ]);
+    const runtimeConfig = createRuntimeConfigManager({
+      IMAGE2_BASE_URL: 'https://relay.example/v1',
+      IMAGE2_API_KEY: 'relay-key',
+      IMAGE2_MODEL: 'gpt-image-2',
+      IMAGE2_ENDPOINT_TYPE: 'images',
+      IMAGE2_PROXY_MODE: 'direct',
+      IMAGE2_MAX_ATTEMPTS: '1',
+    });
+    const controller = new AbortController();
+    const generation = imported.generateImage2Image({
+      requestId: 'abort-test',
+      prompt: 'draw',
+      images: [],
+      image2Options: {},
+      runtimeConfig,
+      signal: controller.signal,
+    });
+
+    await fetchStarted;
+    controller.abort(new DOMException('cancelled', 'AbortError'));
+    await assert.rejects(generation, (error: unknown) => error instanceof Error && error.name === 'AbortError');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('generateImage2Image rejects generated image downloads above the byte limit', async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async (input) => {
+      if (String(input).endsWith('/images/generations')) {
+        return new Response(JSON.stringify({ data: [{ url: 'https://relay.example/generated.png' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(new Uint8Array([1]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/png',
+          'content-length': String(21 * 1024 * 1024),
+        },
+      });
+    };
+    const [{ createRuntimeConfigManager }, imported] = await Promise.all([
+      import('../runtimeConfig'),
+      import(`./image2.ts?size-limit-${Date.now()}`),
+    ]);
+    const runtimeConfig = createRuntimeConfigManager({
+      IMAGE2_BASE_URL: 'https://relay.example/v1',
+      IMAGE2_API_KEY: 'relay-key',
+      IMAGE2_MODEL: 'gpt-image-2',
+      IMAGE2_ENDPOINT_TYPE: 'images',
+      IMAGE2_PROXY_MODE: 'direct',
+      IMAGE2_MAX_ATTEMPTS: '1',
+    });
+
+    await assert.rejects(imported.generateImage2Image({
+      requestId: 'size-limit-test',
+      prompt: 'draw',
+      images: [],
+      image2Options: { responseFormat: 'url' },
+      runtimeConfig,
+    }), /超过 .* 字节限制/);
   } finally {
     globalThis.fetch = originalFetch;
   }
