@@ -392,38 +392,49 @@ async function clickSmokeElementWithMouse(
     return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
   })()`) as { x: number; y: number } | null;
 
-  let center = await readCenter();
-  if (!center) throw new Error(failureMessage);
-  window.webContents.sendInputEvent({ type: 'mouseMove', x: center.x, y: center.y });
-  await window.webContents.executeJavaScript(`(() => {
-    const target = document.querySelector(${JSON.stringify(selector)});
-    target?.closest('[data-image-node-id]')?.dispatchEvent(new MouseEvent('mouseover', {
-      bubbles: true,
-      clientX: ${JSON.stringify(center.x)},
-      clientY: ${JSON.stringify(center.y)},
-    }));
-  })()`);
-  await new Promise((resolve) => setTimeout(resolve, 80));
-  center = await readCenter();
-  if (!center) throw new Error(failureMessage);
-  const hitTest = await window.webContents.executeJavaScript(`(() => {
-    const hit = document.elementFromPoint(${JSON.stringify(center.x)}, ${JSON.stringify(center.y)});
-    const target = document.querySelector(${JSON.stringify(selector)});
-    const targetRect = target?.getBoundingClientRect();
-    const nodeRect = target?.closest('.react-flow__node')?.getBoundingClientRect();
-    return {
-      center: ${JSON.stringify(center)},
-      viewport: { width: innerWidth, height: innerHeight },
-      targetRect: targetRect ? { x: targetRect.x, y: targetRect.y, width: targetRect.width, height: targetRect.height } : null,
-      nodeRect: nodeRect ? { x: nodeRect.x, y: nodeRect.y, width: nodeRect.width, height: nodeRect.height } : null,
-      hit: hit instanceof Element ? hit.outerHTML.slice(0, 240) : null,
-      targetContainsHit: target instanceof Element && hit instanceof Element
-        ? target === hit || target.contains(hit)
-        : false,
-      overlayClass: target?.closest('.absolute.inset-0')?.className,
-    };
-  })()` ) as { hit: string | null; targetContainsHit: boolean; overlayClass?: string };
-  if (!hitTest.targetContainsHit) {
+  let center: { x: number; y: number } | null = null;
+  let hitTest: { hit: string | null; targetContainsHit: boolean; overlayClass?: string } | null = null;
+  const hitTestDeadline = Date.now() + 10_000;
+
+  // React Flow reveals and measures node controls asynchronously. Keep using real
+  // mouse input until Chromium's hit-test tree sees the control; a synthetic DOM
+  // mouseover can make React render the toolbar before the compositor is ready.
+  while (Date.now() < hitTestDeadline) {
+    center = await readCenter();
+    if (center) {
+      window.webContents.sendInputEvent({ type: 'mouseMove', x: center.x, y: center.y });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      hitTest = await window.webContents.executeJavaScript(`(() => {
+        const hit = document.elementFromPoint(${JSON.stringify(center.x)}, ${JSON.stringify(center.y)});
+        const target = document.querySelector(${JSON.stringify(selector)});
+        const targetRect = target?.getBoundingClientRect();
+        const node = target?.closest('.react-flow__node');
+        const nodeRect = node?.getBoundingClientRect();
+        const targetStyle = target instanceof Element ? getComputedStyle(target) : null;
+        const nodeStyle = node instanceof Element ? getComputedStyle(node) : null;
+        return {
+          center: ${JSON.stringify(center)},
+          viewport: { width: innerWidth, height: innerHeight },
+          targetRect: targetRect ? { x: targetRect.x, y: targetRect.y, width: targetRect.width, height: targetRect.height } : null,
+          nodeRect: nodeRect ? { x: nodeRect.x, y: nodeRect.y, width: nodeRect.width, height: nodeRect.height } : null,
+          hit: hit instanceof Element ? hit.outerHTML.slice(0, 240) : null,
+          targetContainsHit: target instanceof Element && hit instanceof Element
+            ? target === hit || target.contains(hit)
+            : false,
+          overlayClass: target?.closest('.absolute.inset-0')?.className,
+          targetPointerEvents: targetStyle?.pointerEvents,
+          targetVisibility: targetStyle?.visibility,
+          nodePointerEvents: nodeStyle?.pointerEvents,
+          nodeVisibility: nodeStyle?.visibility,
+        };
+      })()` ) as { hit: string | null; targetContainsHit: boolean; overlayClass?: string };
+      if (hitTest.targetContainsHit) break;
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  if (!center || !hitTest?.targetContainsHit) {
     throw new Error(`${failureMessage}: mouse hit test missed target ${JSON.stringify(hitTest)}`);
   }
   window.webContents.sendInputEvent({ type: 'mouseDown', x: center.x, y: center.y, button: 'left', clickCount: 1 });
