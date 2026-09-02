@@ -957,6 +957,7 @@ async function createMainWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
     },
   });
+  mainWindow.removeMenu();
 
   configureExternalNavigation(mainWindow, localServer.url);
   mainWindow.once('ready-to-show', () => {
