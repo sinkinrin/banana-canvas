@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildDownloadFileName,
+  buildImageRerunParams,
   buildReferenceNodeData,
   canRerunImageNode,
   getRerunReferenceImages,
@@ -58,6 +59,29 @@ test('buildReferenceNodeData carries current model options into a new prompt nod
       referenceImageIds: ['asset-2'],
     }
   );
+});
+
+test('buildImageRerunParams preserves the original model, options, and references', () => {
+  const signal = new AbortController().signal;
+  assert.deepEqual(buildImageRerunParams({
+    prompt: '  regenerate this  ',
+    imageModel: 'banana-pro',
+    aspectRatio: '16:9',
+    imageSize: '4K',
+    bananaOptions: { searchGrounding: true },
+    referenceImageIds: ['ref-1'],
+  }, {
+    'ref-1': { id: 'ref-1', data: 'base64-ref', mimeType: 'image/png' },
+  }, signal), {
+    prompt: 'regenerate this',
+    imageModel: 'banana-pro',
+    aspectRatio: '16:9',
+    imageSize: '4K',
+    bananaOptions: { searchGrounding: true },
+    image2Options: undefined,
+    referenceImages: [{ data: 'base64-ref', mimeType: 'image/png' }],
+    signal,
+  });
 });
 
 test('buildDownloadFileName uses banana-art prefix and png suffix by default', () => {

@@ -1,4 +1,4 @@
-import { FolderOpen, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
+import { BookOpen, FolderOpen, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
 
 import { APP_VERSION } from '../../lib/appVersion';
 import type { ProjectMeta } from '../../lib/projects';
@@ -10,6 +10,7 @@ export type ProjectsListProps = {
   onRename: (projectId: string) => void;
   onDelete: (projectId: string) => void;
   onOpenSettings?: () => void;
+  onOpenPromptLibrary?: () => void;
 };
 
 function formatProjectTime(value: string) {
@@ -34,6 +35,7 @@ export function ProjectsList({
   onRename,
   onDelete,
   onOpenSettings = () => {},
+  onOpenPromptLibrary = () => {},
 }: ProjectsListProps) {
   return (
     <section className="min-h-screen px-6 py-8" style={{ background: '#16130F', color: '#EEE4CE' }}>
@@ -51,6 +53,15 @@ export function ProjectsList({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onOpenPromptLibrary}
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              style={{ background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE' }}
+            >
+              <BookOpen size={16} />
+              提示词管理
+            </button>
             <button
               type="button"
               onClick={onOpenSettings}

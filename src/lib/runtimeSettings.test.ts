@@ -23,7 +23,7 @@ const settings: RuntimeSettingsSnapshot = {
     ready: true,
     missingKeys: [],
   },
-  gemini: { apiKeyConfigured: false },
+  gemini: { apiKeyConfigured: false, proxyUrl: '', proxyEnabled: false },
 };
 
 test('runtime settings form auto-loads non-secret fields and never exposes saved keys', () => {
@@ -33,6 +33,7 @@ test('runtime settings form auto-loads non-secret fields and never exposes saved
   assert.equal(form.image2Model, 'gpt-image-2');
   assert.equal(form.image2ApiKey, '');
   assert.equal(form.geminiApiKey, '');
+  assert.equal(form.geminiProxyEnabled, false);
 });
 
 test('runtime settings update trims values and preserves keys when replacement fields stay blank', () => {
@@ -41,9 +42,13 @@ test('runtime settings update trims values and preserves keys when replacement f
     image2BaseUrl: ' https://new.example/v1 ',
     image2ApiKey: '   ',
     geminiApiKey: ' AIza-new ',
+    geminiProxyUrl: ' http://127.0.0.1:7890 ',
+    geminiProxyEnabled: true,
   });
 
   assert.equal(update.image2?.baseUrl, 'https://new.example/v1');
   assert.equal('apiKey' in (update.image2 ?? {}), false);
   assert.equal(update.gemini?.apiKey, 'AIza-new');
+  assert.equal(update.gemini?.proxyUrl, 'http://127.0.0.1:7890');
+  assert.equal(update.gemini?.proxyEnabled, true);
 });

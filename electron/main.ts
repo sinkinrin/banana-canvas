@@ -15,6 +15,7 @@ import { autoUpdater } from 'electron-updater';
 import { startLocalServer, type LocalServerHandle } from '../src/server/startLocalServer';
 import type { RuntimeConfigLogger } from '../src/server/runtimeConfig';
 import { isAllowedExternalUrl, isInternalAppUrl } from '../src/lib/electronNavigation';
+import { createUnavailableUpdateState, type DesktopUpdateState } from '../src/lib/desktopUpdates';
 import {
   removeDotEnvKeys,
   type RuntimeSettingsSecretStore,
@@ -24,16 +25,32 @@ import {
   createDesktopUpdateManager,
   type DesktopUpdateInfo,
 } from './updateManager';
-import { WRITE_IMAGE_TO_CLIPBOARD_CHANNEL } from './ipcChannels';
+import { createUpdatePreferencesStore } from './updatePreferences';
+import {
+  UPDATE_CHECK_CHANNEL,
+  UPDATE_DOWNLOAD_CHANNEL,
+  UPDATE_GET_STATE_CHANNEL,
+  UPDATE_INSTALL_CHANNEL,
+  UPDATE_SET_AUTOMATIC_CHANNEL,
+  UPDATE_STATE_CHANGED_CHANNEL,
+  WRITE_IMAGE_TO_CLIPBOARD_CHANNEL,
+} from './ipcChannels';
 
 let mainWindow: BrowserWindow | null = null;
 let serverHandle: LocalServerHandle | null = null;
 let serverStartPromise: Promise<LocalServerHandle> | null = null;
 let updateManager: ReturnType<typeof createDesktopUpdateManager> | null = null;
+let updatePreferencesStore: ReturnType<typeof createUpdatePreferencesStore> | null = null;
 let isQuitting = false;
 
 const MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH = 128 * 1024 * 1024;
 const SUPPORTED_CLIPBOARD_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i;
+
+function assertApplicationWindowSender(event: Electron.IpcMainInvokeEvent, action: string) {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error(`${action} request did not come from the application window`);
+  }
+}
 
 async function writeImageDataUrlToClipboard(imageDataUrl: unknown) {
   if (
@@ -56,10 +73,65 @@ async function writeImageDataUrlToClipboard(imageDataUrl: unknown) {
 }
 
 ipcMain.handle(WRITE_IMAGE_TO_CLIPBOARD_CHANNEL, async (event, imageDataUrl: unknown) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) {
-    throw new Error('Clipboard request did not come from the application window');
-  }
+  assertApplicationWindowSender(event, 'Clipboard');
   await writeImageDataUrlToClipboard(imageDataUrl);
+});
+
+function getUpdatePreferencesStore() {
+  updatePreferencesStore ??= createUpdatePreferencesStore(
+    path.join(app.getPath('userData'), 'update-preferences.json')
+  );
+  return updatePreferencesStore;
+}
+
+function getDesktopUpdateState(): DesktopUpdateState {
+  if (updateManager) return updateManager.getState();
+  const unavailable = createUnavailableUpdateState(app.getVersion());
+  if (!app.isPackaged || isSmokeTest()) return unavailable;
+  return {
+    ...unavailable,
+    supported: true,
+    automaticUpdatesEnabled: getUpdatePreferencesStore().get().automaticUpdatesEnabled,
+  };
+}
+
+function emitDesktopUpdateState(state: DesktopUpdateState) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(UPDATE_STATE_CHANGED_CHANNEL, state);
+}
+
+ipcMain.handle(UPDATE_GET_STATE_CHANNEL, async (event) => {
+  assertApplicationWindowSender(event, 'Update state');
+  startDesktopUpdates();
+  return getDesktopUpdateState();
+});
+
+ipcMain.handle(UPDATE_CHECK_CHANNEL, async (event) => {
+  assertApplicationWindowSender(event, 'Update check');
+  startDesktopUpdates();
+  return updateManager ? await updateManager.checkNow() : getDesktopUpdateState();
+});
+
+ipcMain.handle(UPDATE_DOWNLOAD_CHANNEL, async (event) => {
+  assertApplicationWindowSender(event, 'Update download');
+  startDesktopUpdates();
+  return updateManager ? await updateManager.downloadUpdate() : getDesktopUpdateState();
+});
+
+ipcMain.handle(UPDATE_INSTALL_CHANNEL, async (event) => {
+  assertApplicationWindowSender(event, 'Update install');
+  startDesktopUpdates();
+  return updateManager ? await updateManager.installNow() : getDesktopUpdateState();
+});
+
+ipcMain.handle(UPDATE_SET_AUTOMATIC_CHANNEL, async (event, enabled: unknown) => {
+  assertApplicationWindowSender(event, 'Update preference');
+  if (typeof enabled !== 'boolean') throw new Error('Automatic update preference must be a boolean');
+  getUpdatePreferencesStore().replace({ automaticUpdatesEnabled: enabled });
+  startDesktopUpdates();
+  return updateManager
+    ? updateManager.setAutomaticUpdatesEnabled(enabled)
+    : getDesktopUpdateState();
 });
 
 function isSmokeTest() {
@@ -129,14 +201,18 @@ async function promptToRestartForUpdate(info: DesktopUpdateInfo) {
   return result.response === 0;
 }
 
-function startDesktopAutoUpdates() {
+function startDesktopUpdates() {
   if (!app.isPackaged || isSmokeTest() || updateManager) return;
 
+  const preferences = getUpdatePreferencesStore().get();
   updateManager = createDesktopUpdateManager({
     updater: autoUpdater,
+    currentVersion: app.getVersion(),
+    automaticUpdatesEnabled: preferences.automaticUpdatesEnabled,
     logger: (level, message) => logger({ level, message: `[update] ${message}` }),
     promptToRestart: promptToRestartForUpdate,
     beforeInstall: prepareForUpdateInstall,
+    onStateChange: emitDesktopUpdateState,
   });
   updateManager.start();
 }
@@ -289,19 +365,271 @@ function restoreSmokeClipboard(data: Parameters<typeof clipboard.write>[0]) {
   clipboard.clear();
 }
 
-function createSmokeJpegDataUrl() {
+function createSmokeJpegDataUrl(red = 0x34, green = 0x9a, blue = 0xeb) {
   const width = 4;
   const height = 3;
   const bitmap = Buffer.alloc(width * height * 4);
   for (let index = 0; index < bitmap.length; index += 4) {
-    bitmap[index] = 0x34;
-    bitmap[index + 1] = 0x9a;
-    bitmap[index + 2] = 0xeb;
+    bitmap[index] = red;
+    bitmap[index + 1] = green;
+    bitmap[index + 2] = blue;
     bitmap[index + 3] = 0xff;
   }
   const jpeg = nativeImage.createFromBitmap(bitmap, { width, height }).toJPEG(90);
   if (jpeg.length === 0) throw new Error('Could not create JPEG fixture for clipboard smoke test');
   return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+}
+
+async function clickSmokeElementWithMouse(
+  window: BrowserWindow,
+  selector: string,
+  failureMessage: string
+) {
+  const readCenter = async () => await window.webContents.executeJavaScript(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!(element instanceof HTMLElement)) return null;
+    const rect = element.getBoundingClientRect();
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+  })()`) as { x: number; y: number } | null;
+
+  let center = await readCenter();
+  if (!center) throw new Error(failureMessage);
+  window.webContents.sendInputEvent({ type: 'mouseMove', x: center.x, y: center.y });
+  await window.webContents.executeJavaScript(`(() => {
+    const target = document.querySelector(${JSON.stringify(selector)});
+    target?.closest('[data-image-node-id]')?.dispatchEvent(new MouseEvent('mouseover', {
+      bubbles: true,
+      clientX: ${JSON.stringify(center.x)},
+      clientY: ${JSON.stringify(center.y)},
+    }));
+  })()`);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  center = await readCenter();
+  if (!center) throw new Error(failureMessage);
+  const hitTest = await window.webContents.executeJavaScript(`(() => {
+    const hit = document.elementFromPoint(${JSON.stringify(center.x)}, ${JSON.stringify(center.y)});
+    const target = document.querySelector(${JSON.stringify(selector)});
+    const targetRect = target?.getBoundingClientRect();
+    const nodeRect = target?.closest('.react-flow__node')?.getBoundingClientRect();
+    return {
+      center: ${JSON.stringify(center)},
+      viewport: { width: innerWidth, height: innerHeight },
+      targetRect: targetRect ? { x: targetRect.x, y: targetRect.y, width: targetRect.width, height: targetRect.height } : null,
+      nodeRect: nodeRect ? { x: nodeRect.x, y: nodeRect.y, width: nodeRect.width, height: nodeRect.height } : null,
+      hit: hit instanceof Element ? hit.outerHTML.slice(0, 240) : null,
+      targetContainsHit: target instanceof Element && hit instanceof Element
+        ? target === hit || target.contains(hit)
+        : false,
+      overlayClass: target?.closest('.absolute.inset-0')?.className,
+    };
+  })()` ) as { hit: string | null; targetContainsHit: boolean; overlayClass?: string };
+  if (!hitTest.targetContainsHit) {
+    throw new Error(`${failureMessage}: mouse hit test missed target ${JSON.stringify(hitTest)}`);
+  }
+  window.webContents.sendInputEvent({ type: 'mouseDown', x: center.x, y: center.y, button: 'left', clickCount: 1 });
+  window.webContents.sendInputEvent({ type: 'mouseUp', x: center.x, y: center.y, button: 'left', clickCount: 1 });
+}
+
+async function runImageRerunSmokeTest(window: BrowserWindow) {
+  const rerunImageUrl = createSmokeJpegDataUrl(0xe8, 0x7d, 0x32);
+  await window.webContents.executeJavaScript(`(() => {
+    globalThis.__bananaSmokeOriginalFetch = globalThis.fetch;
+    globalThis.__bananaSmokeGenerateCalls = 0;
+    globalThis.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (new URL(url, location.href).pathname === '/api/generate-image') {
+        globalThis.__bananaSmokeGenerateCalls += 1;
+        return new Response(${JSON.stringify(JSON.stringify({ imageUrl: rerunImageUrl }))}, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return globalThis.__bananaSmokeOriginalFetch(input, init);
+    };
+  })()`);
+
+  try {
+    await clickSmokeElementWithMouse(
+      window,
+      '[data-image-node-id="clipboard-smoke-image"] button[aria-label="重新生成"]',
+      'Image rerun smoke test could not find the rerun button'
+    );
+    try {
+      await waitForSmokePredicate(
+        window,
+        `(() => {
+          const node = document.querySelector('[data-image-node-id="clipboard-smoke-image"]');
+          const image = node?.querySelector('img');
+          return image?.getAttribute('src') === ${JSON.stringify(rerunImageUrl)}
+            && node?.textContent?.includes('已重新生成');
+        })()`,
+        'Image rerun smoke action did not update the result or show success feedback'
+      );
+    } catch (error) {
+      const details = await window.webContents.executeJavaScript(`(() => {
+        const node = document.querySelector('[data-image-node-id="clipboard-smoke-image"]');
+        const image = node?.querySelector('img');
+        const button = node?.querySelector('button[aria-label="重新生成"]');
+        return {
+          calls: globalThis.__bananaSmokeGenerateCalls,
+          imageMatches: image?.getAttribute('src') === ${JSON.stringify(rerunImageUrl)},
+          imagePrefix: image?.getAttribute('src')?.slice(0, 48),
+          buttonDisabled: button?.disabled,
+          text: node?.textContent,
+        };
+      })()`);
+      throw new Error(`${error instanceof Error ? error.message : String(error)}: ${JSON.stringify(details)}`);
+    }
+  } finally {
+    await window.webContents.executeJavaScript(`(() => {
+      if (globalThis.__bananaSmokeOriginalFetch) {
+        globalThis.fetch = globalThis.__bananaSmokeOriginalFetch;
+        delete globalThis.__bananaSmokeOriginalFetch;
+        delete globalThis.__bananaSmokeGenerateCalls;
+      }
+    })()`);
+  }
+}
+
+async function runPromptLibrarySmokeTest(localUrl: string, window: BrowserWindow) {
+  const promptText = 'smoke test cinematic banana poster';
+  await clickSmokeElementWithMouse(
+    window,
+    'button[data-prompt-library-entry="canvas"]',
+    'Prompt library smoke test could not find the canvas entry'
+  );
+  await waitForSmokePredicate(
+    window,
+    `document.querySelector('[data-prompt-library-dialog="true"]')`,
+    'Prompt library smoke dialog did not open'
+  );
+
+  await window.webContents.executeJavaScript(`(() => {
+    const dialog = document.querySelector('[data-prompt-library-dialog="true"]');
+    const button = [...(dialog?.querySelectorAll('button') ?? [])]
+      .find((item) => item.textContent?.includes('新建提示词'));
+    button?.click();
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `document.querySelector('[data-prompt-library-editor="true"]')`,
+    'Prompt library smoke editor did not open'
+  );
+
+  const filled = await window.webContents.executeJavaScript(`(() => {
+    const form = document.querySelector('[data-prompt-library-editor="true"]');
+    const inputs = form?.querySelectorAll('input');
+    const textarea = form?.querySelector('textarea');
+    if (!inputs || inputs.length < 2 || !(textarea instanceof HTMLTextAreaElement)) return false;
+    const setValue = (element, value) => {
+      const prototype = element instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value);
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    setValue(inputs[0], 'Smoke 海报模板');
+    setValue(textarea, ${JSON.stringify(promptText)});
+    setValue(inputs[1], 'smoke，海报');
+    return true;
+  })()`) as boolean;
+  if (!filled) throw new Error('Prompt library smoke editor fields were unavailable');
+
+  await window.webContents.executeJavaScript(`
+    document.querySelector('[data-prompt-library-editor="true"] button[type="submit"]')?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `(() => {
+      const dialog = document.querySelector('[data-prompt-library-dialog="true"]');
+      return dialog?.textContent?.includes('Smoke 海报模板')
+        && [...(dialog?.querySelectorAll('button') ?? [])]
+          .some((button) => button.textContent?.includes('使用此提示词'));
+    })()`,
+    'Prompt library smoke template was not saved'
+  );
+
+  await window.webContents.executeJavaScript(`(() => {
+    const dialog = document.querySelector('[data-prompt-library-dialog="true"]');
+    [...(dialog?.querySelectorAll('button') ?? [])]
+      .find((button) => button.textContent?.includes('使用此提示词'))
+      ?.click();
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `[...document.querySelectorAll('textarea')].some((textarea) => textarea.value === ${JSON.stringify(promptText)})`,
+    'Prompt library smoke template was not applied to a new prompt node'
+  );
+
+  const response = await fetch(`${localUrl}/api/prompts`);
+  const body = await response.json() as { prompts?: Array<{ title?: string; tags?: string[] }> };
+  if (
+    !response.ok
+    || body.prompts?.length !== 1
+    || body.prompts[0]?.title !== 'Smoke 海报模板'
+    || body.prompts[0]?.tags?.join(',') !== 'smoke,海报'
+  ) {
+    throw new Error('Prompt library smoke persistence did not match the saved template');
+  }
+}
+
+async function runApplicationSettingsSmokeTest(window: BrowserWindow) {
+  const opened = await window.webContents.executeJavaScript(`(() => {
+    const button = [...document.querySelectorAll('button')]
+      .find((item) => item.textContent?.trim() === '模型设置');
+    button?.click();
+    return Boolean(button);
+  })()`) as boolean;
+  if (!opened) throw new Error('Application settings smoke entry was unavailable');
+
+  await waitForSmokePredicate(
+    window,
+    `document.querySelector('[data-runtime-settings-dialog="true"]')`,
+    'Application settings smoke dialog did not open'
+  );
+  await window.webContents.executeJavaScript(`(() => {
+    const dialog = document.querySelector('[data-runtime-settings-dialog="true"]');
+    [...(dialog?.querySelectorAll('button') ?? [])]
+      .find((button) => button.textContent?.includes('软件更新'))
+      ?.click();
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `(() => {
+      const dialog = document.querySelector('[data-runtime-settings-dialog="true"]');
+      return dialog?.textContent?.includes('手动检查更新')
+        && dialog?.textContent?.includes('自动更新默认关闭')
+        && dialog?.textContent?.includes('SmartScreen');
+    })()`,
+    'Application settings smoke update panel was incomplete'
+  );
+
+  await window.webContents.executeJavaScript(`(() => {
+    const dialog = document.querySelector('[data-runtime-settings-dialog="true"]');
+    [...(dialog?.querySelectorAll('button') ?? [])]
+      .find((button) => button.textContent?.includes('模型与连接'))
+      ?.click();
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `(() => {
+      const dialog = document.querySelector('[data-runtime-settings-dialog="true"]');
+      const proxyInput = [...(dialog?.querySelectorAll('input') ?? [])]
+        .find((input) => input.placeholder === 'http://127.0.0.1:7890');
+      return dialog?.textContent?.includes('Banana 与提示词优化使用代理')
+        && proxyInput instanceof HTMLInputElement;
+    })()`,
+    'Application settings smoke Banana proxy controls were incomplete'
+  );
+
+  await window.webContents.executeJavaScript(`
+    document.querySelector('[data-runtime-settings-dialog="true"] button[aria-label="关闭设置"]')?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `!document.querySelector('[data-runtime-settings-dialog="true"]')`,
+    'Application settings smoke dialog did not close'
+  );
 }
 
 async function runImageClipboardSmokeTest(window: BrowserWindow) {
@@ -464,7 +792,10 @@ async function runSketchSmokeTest(localUrl: string, window: BrowserWindow) {
     `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('绘制构图草图'))`,
     'QuickDraw smoke prompt node did not become ready'
   );
+  await runApplicationSettingsSmokeTest(window);
   await runImageClipboardSmokeTest(window);
+  await runImageRerunSmokeTest(window);
+  await runPromptLibrarySmokeTest(localUrl, window);
   await runBananaModelSelectionSmokeTest(window);
   await window.webContents.executeJavaScript(`
     [...document.querySelectorAll('button')]
@@ -552,7 +883,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
 
   await runSketchSmokeTest(localUrl, window);
 
-  console.info('[banana:smoke] page, runtime settings, renderer, image clipboard, Banana models, and QuickDraw probes passed');
+  console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, and QuickDraw probes passed');
 }
 
 async function ensureLocalServer() {
@@ -652,7 +983,7 @@ if (!hasSingleInstanceLock) {
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   try {
     await createMainWindow();
-    startDesktopAutoUpdates();
+    startDesktopUpdates();
   } catch (error) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     if (isSmokeTest()) {

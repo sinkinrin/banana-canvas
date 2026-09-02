@@ -18,6 +18,8 @@ export type RuntimeSettingsSnapshot = {
   };
   gemini: {
     apiKeyConfigured: boolean;
+    proxyUrl: string;
+    proxyEnabled: boolean;
   };
 };
 
@@ -38,6 +40,8 @@ export type RuntimeSettingsUpdate = {
   gemini?: {
     apiKey?: string;
     clearApiKey?: boolean;
+    proxyUrl?: string;
+    proxyEnabled?: boolean;
   };
 };
 
@@ -55,6 +59,8 @@ export type RuntimeSettingsForm = {
   image2RequestTimeoutMs: number;
   geminiApiKey: string;
   clearGeminiApiKey: boolean;
+  geminiProxyUrl: string;
+  geminiProxyEnabled: boolean;
 };
 
 export function createRuntimeSettingsForm(settings: RuntimeSettingsSnapshot): RuntimeSettingsForm {
@@ -72,6 +78,8 @@ export function createRuntimeSettingsForm(settings: RuntimeSettingsSnapshot): Ru
     image2RequestTimeoutMs: settings.image2.requestTimeoutMs,
     geminiApiKey: '',
     clearGeminiApiKey: false,
+    geminiProxyUrl: settings.gemini.proxyUrl,
+    geminiProxyEnabled: settings.gemini.proxyEnabled,
   };
 }
 
@@ -93,6 +101,8 @@ export function createRuntimeSettingsUpdate(form: RuntimeSettingsForm): RuntimeS
     gemini: {
       ...(form.geminiApiKey.trim() ? { apiKey: form.geminiApiKey.trim() } : {}),
       clearApiKey: form.clearGeminiApiKey,
+      proxyUrl: form.geminiProxyUrl.trim(),
+      proxyEnabled: form.geminiProxyEnabled,
     },
   };
 }

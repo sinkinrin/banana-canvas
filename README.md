@@ -4,7 +4,7 @@
 
 # 香蕉画图
 
-当前版本：`0.4.0`
+当前版本：`0.5.0`
 
 版本变更见 [CHANGELOG.md](CHANGELOG.md)，维护者发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 
@@ -36,9 +36,10 @@
 - 多模型生图：新创作节点默认使用 `Image2`，也可以切换到 `Banana 2`、`Banana 2 Lite` 或 `Banana Pro`；生成出的图片节点会记录当次使用的模型和专属参数。
 - 批量生成：单个提示词节点一次可生成 `1`、`2` 或 `4` 张图片，并自动连到新图片节点。
 - 图片节点操作：支持全屏查看、复制图片、复制提示词、下载、重新生成，以及“以此为参考新建节点”。
+- 提示词管理：在项目首页、画布或创作节点打开跨项目提示词库，按标题、正文和标签搜索；可收藏当前提示词并一键复用。
 - 画布辅助：支持撤销/重做、适应视口、右键菜单、新建节点、自动布局、清空画布。
-- 本地项目持久化：项目索引、画布快照和图片资产默认保存到仓库本地 `data/projects/`；无本地 API 时会回退到 IndexedDB。
-- 应用内连接设置：项目列表和画布顶部都可以打开“模型设置”，直接配置 Image2 URL、API Key、模型、接口类型、代理和超时参数。
+- 本地持久化：项目索引、画布快照和图片资产保存到 `data/projects/`，跨项目提示词保存在 `data/prompt-library.json`；项目在无本地 API 时会回退到 IndexedDB。
+- 应用内设置：项目列表和画布顶部都可以打开“模型设置”，配置 Image2、Gemini Key、两条独立代理链路和软件更新。
 - 安全自动加载：桌面版使用 Electron `safeStorage` 加密保存 API Key，其他连接参数保存在当前用户的应用数据目录；界面只读取密钥是否已配置，不会把已保存的 Key 回传到浏览器。npm 模式继续使用仓库 `.env`。
 
 ## 运行环境
@@ -72,6 +73,13 @@ IMAGE2_MODEL=你的_Image2_模型名
 GEMINI_API_KEY=你的_Gemini_API_Key
 ```
 
+Banana / Gemini 默认直连。需要代理时可在设置里开启，也可在 `.env` 中显式配置：
+
+```bash
+GEMINI_HTTPS_PROXY=http://127.0.0.1:7890
+GEMINI_PROXY_ENABLED=true
+```
+
 只浏览项目、整理画布和查看已有截图不需要 API Key。
 
 `IMAGE2_BASE_URL` 填 API base URL，例如 `https://example.com/v1`。如果误填成 `https://example.com/v1/chat/completions`，服务端也会自动解析回 `https://example.com/v1`。
@@ -80,17 +88,14 @@ GEMINI_API_KEY=你的_Gemini_API_Key
 
 服务端启动后会监听 `.env`。应用内保存和手动编辑 `.env` 都会热更新；如果新配置校验失败，服务端会拒绝保存并继续使用上一份有效配置。`PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 是启动期配置，变更后会提示需要重启。
 
-如果你在需要代理的网络环境下访问 image2 中转，也可以额外设置：
+如果访问 Image2 中转需要代理，可独立配置：
 
 ```bash
-HTTPS_PROXY=http://127.0.0.1:7890
+IMAGE2_HTTPS_PROXY=http://127.0.0.1:7890
+IMAGE2_PROXY_MODE=proxy
 ```
 
-或：
-
-```bash
-HTTP_PROXY=http://127.0.0.1:7890
-```
+`HTTPS_PROXY` / `HTTP_PROXY` 仍可作为 Image2 的兼容 fallback，但不会自动开启 Banana 代理。
 
 3. 启动开发服务器
 
@@ -120,12 +125,13 @@ npm run electron
 
 1. 首次使用先在项目列表点击“模型设置”，填写 Image2 连接参数。
 2. 点击底部“新建创作节点”，或在画布空白处右键创建新节点；新节点默认选择 Image2。
-3. 输入提示词；需要时可上传参考图、直接在文本框里 `Ctrl+V` 粘贴图片，或点击“绘制构图草图”。
-4. 草图画板自动使用当前生成比例。画出人物相对位置和动作后点击“应用为参考图”；以后可从同一节点继续编辑。
-5. 可先点击“优化”让 Gemini 3.1 Pro 改写文字提示词，再点击“开始生成”。生成请求会同时携带文字和草图参考图。
-6. 生成结果会作为新的图片节点出现在当前节点右侧，并自动建立连线。
-7. 悬停图片节点可执行复制、下载、全屏、重新生成、继续作为参考图等操作。
-8. 当画布变复杂后，可以使用自动布局和适应视口快速整理结构。
+3. 可以从“提示词管理”新建或搜索模板；在创作节点里可收藏当前内容、选择已有提示词并直接填入。
+4. 输入提示词；需要时可上传参考图、直接在文本框里 `Ctrl+V` 粘贴图片，或点击“绘制构图草图”。
+5. 草图画板自动使用当前生成比例。画出人物相对位置和动作后点击“应用为参考图”；以后可从同一节点继续编辑。
+6. 可先点击“优化”让 Gemini 3.1 Pro 改写文字提示词，再点击“开始生成”。生成请求会同时携带文字和草图参考图。
+7. 生成结果会作为新的图片节点出现在当前节点右侧，并自动建立连线。
+8. 悬停图片节点可执行复制、下载、全屏、重新生成、继续作为参考图等操作；重新生成会直接显示进行中、成功或失败状态。
+9. 当画布变复杂后，可以使用自动布局和适应视口快速整理结构。
 
 ## 快捷键
 
@@ -231,6 +237,8 @@ v0.4.0 暂不从 `generateContent` 迁移，原因如下：
 | 变量名 | 用途 |
 | --- | --- |
 | `GEMINI_API_KEY` | 本地或服务端调用 Gemini API 时使用的默认 Key |
+| `GEMINI_HTTPS_PROXY` | 可选，Banana / Gemini 专用代理 URL；仅在 `GEMINI_PROXY_ENABLED=true` 时使用 |
+| `GEMINI_PROXY_ENABLED` | 可选，是否让 Banana 生图与 Gemini 提示词优化使用代理；默认 `false` |
 | `IMAGE2_BASE_URL` | Image2 中转 API base URL，使用 Image2 时必须配置，例如 `https://example.com/v1` |
 | `IMAGE2_CHAT_COMPLETIONS_URL` | 可选，chat completions 完整 URL；未设置 `IMAGE2_BASE_URL` 时作为 fallback |
 | `IMAGE2_API_KEY` | Image2 中转接口 Key，使用 Image2 时必须配置 |
@@ -263,7 +271,7 @@ v0.4.0 暂不从 `generateContent` 迁移，原因如下：
 | `npm run build` | 构建前端静态资源到 `dist/` |
 | `npm run build:electron` | 构建 Electron 主进程与隔离的 preload 桥接到 `build/electron/` |
 | `npm run electron` | 构建并从源码启动 Electron 桌面版 |
-| `npm run smoke:electron` | 构建后启动隐藏 Electron 窗口，验证页面、设置 API、系统图片剪贴板、模型能力切换、Renderer 与 QuickDraw |
+| `npm run smoke:electron` | 构建后启动隐藏 Electron 窗口，验证设置/更新 UI、提示词库、图片复制与重新生成、模型能力切换和 QuickDraw |
 | `npm run smoke:electron:packaged` | 验证 `release/win-unpacked` 中的已打包桌面程序 |
 | `npm run dist:win` | 构建 Windows x64 NSIS 安装包到 `release/` |
 | `npm run typecheck` | 运行 TypeScript 类型检查 |
@@ -286,11 +294,13 @@ npm run dist:win
 
 当前 Windows 安装包未配置代码签名证书，因此首次安装和后续更新时 Windows SmartScreen 可能提示未知发布者。未来配置证书后，`electron-builder` 可读取 `CSC_LINK`、`CSC_KEY_PASSWORD` 等签名环境变量。
 
-## 客户端自动更新
+## 客户端更新
 
-正式打包的 Windows 客户端启动后会延迟检查 GitHub Releases，并每 4 小时复查一次稳定版本。发现新版本后在后台自动下载；下载完成时提示用户选择“立即重启并安装”或“稍后”，选择稍后会在退出应用后安装。
+自动更新默认关闭。正式安装的 Windows 客户端可在“应用设置 → 软件更新”中手动检查线上最新版本、查看本次更新日志、下载并观察实时进度，下载完成后由用户点击“立即重启并安装”。
 
-更新源固定为 [sinkinrin/banana-canvas Releases](https://github.com/sinkinrin/banana-canvas/releases)。每个可更新版本必须同时发布 NSIS 安装包、`.blockmap` 和 `latest.yml`；tag 驱动的 Release workflow 会在 Windows 上重新执行检查、打包 smoke 和元数据校验，全部通过后才创建正式 Release。
+用户主动开启“自动检查并在后台下载更新”后，客户端会延迟检查 GitHub Releases，并每 4 小时复查一次稳定版本。发现新版本后在后台下载；下载完成时提示选择“立即重启并安装”或“稍后”，选择稍后会在退出应用后安装。
+
+更新源固定为 [sinkinrin/banana-canvas Releases](https://github.com/sinkinrin/banana-canvas/releases)。每个可更新版本必须同时发布 NSIS 安装包、`.blockmap` 和 `latest.yml`；`latest.yml` 内嵌当前版本 Changelog 与未签名提醒，供客户端安全展示。tag 驱动的 Release workflow 会在 Windows 上重新执行检查、打包 smoke 和元数据校验，全部通过后才创建正式 Release。
 
 v0.2.1 客户端不含更新器，需要手动安装一次 v0.3.0。从 v0.3.0 开始，后续稳定版可通过上述流程自动更新。
 
@@ -314,6 +324,8 @@ v0.2.1 客户端不含更新器，需要手动安装一次 v0.3.0。从 v0.3.0 �
 │  │  │  └─ useMaskGeneration.ts   # Image2 局部编辑共享请求逻辑
 │  │  ├─ mask/                     # Image2 蒙版编辑与对比弹窗
 │  │  ├─ sketch/                   # QuickDraw 固定画幅草图编辑、导出与测试
+│  │  ├─ prompts/                  # 跨项目提示词管理弹窗
+│  │  ├─ settings/                 # 模型连接、代理与软件更新 UI
 │  │  ├─ projects/                 # 项目列表、缺失项目状态
 │  │  └─ edges/
 │  │     └─ DeletableEdge.tsx      # 可悬停删除的边
@@ -321,13 +333,14 @@ v0.2.1 客户端不含更新器，需要手动安装一次 v0.3.0。从 v0.3.0 �
 │  ├─ server/
 │  │  ├─ app.ts                    # Express app factory and API route mounting
 │  │  ├─ projectsRoutes.ts         # 本地项目 CRUD/import API
+│  │  ├─ promptsRoutes.ts          # 跨项目提示词 CRUD API
 │  │  ├─ generationRoutes.ts       # 生图与提示词优化 API
 │  │  ├─ requestValidation.ts      # 生图请求校验与规范化
 │  │  ├─ proxy.ts                  # 代理、undici agent 与 fetch 包装
 │  │  ├─ runtimeConfig.ts          # .env 热重载、运行时配置和校验
 │  │  ├─ runtimeProxy.ts           # 运行时代理配置同步
 │  │  └─ providers/                # Banana 与 Image2 provider 调用
-│  ├─ services/gemini.ts           # 前端调用后端接口
+│  ├─ services/                    # 生图、运行时设置与提示词库 API 客户端
 │  ├─ store.ts                     # 画布状态和历史记录
 │  └─ lib/                         # 模型参数、项目存储、资产归档、路由等
 ├─ server.ts                       # 环境加载、Vite/static 中间件和监听入口

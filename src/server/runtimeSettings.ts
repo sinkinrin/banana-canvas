@@ -16,6 +16,8 @@ import {
 
 const SETTINGS_ENV_KEYS = [
   'GEMINI_API_KEY',
+  'GEMINI_HTTPS_PROXY',
+  'GEMINI_PROXY_ENABLED',
   'IMAGE2_BASE_URL',
   'IMAGE2_API_KEY',
   'IMAGE2_MODEL',
@@ -198,8 +200,16 @@ export function parseRuntimeSettingsUpdate(input: unknown): SettingsEnvUpdates {
   if (gemini) {
     const apiKey = parseStringField(gemini, 'apiKey', errors, 8_192);
     const clearApiKey = parseBooleanField(gemini, 'clearApiKey', errors);
+    const proxyUrl = parseStringField(gemini, 'proxyUrl', errors, 2_048);
+    const proxyEnabled = parseBooleanField(gemini, 'proxyEnabled', errors);
+    validateHttpUrlField(proxyUrl, 'gemini.proxyUrl', errors);
+    if (proxyEnabled === true && proxyUrl !== undefined && !proxyUrl) {
+      errors.push('gemini.proxyUrl is required when proxy is enabled');
+    }
     if (clearApiKey) updates.GEMINI_API_KEY = '';
     else if (apiKey) updates.GEMINI_API_KEY = apiKey;
+    if (proxyUrl !== undefined) updates.GEMINI_HTTPS_PROXY = proxyUrl;
+    if (proxyEnabled !== undefined) updates.GEMINI_PROXY_ENABLED = proxyEnabled ? 'true' : 'false';
   }
 
   if (errors.length > 0) throw new RuntimeSettingsValidationError(errors);
@@ -275,6 +285,8 @@ function toSnapshot(manager: RuntimeConfigManager): RuntimeSettingsSnapshot {
     },
     gemini: {
       apiKeyConfigured: Boolean(config.geminiApiKey),
+      proxyUrl: config.geminiProxyUrl,
+      proxyEnabled: config.geminiProxyEnabled,
     },
   };
 }

@@ -1,7 +1,6 @@
 import {
   applyGlobalProxyFetch,
-  getConfiguredProxyUrl,
-  getImage2ProxyMode,
+  getGeminiProxyAgent,
   redactProxyUrl,
 } from './proxy';
 import type { RuntimeConfigLogger, RuntimeConfigManager } from './runtimeConfig';
@@ -27,16 +26,30 @@ export function syncRuntimeGlobalProxy(
   } = {}
 ) {
   const env = runtimeConfig.get().env;
-  const proxyUrl = getConfiguredProxyUrl(env);
+  const config = runtimeConfig.get();
+  const proxyUrl = config.geminiProxyEnabled ? config.geminiProxyUrl : '';
 
-  applyGlobalProxyFetch({ proxyUrl, directFetch, env });
+  applyGlobalProxyFetch({
+    proxyUrl,
+    directFetch,
+    env,
+    getProxyDispatcher: () => getGeminiProxyAgent(proxyUrl),
+    shouldProxyRequest: (input) => {
+      try {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        return url.hostname === 'generativelanguage.googleapis.com';
+      } catch {
+        return false;
+      }
+    },
+  });
 
   if (proxyUrl) {
     logger({
       level: 'info',
-      message: `[Proxy] Using proxy: ${redactProxyUrl(proxyUrl)} image2Mode=${getImage2ProxyMode(proxyUrl, env)}`,
+      message: `[Proxy] Banana/Gemini proxy enabled: ${redactProxyUrl(proxyUrl)}`,
     });
   } else {
-    logger({ level: 'info', message: '[Proxy] Proxy disabled' });
+    logger({ level: 'info', message: '[Proxy] Banana/Gemini proxy disabled' });
   }
 }

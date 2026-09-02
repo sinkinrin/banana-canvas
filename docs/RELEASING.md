@@ -40,7 +40,7 @@ git push origin v<version>
 1. `npm ci`、版本门禁、类型检查、Lint、测试和构建。
 2. 生产依赖安全审计。
 3. Windows NSIS 打包和已打包客户端 smoke。
-4. `latest.yml`、blockmap、安装包与 SHA256 校验。
+4. `latest.yml`（含当前版本更新日志与未签名提示）、blockmap、安装包与 SHA256 校验。
 5. 上传短期 Actions artifact。
 6. 最后一步创建 GitHub Release 并一次性上传所有客户端更新资产。
 
@@ -57,8 +57,10 @@ Release 在所有验证完成前不会出现，避免客户端读到只有安装
 
 `electron-builder` 的 GitHub provider 固定为 `sinkinrin/banana-canvas`。构建脚本显式使用 `--publish never`，防止本地打包或 CI 构建阶段提前上传；只有 Release workflow 的最后一步拥有 `contents: write` 权限。
 
+`dist:win` 会从 `CHANGELOG.md` 提取当前版本小节并写入 `latest.yml` 的 `releaseName` / `releaseNotes`。`release:prepare` 会拒绝缺少这些字段的更新元数据，确保客户端“软件更新”页能展示最新版本说明。
+
 ## 未签名发布说明
 
 当前没有 Windows 代码签名证书。发布流程允许未签名安装包，但 Release Notes 和客户端更新确认框必须说明 SmartScreen 风险。不要向用户声称安装包具有发布者身份验证。
 
-v0.2.1 没有内置更新器，用户必须手动安装 v0.3.0；此后稳定版本才会后台下载并在用户确认后重启安装。
+自动更新默认关闭；用户可在设置中手动检查、下载和安装，也可显式开启后台定期检查。v0.2.1 没有内置更新器，用户必须手动安装 v0.3.0；此后稳定版本才支持应用内更新。

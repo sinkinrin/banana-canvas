@@ -99,9 +99,11 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
         <div
           className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 rounded-2xl shadow-2xl z-10"
           style={{background: 'rgba(22,19,15,0.9)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(20px)'}}
+          onMouseDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
         >
           <button
+            type="button"
             onClick={() => setScale(prev => Math.max(0.5, prev - 0.2))}
             className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
             title="缩小"
@@ -112,6 +114,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             {Math.round(scale * 100)}%
           </div>
           <button
+            type="button"
             onClick={() => setScale(prev => Math.min(5, prev + 0.2))}
             className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
             title="放大"
@@ -120,6 +123,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
           </button>
           <div className="w-px h-6 mx-1" style={{background: 'rgba(242,193,78,0.15)'}} />
           <button
+            type="button"
             onClick={handleCopy}
             className={`p-2 hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors flex items-center gap-2 ${copyFailed ? 'text-red-400' : 'text-white'}`}
             title={copyFailed ? '复制失败，请重试' : copied ? '图片已复制' : '复制图片'}
@@ -128,6 +132,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             {copyFailed && <span className="text-xs">复制失败</span>}
           </button>
           <button
+            type="button"
             onClick={handleDownload}
             className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
             title="下载图片"
@@ -136,6 +141,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
           </button>
           <div className="w-px h-6 mx-1" style={{background: 'rgba(242,193,78,0.15)'}} />
           <button
+            type="button"
             onClick={onClose}
             className="p-2 text-red-400 hover:bg-red-900/40 rounded-xl transition-colors"
             title="关闭"

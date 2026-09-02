@@ -18,7 +18,8 @@ import { ImageNode } from './nodes/ImageNode';
 import { DeletableEdge } from './edges/DeletableEdge';
 import { APP_VERSION } from '../lib/appVersion';
 import { DEFAULT_IMAGE_MODEL } from '../lib/imageModels';
-import { Plus, Sparkles, Undo2, Redo2, LayoutGrid, Maximize2 } from 'lucide-react';
+import { BookOpen, Plus, Sparkles, Undo2, Redo2, LayoutGrid, Maximize2 } from 'lucide-react';
+import { PromptLibraryDialog } from './prompts/PromptLibraryDialog';
 
 function CanvasInner() {
   const nodes = useStore((state) => state.nodes);
@@ -35,6 +36,7 @@ function CanvasInner() {
   const { undo, redo, pastStates, futureStates } = useZustandStore(useStore.temporal, (state) => state);
 
   const [confirmClear, setConfirmClear] = useState(false);
+  const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,6 +56,14 @@ function CanvasInner() {
     const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     addNode('promptNode', { x: center.x - 160, y: center.y - 100 }, {
       prompt: '',
+      imageModel: DEFAULT_IMAGE_MODEL,
+    });
+  }, [addNode, screenToFlowPosition]);
+
+  const handleUseLibraryPrompt = useCallback((prompt: string) => {
+    const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    addNode('promptNode', { x: center.x - 160, y: center.y - 100 }, {
+      prompt,
       imageModel: DEFAULT_IMAGE_MODEL,
     });
   }, [addNode, screenToFlowPosition]);
@@ -203,6 +213,17 @@ function CanvasInner() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              data-prompt-library-entry="canvas"
+              onClick={() => setIsPromptLibraryOpen(true)}
+              className="inline-flex w-fit items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition-colors"
+              style={{ background: 'rgba(29,26,20,0.92)', border: '1px solid rgba(242,193,78,0.15)', color: '#EEE4CE' }}
+            >
+              <BookOpen size={15} style={{ color: '#F2C14E' }} />
+              提示词库
+            </button>
+            <button
+              type="button"
               onClick={handleClear}
               className={`backdrop-blur-md px-4 py-2 rounded-xl shadow-sm text-xs font-medium transition-colors w-fit ${confirmClear ? 'text-red-300 bg-red-900/60 border-red-500/30 border' : 'text-red-400 hover:bg-red-900/40'}`}
               style={confirmClear ? undefined : {background: 'rgba(29,26,20,0.92)', border: '1px solid rgba(242,193,78,0.15)'}}
@@ -252,6 +273,13 @@ function CanvasInner() {
           </button>
         </Panel>
       </ReactFlow>
+
+      {isPromptLibraryOpen && (
+        <PromptLibraryDialog
+          onClose={() => setIsPromptLibraryOpen(false)}
+          onUsePrompt={handleUseLibraryPrompt}
+        />
+      )}
 
       {contextMenu && (
         <div

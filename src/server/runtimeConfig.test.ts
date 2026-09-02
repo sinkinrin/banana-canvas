@@ -52,6 +52,20 @@ test('runtime config rejects invalid reloads and keeps the previous valid config
   );
 });
 
+test('Banana proxy stays disabled until both URL and explicit opt-in are present', () => {
+  const disabled = createRuntimeConfigManager(validImage2Env({
+    GEMINI_HTTPS_PROXY: 'http://127.0.0.1:7890',
+  })).get();
+  assert.equal(disabled.geminiProxyUrl, 'http://127.0.0.1:7890');
+  assert.equal(disabled.geminiProxyEnabled, false);
+
+  const enabled = createRuntimeConfigManager(validImage2Env({
+    GEMINI_HTTPS_PROXY: 'http://127.0.0.1:7890',
+    GEMINI_PROXY_ENABLED: 'true',
+  })).get();
+  assert.equal(enabled.geminiProxyEnabled, true);
+});
+
 test('runtime config recovery drops invalid inherited fields and preserves valid secrets', () => {
   const recovered = recoverInvalidRuntimeEnv(validImage2Env({
     IMAGE2_BASE_URL: 'not a url',

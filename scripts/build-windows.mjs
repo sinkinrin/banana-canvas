@@ -3,6 +3,10 @@ import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  embedReleaseNotesInLatestMetadata,
+  validateVersionMetadata,
+} from './release-metadata.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseDir = path.join(rootDir, 'release');
@@ -40,7 +44,13 @@ function runBuilder() {
 }
 
 try {
+  const { changelog, version } = validateVersionMetadata(rootDir);
   await runBuilder();
+  embedReleaseNotesInLatestMetadata(
+    path.join(stagingDir, 'latest.yml'),
+    changelog,
+    version
+  );
   rmSync(releaseDir, { recursive: true, force: true });
   cpSync(stagingDir, releaseDir, { recursive: true });
   console.info(`[banana:packaging] copied verified artifacts to ${releaseDir}`);

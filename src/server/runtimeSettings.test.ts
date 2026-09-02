@@ -66,6 +66,13 @@ test('parseRuntimeSettingsUpdate validates bounded settings and supports explici
       error instanceof RuntimeSettingsValidationError &&
       error.errors.includes('image2.proxyUrl must use http or https')
   );
+
+  assert.throws(
+    () => parseRuntimeSettingsUpdate({ gemini: { proxyUrl: '', proxyEnabled: true } }),
+    (error: unknown) =>
+      error instanceof RuntimeSettingsValidationError &&
+      error.errors.includes('gemini.proxyUrl is required when proxy is enabled')
+  );
 });
 
 test('runtime settings store persists, reloads, and returns only key presence', () => {
@@ -91,19 +98,27 @@ test('runtime settings store persists, reloads, and returns only key presence', 
         maxAttempts: 1,
         requestTimeoutMs: 300_000,
       },
-      gemini: { apiKey: 'secret-gemini-key' },
+      gemini: {
+        apiKey: 'secret-gemini-key',
+        proxyUrl: 'http://127.0.0.1:7890',
+        proxyEnabled: true,
+      },
     });
 
     assert.equal(snapshot.image2.baseUrl, 'https://relay.example/v1');
     assert.equal(snapshot.image2.apiKeyConfigured, true);
     assert.equal(snapshot.image2.ready, true);
     assert.equal(snapshot.gemini.apiKeyConfigured, true);
+    assert.equal(snapshot.gemini.proxyUrl, 'http://127.0.0.1:7890');
+    assert.equal(snapshot.gemini.proxyEnabled, true);
     assert.equal(JSON.stringify(snapshot).includes('secret-relay-key'), false);
     assert.equal(JSON.stringify(snapshot).includes('secret-gemini-key'), false);
 
     const saved = fs.readFileSync(envFilePath, 'utf8');
     assert.match(saved, /IMAGE2_API_KEY="secret-relay-key"/);
     assert.match(saved, /GEMINI_API_KEY="secret-gemini-key"/);
+    assert.match(saved, /GEMINI_HTTPS_PROXY="http:\/\/127\.0\.0\.1:7890"/);
+    assert.match(saved, /GEMINI_PROXY_ENABLED="true"/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

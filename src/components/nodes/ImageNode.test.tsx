@@ -72,3 +72,41 @@ test('ImageNode does not render rerun control for mask edit results', () => {
 
   assert.doesNotMatch(html, /title="重新生成"/);
 });
+
+test('ImageNode protects every result action from canvas dragging and exposes rerun', () => {
+  const node = {
+    id: 'image-actions',
+    type: 'imageNode',
+    position: { x: 0, y: 0 },
+    data: {
+      prompt: '生成一张海报',
+      imageModel: 'banana',
+      imageUrl: 'data:image/png;base64,aW1hZ2U=',
+    },
+  } satisfies AppNode;
+
+  const html = renderToStaticMarkup(
+    <ReactFlowProvider>
+      <ImageNode
+        id={node.id}
+        type={node.type}
+        data={node.data}
+        selected={false}
+        zIndex={0}
+        isConnectable={true}
+        deletable={true}
+        selectable={true}
+        draggable={true}
+        dragging={false}
+        positionAbsoluteX={0}
+        positionAbsoluteY={0}
+      />
+    </ReactFlowProvider>
+  );
+
+  assert.match(html, /nodrag nopan nowheel/);
+  assert.match(html, /aria-label="重新生成"/);
+  assert.match(html, /title="复制图片"/);
+  assert.match(html, /title="以此为参考新建节点"/);
+  assert.equal((html.match(/<button\b/g) ?? []).length, (html.match(/<button\b[^>]*type="button"/g) ?? []).length);
+});

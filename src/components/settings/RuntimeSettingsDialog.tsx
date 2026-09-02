@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, KeyRound, Loader2, Server, Settings, X } from 'lucide-react';
+import { CheckCircle2, KeyRound, Loader2, RefreshCw, Server, Settings, X } from 'lucide-react';
 
 import {
   createRuntimeSettingsForm,
@@ -8,6 +8,7 @@ import {
   type RuntimeSettingsSnapshot,
 } from '../../lib/runtimeSettings';
 import { loadRuntimeSettings, saveRuntimeSettings } from '../../services/runtimeSettings';
+import { SoftwareUpdatePanel } from './SoftwareUpdatePanel';
 
 const fieldClassName = 'w-full rounded-lg border px-3 py-2 text-sm outline-none';
 const fieldStyle = {
@@ -57,6 +58,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [activeTab, setActiveTab] = useState<'models' | 'updates'>('models');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -112,6 +114,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
       }}
     >
       <section
+        data-runtime-settings-dialog="true"
         role="dialog"
         aria-modal="true"
         aria-labelledby="runtime-settings-title"
@@ -127,9 +130,9 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
               <Settings size={20} />
             </div>
             <div>
-              <h2 id="runtime-settings-title" className="text-lg font-semibold">模型与连接设置</h2>
+              <h2 id="runtime-settings-title" className="text-lg font-semibold">应用设置</h2>
               <p className="mt-0.5 text-xs" style={{ color: '#96836F' }}>
-                保存在本机用户目录，启动时自动加载；密钥不会回传到界面。
+                管理模型连接、网络代理与桌面版本更新。
               </p>
             </div>
           </div>
@@ -138,7 +141,43 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
           </button>
         </header>
 
-        {!form || !settings ? (
+        <nav
+          className="sticky top-[73px] z-10 flex gap-1 border-b px-6 py-2"
+          style={{ background: 'rgba(29,26,20,0.98)', borderColor: 'rgba(242,193,78,0.12)' }}
+          aria-label="设置分类"
+          role="tablist"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'models'}
+            onClick={() => setActiveTab('models')}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium"
+            style={activeTab === 'models'
+              ? { background: 'rgba(242,193,78,0.14)', color: '#F2C14E' }
+              : { color: '#96836F' }}
+          >
+            <Server size={15} />
+            模型与连接
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'updates'}
+            onClick={() => setActiveTab('updates')}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium"
+            style={activeTab === 'updates'
+              ? { background: 'rgba(242,193,78,0.14)', color: '#F2C14E' }
+              : { color: '#96836F' }}
+          >
+            <RefreshCw size={15} />
+            软件更新
+          </button>
+        </nav>
+
+        {activeTab === 'updates' ? (
+          <SoftwareUpdatePanel />
+        ) : !form || !settings ? (
           <div className="flex min-h-64 items-center justify-center gap-3" style={{ color: '#96836F' }}>
             {errorMessage ? errorMessage : <><Loader2 size={18} className="animate-spin" />加载配置中...</>}
           </div>
@@ -305,6 +344,34 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                   清除已保存的 Gemini Key
                 </label>
               )}
+              <div className="mt-5 border-t pt-4" style={{ borderColor: 'rgba(242,193,78,0.1)' }}>
+                <label className="flex items-start gap-3 rounded-lg border p-3" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-[#F2C14E]"
+                    checked={form.geminiProxyEnabled}
+                    onChange={(event) => patchForm({ geminiProxyEnabled: event.target.checked })}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">Banana 与提示词优化使用代理</span>
+                    <span className="mt-1 block text-xs leading-5" style={{ color: '#96836F' }}>
+                      默认关闭；只影响 Gemini API，不会改变 Image2 的独立代理模式。
+                    </span>
+                  </span>
+                </label>
+                <label className="mt-3 block space-y-1.5">
+                  <span className="text-xs" style={{ color: '#B8A58D' }}>Banana / Gemini 代理 URL</span>
+                  <input
+                    type="url"
+                    inputMode="url"
+                    value={form.geminiProxyUrl}
+                    onChange={(event) => patchForm({ geminiProxyUrl: event.target.value })}
+                    placeholder="http://127.0.0.1:7890"
+                    className={fieldClassName}
+                    style={fieldStyle}
+                  />
+                </label>
+              </div>
             </section>
 
             {(message || errorMessage) && (

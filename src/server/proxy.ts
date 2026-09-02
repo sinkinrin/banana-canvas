@@ -13,11 +13,15 @@ export const DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS = 60_000;
 
 let proxyAgent: ProxyAgent | null = null;
 let proxyAgentKey = '';
+let geminiProxyAgent: ProxyAgent | null = null;
+let geminiProxyAgentKey = '';
 let image2DirectAgent: Agent | null = null;
 let image2DirectAgentKey = '';
 let originalGlobalFetch: typeof fetch | null = null;
 let globalProxyFetchUrl = '';
 let globalProxyFetchEnv: EnvLike = {};
+let globalShouldProxyRequest: (input: RequestInfo | URL) => boolean = () => true;
+let globalGetProxyDispatcher: (() => unknown) | undefined;
 
 export function getConfiguredProxyUrl(env: EnvLike = getRuntimeConfig().env) {
   return env.IMAGE2_HTTPS_PROXY || env.HTTPS_PROXY || env.HTTP_PROXY || '';
@@ -102,6 +106,19 @@ export function getProxyAgent(proxyUrl: string, env: EnvLike = getRuntimeConfig(
   return proxyAgent;
 }
 
+export function getGeminiProxyAgent(proxyUrl: string) {
+  if (!geminiProxyAgent || geminiProxyAgentKey !== proxyUrl) {
+    geminiProxyAgent = new ProxyAgent({
+      uri: proxyUrl,
+      connectTimeout: DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS,
+      headersTimeout: 300_000,
+      bodyTimeout: 300_000,
+    });
+    geminiProxyAgentKey = proxyUrl;
+  }
+  return geminiProxyAgent;
+}
+
 export function getImage2DirectAgent(env: EnvLike = getRuntimeConfig().env) {
   const requestTimeoutMs = readPositiveIntEnv(
     env,
@@ -133,10 +150,14 @@ export function applyGlobalProxyFetch({
   proxyUrl,
   directFetch,
   env = getRuntimeConfig().env,
+  shouldProxyRequest = () => true,
+  getProxyDispatcher,
 }: {
   proxyUrl: string;
   directFetch?: typeof fetch;
   env?: EnvLike;
+  shouldProxyRequest?: (input: RequestInfo | URL) => boolean;
+  getProxyDispatcher?: () => unknown;
 }) {
   if (!proxyUrl) {
     if (originalGlobalFetch) {
@@ -144,6 +165,8 @@ export function applyGlobalProxyFetch({
       originalGlobalFetch = null;
       globalProxyFetchUrl = '';
       globalProxyFetchEnv = {};
+      globalShouldProxyRequest = () => true;
+      globalGetProxyDispatcher = undefined;
     }
     return;
   }
@@ -152,6 +175,8 @@ export function applyGlobalProxyFetch({
     originalGlobalFetch = directFetch ?? globalThis.fetch;
   }
   globalProxyFetchEnv = env;
+  globalShouldProxyRequest = shouldProxyRequest;
+  globalGetProxyDispatcher = getProxyDispatcher;
   if (globalProxyFetchUrl === proxyUrl) return;
 
   const sourceFetch = originalGlobalFetch;
@@ -161,8 +186,9 @@ export function applyGlobalProxyFetch({
     if (requestInit?.dispatcher) {
       return sourceFetch(input, init);
     }
+    if (!globalShouldProxyRequest(input)) return sourceFetch(input, init);
 
-    const agent = getProxyAgent(proxyUrl, globalProxyFetchEnv);
+    const agent = globalGetProxyDispatcher?.() ?? getProxyAgent(proxyUrl, globalProxyFetchEnv);
     return sourceFetch(input, { ...(init ?? {}), dispatcher: agent } as FetchInitWithDispatcher);
   };
 }

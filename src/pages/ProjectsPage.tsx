@@ -8,6 +8,7 @@ import { createProjectDialogCallbacks } from '../components/projects/projectDial
 import { sortProjectsByUpdatedAt, type ProjectMeta } from '../lib/projects';
 import { createProjectRepository } from '../lib/projectRepository';
 import { getProjectPath } from '../lib/routes';
+import { PromptLibraryDialog } from '../components/prompts/PromptLibraryDialog';
 
 type ProjectsPageStatus = 'loading' | 'ready' | 'error';
 type ProjectDialogState =
@@ -27,6 +28,7 @@ export type ProjectsPageViewProps = {
   onRename: (projectId: string) => void;
   onDelete: (projectId: string) => void;
   onOpenSettings?: () => void;
+  onOpenPromptLibrary?: () => void;
 };
 
 function navigateTo(path: string) {
@@ -47,6 +49,7 @@ export function ProjectsPageView({
   onRename,
   onDelete,
   onOpenSettings,
+  onOpenPromptLibrary,
 }: ProjectsPageViewProps) {
   if (status === 'loading') {
     return (
@@ -95,6 +98,7 @@ export function ProjectsPageView({
       onRename={onRename}
       onDelete={onDelete}
       onOpenSettings={onOpenSettings}
+      onOpenPromptLibrary={onOpenPromptLibrary}
     />
   );
 }
@@ -104,6 +108,7 @@ export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [dialog, setDialog] = useState<ProjectDialogState>(null);
+  const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
 
   const refreshProjects = async () => {
     const index = await projectRepository.listProjects();
@@ -175,6 +180,7 @@ export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }
         onRename={handleRename}
         onDelete={handleDelete}
         onOpenSettings={onOpenSettings}
+        onOpenPromptLibrary={() => setIsPromptLibraryOpen(true)}
       />
       {dialog?.type === 'create' && (
         <ProjectNameDialog
@@ -205,6 +211,9 @@ export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }
           onConfirm={() => dialogCallbacks.confirmDelete(dialog.project.id)}
           onCancel={() => setDialog(null)}
         />
+      )}
+      {isPromptLibraryOpen && (
+        <PromptLibraryDialog onClose={() => setIsPromptLibraryOpen(false)} />
       )}
     </>
   );

@@ -34,6 +34,31 @@ export function extractChangelogSection(changelog, version) {
   return section;
 }
 
+export function createClientReleaseNotes(changelog, version) {
+  return [
+    extractChangelogSection(changelog, version),
+    '',
+    '> Windows 安装包当前未进行代码签名，安装或更新时可能触发 SmartScreen 提示。',
+  ].join('\n').trim();
+}
+
+export function embedReleaseNotesInLatestMetadata(latestMetadataPath, changelog, version) {
+  const metadata = readFileSync(latestMetadataPath, 'utf8').trimEnd();
+  const releaseNotes = createClientReleaseNotes(changelog, version);
+  const yamlBlock = releaseNotes
+    .split(/\r?\n/)
+    .map((line) => `  ${line}`)
+    .join('\n');
+  const nextMetadata = [
+    metadata,
+    `releaseName: ${JSON.stringify(`Banana Canvas v${version}`)}`,
+    'releaseNotes: |-',
+    yamlBlock,
+    '',
+  ].join('\n');
+  writeFileSync(latestMetadataPath, nextMetadata, 'utf8');
+}
+
 export function validateVersionMetadata(rootDir, expectedTag) {
   const packageJson = readJson(path.join(rootDir, 'package.json'));
   const packageLock = readJson(path.join(rootDir, 'package-lock.json'));
@@ -112,13 +137,14 @@ export async function prepareReleaseArtifacts(rootDir, expectedTag) {
   if (!latestMetadata.includes('url: ' + installerName)) {
     throw new Error('release/latest.yml 未引用预期安装包。');
   }
+  if (!/^releaseName:\s+/m.test(latestMetadata) || !/^releaseNotes:\s*\|-/m.test(latestMetadata)) {
+    throw new Error('release/latest.yml 缺少客户端可展示的版本名称或更新日志。');
+  }
 
   const releaseNotes = [
     '# Banana Canvas v' + version,
     '',
-    extractChangelogSection(changelog, version),
-    '',
-    '> Windows 安装包当前未进行代码签名，安装或更新时可能触发 SmartScreen 提示。',
+    createClientReleaseNotes(changelog, version),
     '',
   ].join('\n');
   writeFileSync(path.join(releaseDir, 'release-notes.md'), releaseNotes, 'utf8');

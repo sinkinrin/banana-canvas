@@ -22,9 +22,9 @@ import { MaskCompareModal } from '../mask/MaskCompareModal';
 import { buildImageMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
 import {
   buildDownloadFileName,
+  buildImageRerunParams,
   buildReferenceNodeData,
   canRerunImageNode,
-  getRerunReferenceImages,
   useImageNodeActions,
 } from './useImageNodeActions';
 
@@ -36,6 +36,9 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   const [copyImageFailed, setCopyImageFailed] = useState(false);
+  const [copyPromptFailed, setCopyPromptFailed] = useState(false);
+  const [rerunError, setRerunError] = useState<string>();
+  const [rerunSucceeded, setRerunSucceeded] = useState(false);
   const {
     copiedImage,
     copiedPrompt,
@@ -106,35 +109,32 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
   const handleCopyPrompt = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    setCopyPromptFailed(false);
     try {
       await copyTextToClipboard(data.prompt || '');
       setCopiedPrompt(true);
       setTimeout(() => setCopiedPrompt(false), 2000);
     } catch (err) {
       console.error('Failed to copy prompt:', err);
+      setCopyPromptFailed(true);
+      setTimeout(() => setCopyPromptFailed(false), 2_500);
     }
   };
 
   const handleRerun = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const prompt = data.prompt;
-    if (!prompt || !canRerun || isRegenerating) return;
+    if (!canRerun || isRegenerating) return;
 
     const controller = new AbortController();
+    const params = buildImageRerunParams(data, assets, controller.signal);
+    if (!params) return;
     rerunAbortRef.current = controller;
     setIsRegenerating(true);
+    setRerunError(undefined);
+    setRerunSucceeded(false);
 
     try {
-      const newUrl = await generateImageAction({
-        prompt,
-        imageModel,
-        aspectRatio: data.aspectRatio || '1:1',
-        imageSize: data.imageSize || '1K',
-        bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
-        image2Options: imageModel === 'image2' ? data.image2Options : undefined,
-        referenceImages: getRerunReferenceImages(data, assets),
-        signal: controller.signal,
-      });
+      const newUrl = await generateImageAction(params);
       // Only update if not aborted
       if (!controller.signal.aborted) {
         updateNodeData(id, {
@@ -144,10 +144,13 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
           bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
           image2Options: imageModel === 'image2' ? data.image2Options : undefined,
         });
+        setRerunSucceeded(true);
+        setTimeout(() => setRerunSucceeded(false), 2_000);
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
         console.error('Rerun failed:', err);
+        setRerunError(err instanceof Error ? err.message : '重新生成失败，请重试');
       }
     } finally {
       rerunAbortRef.current = null;
@@ -285,12 +288,14 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
   return (
     <div
+      data-image-node-id={id}
       className="rounded-2xl overflow-hidden transition-all group"
       style={{
         background: '#1D1A14',
         border: '1px solid rgba(242,193,78,0.15)',
         boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
         padding: '6px',
+        pointerEvents: 'auto',
       }}
       onMouseEnter={e => {
         setIsHovered(true);
@@ -314,9 +319,15 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
             />
 
             {/* Hover overlay controls */}
-            <div className={`absolute inset-0 bg-black/5 flex items-center justify-center transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="flex items-center gap-2 p-2 rounded-2xl shadow-2xl" style={{background: 'rgba(22,19,15,0.85)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(8px)'}}>
+            <div className={`absolute inset-0 z-10 flex items-center justify-center bg-black/5 transition-opacity duration-200 ${isHovered ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}>
+              <div
+                className="nodrag nopan nowheel relative z-20 flex items-center gap-2 rounded-2xl p-2 shadow-2xl"
+                style={{background: 'rgba(22,19,15,0.85)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(8px)', pointerEvents: 'auto'}}
+                onPointerDown={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+              >
                 <button
+                  type="button"
                   onClick={handleCopyImage}
                   className={`p-2.5 hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all flex items-center gap-1.5 ${copyImageFailed ? 'text-red-400' : 'text-white'}`}
                   title={copyImageFailed ? '复制失败，请重试' : copiedImage ? '图片已复制' : '复制图片'}
@@ -325,6 +336,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                   {copyImageFailed && <span className="text-xs whitespace-nowrap">复制失败</span>}
                 </button>
                 <button
+                  type="button"
                   onClick={handleDownload}
                   className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="下载"
@@ -332,6 +344,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                   <Download size={18} />
                 </button>
                 <button
+                  type="button"
                   className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="全屏查看"
                   onClick={(e) => {
@@ -343,15 +356,18 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 </button>
                 {canRerun && (
                   <button
+                    type="button"
                     onClick={handleRerun}
                     className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                    title="重新生成"
+                    title={rerunError ? '重新生成失败，点击重试' : isRegenerating ? '正在重新生成' : '重新生成'}
+                    aria-label="重新生成"
                     disabled={isRegenerating}
                   >
                     <RefreshCw size={18} className={isRegenerating ? 'animate-spin' : ''} />
                   </button>
                 )}
                 <button
+                  type="button"
                   onClick={handleUseAsReference}
                   className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
                   title="以此为参考新建节点"
@@ -359,6 +375,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                   <Wand2 size={18} />
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowMaskEditor(true);
@@ -370,6 +387,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 </button>
                 {sourceImageUrl && (
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowCompare(true);
@@ -381,6 +399,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                   </button>
                 )}
                 <button
+                  type="button"
                   onClick={handleDelete}
                   className="p-2.5 text-white hover:bg-[rgba(239,68,68,0.15)] rounded-xl transition-all"
                   title="删除"
@@ -389,6 +408,20 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 </button>
               </div>
             </div>
+            {(isRegenerating || rerunError || rerunSucceeded) && (
+              <div
+                className="pointer-events-none absolute bottom-3 left-1/2 z-20 max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full px-3 py-1.5 text-center text-xs shadow-lg"
+                style={{
+                  background: 'rgba(22,19,15,0.92)',
+                  color: rerunError ? '#F28B82' : rerunSucceeded ? '#7CCB8A' : '#F2C14E',
+                  border: `1px solid ${rerunError ? 'rgba(242,139,130,0.3)' : 'rgba(242,193,78,0.2)'}`,
+                }}
+                role="status"
+                aria-live="polite"
+              >
+                {rerunError || (rerunSucceeded ? '已重新生成' : '正在重新生成…')}
+              </div>
+            )}
           </>
         ) : (
           <div className="text-sm" style={{color: '#5C4E3E'}}>无图像数据</div>
@@ -406,14 +439,15 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
             </p>
           </div>
           <button
+            type="button"
             onClick={handleCopyPrompt}
-            className="p-1.5 rounded-lg transition-all shrink-0 shadow-sm"
-            style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)', color: '#96836F'}}
+            className="nodrag nopan nowheel shrink-0 rounded-lg p-1.5 shadow-sm transition-all"
+            style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)', color: copyPromptFailed ? '#F28B82' : '#96836F'}}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#F2C14E'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.35)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#96836F'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.15)'; }}
-            title="复制提示词"
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = copyPromptFailed ? '#F28B82' : '#96836F'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.15)'; }}
+            title={copyPromptFailed ? '提示词复制失败，请重试' : copiedPrompt ? '提示词已复制' : '复制提示词'}
           >
-            {copiedPrompt ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+            {copyPromptFailed ? <CircleAlert size={14} /> : copiedPrompt ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
           </button>
         </div>
       )}

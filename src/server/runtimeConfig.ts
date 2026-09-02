@@ -23,6 +23,8 @@ const STARTUP_ENV_KEYS = ['PORT', 'NODE_ENV', 'BANANA_DATA_DIR'] as const;
 
 const RUNTIME_ENV_KEYS = [
   'GEMINI_API_KEY',
+  'GEMINI_HTTPS_PROXY',
+  'GEMINI_PROXY_ENABLED',
   'IMAGE2_BASE_URL',
   'IMAGE2_CHAT_COMPLETIONS_URL',
   'IMAGE2_API_KEY',
@@ -66,6 +68,8 @@ export type RuntimeConfigLogger = (entry: RuntimeConfigLogEntry) => void;
 export type RuntimeConfig = {
   env: EnvLike;
   geminiApiKey: string;
+  geminiProxyUrl: string;
+  geminiProxyEnabled: boolean;
   startup: {
     port: number;
     nodeEnv: string;
@@ -231,6 +235,7 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
   validateUrlField(env, 'IMAGE2_HTTPS_PROXY', errors);
   validateUrlField(env, 'HTTPS_PROXY', errors);
   validateUrlField(env, 'HTTP_PROXY', errors);
+  validateUrlField(env, 'GEMINI_HTTPS_PROXY', errors);
   validateEnumField(env, 'IMAGE2_ENDPOINT_TYPE', ['chat', 'images'] as const, errors);
   validateEnumField(env, 'IMAGE2_PROXY_MODE', ['direct', 'auto', 'proxy'] as const, errors);
 
@@ -245,6 +250,7 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
   const stream = parseBooleanField(env, 'IMAGE2_STREAM', false, errors);
   const directAllowH2 = parseBooleanField(env, 'IMAGE2_DIRECT_ALLOW_H2', true, errors);
   const hedgeEnabled = parseBooleanField(env, 'IMAGE2_HEDGE_ENABLED', false, errors);
+  const geminiProxyEnabled = parseBooleanField(env, 'GEMINI_PROXY_ENABLED', false, errors);
   const partialImages = parseIntegerField({
     env,
     key: 'IMAGE2_PARTIAL_IMAGES',
@@ -290,6 +296,9 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
     min: 1,
     errors,
   });
+  if (geminiProxyEnabled && !env.GEMINI_HTTPS_PROXY) {
+    errors.push('GEMINI_PROXY_ENABLED requires GEMINI_HTTPS_PROXY');
+  }
 
   if (errors.length > 0) return { ok: false, errors };
 
@@ -303,6 +312,7 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
   normalizeBooleanField(env, 'IMAGE2_STREAM', stream);
   normalizeBooleanField(env, 'IMAGE2_DIRECT_ALLOW_H2', directAllowH2);
   normalizeBooleanField(env, 'IMAGE2_HEDGE_ENABLED', hedgeEnabled);
+  normalizeBooleanField(env, 'GEMINI_PROXY_ENABLED', geminiProxyEnabled);
 
   const image2Config = createImage2Config(env);
   const proxyUrl = getConfiguredProxyUrlFromEnv(env);
@@ -313,6 +323,8 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
     config: {
       env,
       geminiApiKey: env.GEMINI_API_KEY ?? '',
+      geminiProxyUrl: env.GEMINI_HTTPS_PROXY ?? '',
+      geminiProxyEnabled: geminiProxyEnabled && Boolean(env.GEMINI_HTTPS_PROXY),
       startup: {
         port,
         nodeEnv: env.NODE_ENV ?? '',

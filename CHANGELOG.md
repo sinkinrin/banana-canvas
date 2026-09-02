@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-02
+
+### 新增
+
+- 设置中新增 Banana / Gemini 独立代理开关与代理 URL；默认直连，开启后同时用于 Banana 系列生图和 Gemini 提示词优化，不影响 Image2 的代理模式。
+- 新增跨项目提示词库，支持标题、内容、标签、搜索、新建、编辑、复制、删除、收藏当前提示词，以及一键填入或创建创作节点。
+- 设置新增“软件更新”页，可手动检查线上最新版本、查看更新日志、下载进度并主动重启安装；自动更新改为默认关闭，由用户显式开启。
+
+### 修复
+
+- 修复生成结果“重新生成”点击后缺少可见响应的问题；结果动作统一隔离 React Flow 拖拽手势，并为重新生成和复制失败补充明确状态反馈。
+
+### 发布
+
+- Windows 打包阶段会把当前版本 Changelog 和未签名提示写入 `latest.yml`，Release 门禁会拒绝缺少客户端更新日志的元数据。
+
 ## [0.4.0] - 2026-09-02
 
 ### 新增
@@ -81,7 +97,8 @@
 - 改进 Image2 请求、代理、取消、校验与生成结果处理。
 - 增强本地项目资产持久化与可恢复删除。
 
-[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.2.1...v0.3.0

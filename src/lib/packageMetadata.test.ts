@@ -54,6 +54,9 @@ test('package scripts expose test and check commands', async () => {
   assert.equal(packageJson.scripts['version:check'], 'node scripts/verify-version.mjs');
   assert.equal(packageJson.scripts['release:prepare'], 'node scripts/prepare-release.mjs');
   assert.match(packageJson.scripts.electron, /electron \./);
+
+  const buildWindows = await readFile(resolve(repoRoot, 'scripts/build-windows.mjs'), 'utf8');
+  assert.match(buildWindows, /embedReleaseNotesInLatestMetadata/);
 });
 
 test('desktop packaging uses a stable update filename, custom icon, and excludes node_modules', async () => {
@@ -102,7 +105,7 @@ test('README documents setup and verification commands', async () => {
   assert.match(readme, /`npm install` 是首次设置步骤/);
   assert.match(readme, /`npm run check` 不会执行 `npm install`/);
   assert.ok(readme.includes('当前版本：`' + packageJson.version + '`'));
-  assert.match(readme, /后台自动下载/);
+  assert.match(readme, /自动更新默认关闭/);
 });
 
 test('release workflow builds update metadata before creating GitHub Release', async () => {

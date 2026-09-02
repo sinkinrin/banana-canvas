@@ -1,7 +1,7 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
-import { Edit3, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
+import { BookOpen, Edit3, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
 import { optimizePrompt } from '../../services/gemini';
@@ -31,6 +31,7 @@ import {
   getImage2MaskEditAspectRatio,
   getPromptAspectRatioOptions,
 } from './promptAspectRatios';
+import { PromptLibraryDialog } from '../prompts/PromptLibraryDialog';
 
 const aspectRatioLabels: Record<BananaAspectRatio, string> = {
   '1:1': '1:1 (正方形)',
@@ -73,6 +74,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
   const [isSketchEditorOpen, setIsSketchEditorOpen] = useState(false);
+  const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
   const {
     fileInputRef,
     isReadingFile,
@@ -271,8 +273,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </div>
             <span style={{color: '#EEE4CE'}}>香蕉画图</span>
           </div>
-          <div className="flex items-center gap-1 p-1 rounded-xl shadow-sm" style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)'}}>
+          <div className="nodrag nopan nowheel flex items-center gap-1 p-1 rounded-xl shadow-sm" style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)'}} onPointerDown={(event) => event.stopPropagation()}>
             <button
+              type="button"
               onClick={() => setShowSettings(!showSettings)}
               className="p-1.5 rounded-lg transition-colors hover:bg-[rgba(242,193,78,0.1)]"
               style={{color: '#96836F'}}
@@ -281,6 +284,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               <Settings2 size={16} />
             </button>
             <button
+              type="button"
               onClick={handleDelete}
               className="p-1.5 rounded-lg transition-colors hover:text-red-400 hover:bg-[rgba(239,68,68,0.15)]"
               style={{color: '#96836F'}}
@@ -302,19 +306,31 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               onSubmit={handleGenerate}
             />
             <button
+              type="button"
               onClick={handleOptimizePrompt}
               disabled={isOptimizing || !prompt.trim()}
-              className="absolute bottom-2 right-2 p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[rgba(242,193,78,0.2)]"
+              className="nodrag nopan nowheel absolute bottom-2 right-2 p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[rgba(242,193,78,0.2)]"
               style={{background: 'rgba(242,193,78,0.12)', color: '#F2C14E', border: '1px solid rgba(242,193,78,0.2)'}}
               title="使用 Gemini 3.1 Pro 优化提示词"
             >
               {isOptimizing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
               优化
             </button>
+            <button
+              type="button"
+              data-prompt-library-entry="node"
+              onClick={() => setIsPromptLibraryOpen(true)}
+              className="nodrag nopan nowheel absolute bottom-2 left-2 flex items-center gap-1 rounded-lg p-1.5 text-xs font-medium transition-all hover:bg-[rgba(242,193,78,0.14)]"
+              style={{ background: 'rgba(22,19,15,0.84)', color: '#B8A58D', border: '1px solid rgba(242,193,78,0.14)' }}
+              title="打开提示词库"
+            >
+              <BookOpen size={14} />
+              提示词库
+            </button>
           </div>
 
           {/* Reference Images Section */}
-          <div>
+          <div className="nodrag nopan nowheel" onPointerDown={(event) => event.stopPropagation()}>
             <button
               type="button"
               onClick={() => setIsSketchEditorOpen(true)}
@@ -344,6 +360,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                     <div key={index} className="relative w-full aspect-square rounded-lg overflow-hidden" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)'}}>
                       <img src={img.url} alt={`参考图 ${index + 1}`} className="w-full h-full object-cover opacity-80" />
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setMaskEditorSource({ image: img, index });
@@ -355,6 +372,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                         <Edit3 size={10} />
                       </button>
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemoveImage(index);
@@ -374,6 +392,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 </div>
                 {referenceImages.length < 4 && (
                   <button
+                    type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isReadingFile}
                     className="w-full py-1.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
@@ -397,6 +416,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               </div>
             ) : (
               <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isReadingFile}
                 className="w-full py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
@@ -427,7 +447,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           </div>
 
           {showSettings && (
-            <div className="p-4 rounded-xl space-y-4" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.1)'}}>
+            <div className="nodrag nopan nowheel p-4 rounded-xl space-y-4" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.1)'}} onPointerDown={(event) => event.stopPropagation()}>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>生图模型</label>
                 <select
@@ -521,6 +541,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <div className="flex gap-2">
                   {[1, 2, 4].map(count => (
                     <button
+                      type="button"
                       key={count}
                       onClick={() => {
                         updateNodeData(id, { batchCount: count });
@@ -543,6 +564,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <div className="flex gap-2 flex-wrap">
                   {['', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444'].map(color => (
                     <button
+                      type="button"
                       key={color}
                       onClick={() => {
                         updateNodeData(id, { color });
@@ -570,9 +592,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           )}
 
           <button
+            type="button"
             onClick={() => handleGenerate()}
             disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration}
-            className="w-full py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            className="nodrag nopan nowheel w-full py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               background: data.isLoading || !prompt.trim()
                 ? 'rgba(242,193,78,0.15)'
@@ -598,11 +621,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
           {data.isLoading && (
             <button
+              type="button"
               onClick={() => {
                 abortGeneration();
                 updateNodeData(id, { isLoading: false });
               }}
-              className="w-full py-1 text-[10px] transition-colors hover:text-[#96836F]"
+              className="nodrag nopan nowheel w-full py-1 text-[10px] transition-colors hover:text-[#96836F]"
               style={{color: '#5C4E3E'}}
             >
               如果长时间无响应，点击此处重置状态
@@ -626,6 +650,16 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           initialSnapshot={data.sketch?.snapshot}
           onClose={() => setIsSketchEditorOpen(false)}
           onApply={handleApplySketch}
+        />
+      )}
+      {isPromptLibraryOpen && (
+        <PromptLibraryDialog
+          initialPrompt={prompt}
+          onClose={() => setIsPromptLibraryOpen(false)}
+          onUsePrompt={(nextPrompt) => {
+            setPrompt(nextPrompt);
+            commitPrompt(nextPrompt);
+          }}
         />
       )}
     </div>

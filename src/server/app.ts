@@ -2,6 +2,8 @@ import express from 'express';
 import { createLocalProjectStore } from '../lib/localProjectStore';
 import { mountGenerationRoutes, type GenerationProviders } from './generationRoutes';
 import { mountProjectRoutes } from './projectsRoutes';
+import { mountPromptRoutes } from './promptsRoutes';
+import { createLocalPromptStore } from '../lib/localPromptStore';
 import type { RuntimeConfigManager } from './runtimeConfig';
 import { mountRuntimeSettingsRoutes, type RuntimeSettingsStore } from './runtimeSettings';
 
@@ -55,6 +57,7 @@ export function createApp({
     next(error);
   });
   if (runtimeSettings) mountRuntimeSettingsRoutes(app, runtimeSettings);
+  mountPromptRoutes(app, createLocalPromptStore(dataDir));
   mountProjectRoutes(app, createLocalProjectStore(dataDir));
   mountGenerationRoutes(app, { providers, runtimeConfig });
   app.use('/api', (_req, res) => {

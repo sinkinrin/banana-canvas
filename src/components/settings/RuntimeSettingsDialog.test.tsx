@@ -7,7 +7,8 @@ import { RuntimeSettingsDialog } from './RuntimeSettingsDialog';
 test('RuntimeSettingsDialog exposes the local auto-loading configuration workflow', () => {
   const html = renderToStaticMarkup(<RuntimeSettingsDialog onClose={() => {}} />);
 
-  assert.match(html, /模型与连接设置/);
-  assert.match(html, /启动时自动加载/);
+  assert.match(html, /应用设置/);
+  assert.match(html, /模型与连接/);
+  assert.match(html, /软件更新/);
   assert.match(html, /加载配置中/);
 });
