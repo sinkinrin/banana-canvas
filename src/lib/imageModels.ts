@@ -22,7 +22,7 @@ export type ReferenceImageInput = {
   mimeType: string;
 };
 
-export const BANANA_MODEL = 'gemini-3.1-flash-image-preview';
+export const BANANA_MODEL = 'gemini-3.1-flash-image';
 export const BANANA_ASPECT_RATIO_VALUES = [
   '1:1',
   '1:4',

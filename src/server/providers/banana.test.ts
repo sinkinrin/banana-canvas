@@ -15,7 +15,7 @@ test('buildBananaProviderRequest preserves prompt, model options, and inline ref
     bananaOptions: { thinkingLevel: 'HIGH' },
   }) as any;
 
-  assert.equal(request.model, 'gemini-3.1-flash-image-preview');
+  assert.equal(request.model, 'gemini-3.1-flash-image');
   assert.equal(request.contents.parts[0].inlineData.mimeType, 'image/png');
   assert.equal(request.contents.parts[0].inlineData.data, Buffer.from('ref').toString('base64'));
   assert.equal(request.contents.parts[1].text, 'draw');

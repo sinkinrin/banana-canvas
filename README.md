@@ -4,7 +4,7 @@
 
 # 香蕉画图
 
-当前版本：`0.3.0`
+当前版本：`0.3.1`
 
 版本变更见 [CHANGELOG.md](CHANGELOG.md)，维护者发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 
@@ -147,7 +147,7 @@ npm run electron
 - 参考图上限：4 张
 - 构图草图占用一个参考图位置；再次应用同一草图会替换旧草图图片，不会重复增加。
 - 草图 PNG 按固定画幅导出，最长边为 2048 像素，不会按笔画边界自动裁切；QuickDraw JSON 快照随项目保存，便于继续编辑。
-- 默认生成模型：`Image2`；`Banana` 使用 `gemini-3.1-flash-image-preview`，`Image2` 使用应用内设置或 `.env` 中配置的 OpenAI-compatible 中转
+- 默认生成模型：`Image2`；`Banana` 使用 Nano Banana 2 稳定版 `gemini-3.1-flash-image`，`Image2` 使用应用内设置或 `.env` 中配置的 OpenAI-compatible 中转
 - 提示词优化模型：`gemini-3.1-pro-preview`
 
 ### 图片节点

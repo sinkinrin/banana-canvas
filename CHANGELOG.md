@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-02
+
+### 改进
+
+- Banana 提供方从 Nano Banana 2 预览模型迁移到官方稳定模型 `gemini-3.1-flash-image`。
+- 同步更新模型请求断言与用户文档，保留现有分辨率、宽高比、思考模式和搜索增强参数。
+
+### 发布
+
+- 这是内置更新器的 v0.3.0 客户端可自动接收的首个增量版本，继续通过 GitHub Releases 提供安装包、blockmap 与 `latest.yml`。
+
+### 已知限制
+
+- Windows 安装包暂未进行代码签名，安装和自动更新时可能出现 SmartScreen 未知发布者提示。
+
 ## [0.3.0] - 2026-09-02
 
 ### 新增
@@ -43,6 +58,7 @@
 - 改进 Image2 请求、代理、取消、校验与生成结果处理。
 - 增强本地项目资产持久化与可恢复删除。
 
-[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/sinkinrin/banana-canvas/releases/tag/v0.2.1
