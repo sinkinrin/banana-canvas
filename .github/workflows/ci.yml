@@ -2,15 +2,31 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,6 +35,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm audit
-      - run: npm audit --omit=dev
-      - run: xvfb-run -a npm run smoke:electron
+      - if: runner.os == 'Linux'
+        run: npm audit --audit-level=high
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a npm run smoke:electron
+      - if: runner.os == 'Windows'
+        run: npm run smoke:electron

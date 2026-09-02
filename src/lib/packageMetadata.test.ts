@@ -19,15 +19,18 @@ test('package metadata uses the banana-canvas package name', async () => {
   }>('package.json');
   const packageLock = await readJsonFile<{
     name: string;
-    packages: Record<string, { name?: string }>;
+    version: string;
+    packages: Record<string, { name?: string; version?: string }>;
   }>('package-lock.json');
 
   assert.equal(packageJson.name, 'banana-canvas');
-  assert.equal(packageJson.version, '0.2.1');
+  assert.match(packageJson.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   assert.match(packageJson.description, /Image2/);
   assert.equal(packageJson.author, 'Banana Canvas Contributors');
   assert.equal(packageLock.name, 'banana-canvas');
+  assert.equal(packageLock.version, packageJson.version);
   assert.equal(packageLock.packages[''].name, 'banana-canvas');
+  assert.equal(packageLock.packages[''].version, packageJson.version);
 });
 
 test('package scripts expose test and check commands', async () => {
@@ -38,7 +41,7 @@ test('package scripts expose test and check commands', async () => {
   assert.equal(packageJson.scripts.test, 'node scripts/run-tests.mjs');
   assert.equal(
     packageJson.scripts.check,
-    'npm run typecheck && npm run lint && npm test && npm run build && npm run build:electron'
+    'npm run version:check && npm run typecheck && npm run lint && npm test && npm run build && npm run build:electron'
   );
   assert.equal(packageJson.scripts.typecheck, 'tsc --noEmit');
   assert.match(packageJson.scripts.lint, /eslint/);
@@ -48,6 +51,8 @@ test('package scripts expose test and check commands', async () => {
   assert.match(packageJson.scripts['clean:release'], /release/);
   assert.match(packageJson.scripts['dist:win'], /clean:release/);
   assert.match(packageJson.scripts['dist:win'], /build-windows/);
+  assert.equal(packageJson.scripts['version:check'], 'node scripts/verify-version.mjs');
+  assert.equal(packageJson.scripts['release:prepare'], 'node scripts/prepare-release.mjs');
   assert.match(packageJson.scripts.electron, /electron \./);
 });
 
@@ -58,16 +63,23 @@ test('desktop packaging uses a stable update filename, custom icon, and excludes
     build: {
       files: string[];
       npmRebuild: boolean;
+      publish: Array<{ provider: string; owner: string; repo: string }>;
       win: { icon: string; artifactName: string };
     };
   }>('package.json');
 
   assert.equal(packageJson.dependencies.vite, undefined);
+  assert.match(packageJson.dependencies['electron-updater'], /^\^6\./);
   assert.equal(packageJson.devDependencies.vite, '^6.4.3');
   assert.equal(packageJson.build.npmRebuild, false);
   assert.equal(packageJson.build.win.icon, 'assets/icon.ico');
   assert.equal(packageJson.build.win.artifactName, 'banana-canvas-setup-${version}.${ext}');
   assert.equal(packageJson.build.files.includes('!node_modules{,/**/*}'), true);
+  assert.deepEqual(packageJson.build.publish, [{
+    provider: 'github',
+    owner: 'sinkinrin',
+    repo: 'banana-canvas',
+  }]);
 });
 
 test('environment template keeps secrets blank and provides the default Image2 model', async () => {
@@ -82,10 +94,31 @@ test('environment template keeps secrets blank and provides the default Image2 m
 
 test('README documents setup and verification commands', async () => {
   const readme = await readFile(resolve(repoRoot, 'README.md'), 'utf8');
+  const packageJson = await readJsonFile<{ version: string }>('package.json');
 
   assert.match(readme, /npm install/);
   assert.match(readme, /npm test/);
   assert.match(readme, /npm run check/);
   assert.match(readme, /`npm install` 是首次设置步骤/);
   assert.match(readme, /`npm run check` 不会执行 `npm install`/);
+  assert.ok(readme.includes('当前版本：`' + packageJson.version + '`'));
+  assert.match(readme, /后台自动下载/);
+});
+
+test('release workflow builds update metadata before creating GitHub Release', async () => {
+  const workflow = await readFile(
+    resolve(repoRoot, '.github/workflows/release.yml'),
+    'utf8'
+  );
+  const changelog = await readFile(resolve(repoRoot, 'CHANGELOG.md'), 'utf8');
+  const packageJson = await readJsonFile<{ version: string }>('package.json');
+
+  assert.match(workflow, /tags:\s*\n\s*-\s*'v\*'/);
+  assert.match(workflow, /runs-on: windows-latest/);
+  assert.match(workflow, /npm run smoke:electron:packaged/);
+  assert.match(workflow, /npm run release:prepare/);
+  assert.match(workflow, /release\/latest\.yml/);
+  assert.match(workflow, /gh release create/);
+  assert.match(changelog, /^## \[Unreleased\]/m);
+  assert.ok(changelog.includes('## [' + packageJson.version + ']'));
 });

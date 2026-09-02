@@ -17,7 +17,9 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import {
   areHistoryStatesEqual,
+  buildSketchReferenceImageIds,
   collectReferencedAssetIdsFromHistory,
+  createImageAsset,
   createHistorySnapshot,
   createPersistedSnapshot,
   migrateCanvasNodesToAssetIds,
@@ -26,6 +28,7 @@ import {
   type CanvasImageAsset,
   type CanvasNode,
   type CanvasNodeData,
+  type CanvasSketchSavePayload,
 } from './lib/canvasState';
 import { normalizeProjectSnapshot, type ProjectSnapshot } from './lib/projectSession';
 import { DEFAULT_IMAGE_MODEL } from './lib/imageModels';
@@ -67,6 +70,9 @@ export type AppState = {
   addNode: (type: string, position: { x: number; y: number }, data?: any) => string;
   deleteNode: (id: string) => void;
   updateNodeData: (id: string, data: Partial<AppNodeData>) => void;
+  saveNodeSketch: (id: string, payload: CanvasSketchSavePayload) =>
+    | { ok: true; assetId: string }
+    | { ok: false; error: string };
   clearCanvas: () => void;
   hydrateProject: (snapshot: ProjectSnapshot) => void;
   exportProject: () => ProjectSnapshot;
@@ -207,6 +213,48 @@ export const useStore = create<AppState>()(
             ),
             assets: normalized.assets,
           });
+        },
+        saveNodeSketch: (id, payload) => {
+          const state = get();
+          const currentNode = state.nodes.find((node) => node.id === id);
+          if (!currentNode) return { ok: false, error: '创作节点不存在。' };
+
+          const sketchAsset = createImageAsset(payload.image);
+          const nextReferenceImageIds = buildSketchReferenceImageIds({
+            referenceImageIds: currentNode.data.referenceImageIds ?? [],
+            previousSketchAssetId: currentNode.data.sketch?.referenceImageAssetId,
+            nextSketchAssetId: sketchAsset.id,
+          });
+          if (!nextReferenceImageIds) {
+            return { ok: false, error: '参考图已达到 4 张上限，请先移除一张再应用草图。' };
+          }
+
+          const updatedAt = new Date().toISOString();
+          set({
+            nodes: state.nodes.map((node) => node.id === id
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    aspectRatio: payload.aspectRatio,
+                    referenceImageIds: nextReferenceImageIds,
+                    referenceImages: undefined,
+                    referenceImage: undefined,
+                    sketch: {
+                      snapshot: payload.snapshot,
+                      aspectRatio: payload.aspectRatio,
+                      referenceImageAssetId: sketchAsset.id,
+                      updatedAt,
+                    },
+                  },
+                }
+              : node),
+            assets: {
+              ...state.assets,
+              [sketchAsset.id]: sketchAsset,
+            },
+          });
+          return { ok: true, assetId: sketchAsset.id };
         },
         clearCanvas: () => {
           set({

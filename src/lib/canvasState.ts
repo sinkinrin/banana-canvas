@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/react';
+import type { Snapshot as QuickdrawSnapshot } from '@quickdrawjs/react';
 import { v4 as uuidv4 } from 'uuid';
 import {
   normalizeBananaOptions,
@@ -23,6 +24,19 @@ export type CanvasImageAsset = {
   mimeType: string;
 };
 
+export type CanvasSketchData = {
+  snapshot: QuickdrawSnapshot;
+  aspectRatio: BananaAspectRatio;
+  referenceImageAssetId: string;
+  updatedAt: string;
+};
+
+export type CanvasSketchSavePayload = {
+  snapshot: QuickdrawSnapshot;
+  image: InlineImageData;
+  aspectRatio: BananaAspectRatio;
+};
+
 export type CanvasNodeData = {
   prompt?: string;
   imageModel?: ImageModelId;
@@ -45,6 +59,7 @@ export type CanvasNodeData = {
   color?: string;
   createdAt?: string;
   generationTitle?: string;
+  sketch?: CanvasSketchData;
 };
 
 export type CanvasNode = Node<CanvasNodeData>;
@@ -104,6 +119,31 @@ export function createImageAsset(image: InlineImageData): CanvasImageAsset {
     data: image.data,
     mimeType: image.mimeType,
   };
+}
+
+export function buildSketchReferenceImageIds({
+  referenceImageIds,
+  previousSketchAssetId,
+  nextSketchAssetId,
+  maxCount = 4,
+}: {
+  referenceImageIds: string[];
+  previousSketchAssetId?: string;
+  nextSketchAssetId: string;
+  maxCount?: number;
+}): string[] | null {
+  const nextIds = [...new Set(referenceImageIds)].filter((id) => id !== nextSketchAssetId);
+  const previousIndex = previousSketchAssetId
+    ? nextIds.indexOf(previousSketchAssetId)
+    : -1;
+
+  if (previousIndex >= 0) {
+    nextIds[previousIndex] = nextSketchAssetId;
+    return nextIds.slice(0, maxCount);
+  }
+
+  if (nextIds.length >= maxCount) return null;
+  return [...nextIds, nextSketchAssetId];
 }
 
 function assetUrl(asset: CanvasImageAsset) {
@@ -193,6 +233,7 @@ function sanitizeNodeDataForSnapshot(data: CanvasNodeData): CanvasNodeData {
     color: data.color,
     createdAt: data.createdAt,
     generationTitle: data.generationTitle,
+    sketch: data.sketch,
     referenceImages: undefined,
     referenceImage: undefined,
     sourceImage: undefined,

@@ -1,6 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, safeStorage, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  safeStorage,
+  shell,
+  type MessageBoxOptions,
+} from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { startLocalServer, type LocalServerHandle } from '../src/server/startLocalServer';
 import type { RuntimeConfigLogger } from '../src/server/runtimeConfig';
 import { isAllowedExternalUrl, isInternalAppUrl } from '../src/lib/electronNavigation';
@@ -9,10 +17,15 @@ import {
   type RuntimeSettingsSecretStore,
   type RuntimeSettingsSecretValues,
 } from '../src/server/runtimeSettings';
+import {
+  createDesktopUpdateManager,
+  type DesktopUpdateInfo,
+} from './updateManager';
 
 let mainWindow: BrowserWindow | null = null;
 let serverHandle: LocalServerHandle | null = null;
 let serverStartPromise: Promise<LocalServerHandle> | null = null;
+let updateManager: ReturnType<typeof createDesktopUpdateManager> | null = null;
 let isQuitting = false;
 
 function isSmokeTest() {
@@ -42,6 +55,57 @@ const logger: RuntimeConfigLogger = ({ level, message }) => {
   }
   console.info(prefix, message);
 };
+
+async function prepareForUpdateInstall() {
+  if (isQuitting) return;
+  isQuitting = true;
+  updateManager?.stop();
+
+  if (!serverHandle) return;
+  try {
+    await serverHandle.close();
+  } catch (error) {
+    logger({
+      level: 'warn',
+      message: `[update] 关闭本地服务失败，将继续安装：${error instanceof Error ? error.message : String(error)}`,
+    });
+  } finally {
+    serverHandle = null;
+  }
+}
+
+async function promptToRestartForUpdate(info: DesktopUpdateInfo) {
+  const options: MessageBoxOptions = {
+    type: 'info',
+    title: '香蕉画图更新已就绪',
+    message: `版本 ${info.version} 已在后台下载完成`,
+    detail: [
+      info.releaseName?.trim(),
+      '是否立即重启并安装？选择“稍后”会在退出应用后自动安装。',
+      '当前安装包未进行代码签名，Windows 可能显示安全提示。',
+    ].filter(Boolean).join('\n\n'),
+    buttons: ['立即重启并安装', '稍后'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  };
+  const result = mainWindow
+    ? await dialog.showMessageBox(mainWindow, options)
+    : await dialog.showMessageBox(options);
+  return result.response === 0;
+}
+
+function startDesktopAutoUpdates() {
+  if (!app.isPackaged || isSmokeTest() || updateManager) return;
+
+  updateManager = createDesktopUpdateManager({
+    updater: autoUpdater,
+    logger: (level, message) => logger({ level, message: `[update] ${message}` }),
+    promptToRestart: promptToRestartForUpdate,
+    beforeInstall: prepareForUpdateInstall,
+  });
+  updateManager.start();
+}
 
 function getAppRoot() {
   return app.getAppPath();
@@ -140,6 +204,114 @@ async function waitForSmokeRenderer(window: BrowserWindow) {
   throw new Error('Desktop smoke renderer did not become ready');
 }
 
+async function waitForSmokePredicate(
+  window: BrowserWindow,
+  expression: string,
+  failureMessage: string
+) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const matched = await window.webContents.executeJavaScript(`Boolean(${expression})`) as boolean;
+    if (matched) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(failureMessage);
+}
+
+async function runSketchSmokeTest(localUrl: string, window: BrowserWindow) {
+  const createResponse = await fetch(`${localUrl}/api/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'QuickDraw smoke',
+      snapshot: {
+        nodes: [{
+          id: 'quickdraw-smoke-prompt',
+          type: 'promptNode',
+          position: { x: 250, y: 250 },
+          data: { prompt: 'a person in motion', imageModel: 'image2', aspectRatio: '1:1' },
+        }],
+        edges: [],
+        assets: {},
+      },
+    }),
+  });
+  const created = await createResponse.json() as { project?: { id?: string } };
+  const projectId = created.project?.id;
+  if (!createResponse.ok || !projectId) {
+    throw new Error(`QuickDraw smoke project creation failed with HTTP ${createResponse.status}`);
+  }
+
+  await window.loadURL(`${localUrl}/projects/${encodeURIComponent(projectId)}`);
+  await waitForSmokePredicate(
+    window,
+    `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('绘制构图草图'))`,
+    'QuickDraw smoke prompt node did not become ready'
+  );
+  await window.webContents.executeJavaScript(`
+    [...document.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('绘制构图草图'))
+      ?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `document.querySelector('[data-sketch-editor-modal="true"] .qd-root')`,
+    'QuickDraw smoke editor did not open'
+  );
+
+  const drawResult = await window.webContents.executeJavaScript(`(() => {
+    const modal = document.querySelector('[data-sketch-editor-modal="true"]');
+    const canvas = modal?.querySelector('.qd-canvas');
+    if (!(canvas instanceof HTMLCanvasElement)) return { ok: false, reason: 'canvas missing' };
+    const rect = canvas.getBoundingClientRect();
+    const point = (type, x, y, buttons) => new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 77,
+      pointerType: 'mouse',
+      button: 0,
+      buttons,
+      pressure: buttons ? 0.5 : 0,
+      clientX: rect.left + x,
+      clientY: rect.top + y,
+    });
+    canvas.dispatchEvent(point('pointerdown', rect.width * 0.3, rect.height * 0.35, 1));
+    canvas.dispatchEvent(point('pointermove', rect.width * 0.5, rect.height * 0.55, 1));
+    canvas.dispatchEvent(point('pointermove', rect.width * 0.7, rect.height * 0.4, 1));
+    canvas.dispatchEvent(point('pointerup', rect.width * 0.7, rect.height * 0.4, 0));
+    return { ok: true };
+  })()` ) as { ok: boolean; reason?: string };
+  if (!drawResult.ok) throw new Error(`QuickDraw smoke draw failed: ${drawResult.reason ?? 'unknown'}`);
+
+  await waitForSmokePredicate(
+    window,
+    `(() => { const button = [...document.querySelectorAll('[data-sketch-editor-modal="true"] button')].find((item) => item.textContent?.includes('应用为参考图')); return Boolean(button && !button.disabled); })()`,
+    'QuickDraw smoke drawing did not enable apply'
+  );
+
+  await window.webContents.executeJavaScript(`
+    [...document.querySelectorAll('[data-sketch-editor-modal="true"] button')]
+      .find((button) => button.textContent?.includes('应用为参考图'))
+      ?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `!document.querySelector('[data-sketch-editor-modal="true"]') && document.body.textContent?.includes('草图 · 1/1')`,
+    'QuickDraw smoke sketch was not attached as a reference image'
+  );
+
+  await window.webContents.executeJavaScript(`
+    [...document.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('编辑构图草图'))
+      ?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `(() => { const root = document.querySelector('[data-sketch-editor-modal="true"] .qd-root'); const button = [...document.querySelectorAll('[data-sketch-editor-modal="true"] button')].find((item) => item.textContent?.includes('应用为参考图')); return Boolean(root && button && !button.disabled); })()`,
+    'QuickDraw smoke editable snapshot did not reopen'
+  );
+}
+
 async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   const [pageResponse, settingsResponse] = await Promise.all([
     fetch(localUrl),
@@ -160,7 +332,9 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
 
   await waitForSmokeRenderer(window);
 
-  console.info('[banana:smoke] page, runtime settings, and renderer probes passed');
+  await runSketchSmokeTest(localUrl, window);
+
+  console.info('[banana:smoke] page, runtime settings, renderer, and QuickDraw probes passed');
 }
 
 async function ensureLocalServer() {
@@ -259,6 +433,7 @@ if (!hasSingleInstanceLock) {
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   try {
     await createMainWindow();
+    startDesktopAutoUpdates();
   } catch (error) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     if (isSmokeTest()) {
@@ -284,6 +459,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
+  updateManager?.stop();
   if (!serverHandle || isQuitting) return;
 
   event.preventDefault();

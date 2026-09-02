@@ -1,7 +1,7 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
-import { Edit3, Image as ImageIcon, Loader2, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
+import { Edit3, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
 import { optimizePrompt } from '../../services/gemini';
@@ -21,6 +21,8 @@ import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorMod
 import { useReferenceImages } from './useReferenceImages';
 import { buildPromptMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
 import { usePromptGeneration } from './usePromptGeneration';
+import { SketchEditorModal } from '../sketch/SketchEditorModal';
+import type { SketchSavePayload } from '../sketch/sketchGeometry';
 import {
   getEffectivePromptAspectRatio,
   getImage2MaskEditAspectRatio,
@@ -53,6 +55,7 @@ const imageSizeLabels: Record<BananaImageSize, string> = {
 
 export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const updateNodeData = useStore((state) => state.updateNodeData);
+  const saveNodeSketch = useStore((state) => state.saveNodeSketch);
   const addNode = useStore((state) => state.addNode);
   const assets = useStore((state) => state.assets);
   const assetsHydrated = useStore((state) => state.assetsHydrated);
@@ -66,6 +69,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const [showSettings, setShowSettings] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
+  const [isSketchEditorOpen, setIsSketchEditorOpen] = useState(false);
   const {
     fileInputRef,
     isReadingFile,
@@ -91,6 +95,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Image2';
   const bananaOptions = data.bananaOptions;
   const image2Options = data.image2Options;
+  const sketchReferenceIsAttached = Boolean(
+    data.sketch?.referenceImageAssetId &&
+    referenceImageIds.includes(data.sketch.referenceImageAssetId)
+  );
 
   useEffect(() => {
     setPrompt(data.prompt || '');
@@ -223,6 +231,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     });
   };
 
+  const handleApplySketch = async (payload: SketchSavePayload) => {
+    const result = saveNodeSketch(id, payload);
+    if (!result.ok) throw new Error(result.error);
+    setIsSketchEditorOpen(false);
+  };
+
   return (
     <div
       className="w-80 rounded-2xl overflow-hidden transition-all"
@@ -293,6 +307,28 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
           {/* Reference Images Section */}
           <div>
+            <button
+              type="button"
+              onClick={() => setIsSketchEditorOpen(true)}
+              disabled={!data.sketch && referenceImages.length >= 4}
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ border: '1px solid rgba(91,155,213,0.28)', background: 'rgba(91,155,213,0.09)', color: '#8FC1EA' }}
+              title={data.sketch
+                ? sketchReferenceIsAttached
+                  ? '继续编辑已保存的构图草图'
+                  : '继续编辑草图；应用时会重新占用一个参考图位置'
+                : referenceImages.length >= 4
+                  ? '参考图已达到 4 张上限'
+                  : '绘制人物位置、动作和画面构图'}
+            >
+              <PencilLine size={14} />
+              {data.sketch ? '编辑构图草图' : '绘制构图草图'}
+              {data.sketch && (
+                <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ background: 'rgba(91,155,213,0.16)' }}>
+                  {data.sketch.aspectRatio}
+                </span>
+              )}
+            </button>
             {referenceImages.length > 0 ? (
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
@@ -321,7 +357,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                         <X size={10} />
                       </button>
                       <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded" style={{background: 'rgba(22,19,15,0.8)', color: '#F2C14E', fontSize: '10px', fontWeight: 500}}>
-                        {index + 1}/{referenceImages.length}
+                        {referenceImageIds[index] === data.sketch?.referenceImageAssetId
+                          ? `草图 · ${index + 1}/${referenceImages.length}`
+                          : `${index + 1}/${referenceImages.length}`}
                       </div>
                     </div>
                   ))}
@@ -564,6 +602,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           sourceImage={maskEditorSource.image}
           onClose={() => setMaskEditorSource(null)}
           onGenerate={handleMaskGenerate}
+        />
+      )}
+      {isSketchEditorOpen && (
+        <SketchEditorModal
+          aspectRatio={data.sketch?.aspectRatio ?? aspectRatio}
+          initialSnapshot={data.sketch?.snapshot}
+          onClose={() => setIsSketchEditorOpen(false)}
+          onApply={handleApplySketch}
         />
       )}
     </div>

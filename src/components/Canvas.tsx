@@ -16,6 +16,7 @@ import { useStore } from '../store';
 import { PromptNode } from './nodes/PromptNode';
 import { ImageNode } from './nodes/ImageNode';
 import { DeletableEdge } from './edges/DeletableEdge';
+import { APP_VERSION } from '../lib/appVersion';
 import { DEFAULT_IMAGE_MODEL } from '../lib/imageModels';
 import { Plus, Sparkles, Undo2, Redo2, LayoutGrid, Maximize2 } from 'lucide-react';
 
@@ -194,7 +195,9 @@ function CanvasInner() {
             </div>
             <div>
               <h1 className="font-bold text-white text-lg tracking-tight">香蕉画图</h1>
-              <p className="text-xs font-medium" style={{color: '#96836F'}}>无限画布 AI 创作工具</p>
+              <p className="text-xs font-medium" style={{color: '#96836F'}}>
+                无限画布 AI 创作工具 · v{APP_VERSION}
+              </p>
             </div>
           </div>
 

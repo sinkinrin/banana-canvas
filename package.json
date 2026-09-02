@@ -1,9 +1,17 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "本地优先的 AI 图像创作画布，默认使用 Image2 并支持应用内连接配置。",
   "author": "Banana Canvas Contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sinkinrin/banana-canvas.git"
+  },
+  "homepage": "https://github.com/sinkinrin/banana-canvas#readme",
+  "bugs": {
+    "url": "https://github.com/sinkinrin/banana-canvas/issues"
+  },
   "type": "module",
   "main": "build/electron/main.cjs",
   "scripts": {
@@ -21,13 +29,17 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\" server.ts vite.config.ts",
     "test": "node scripts/run-tests.mjs",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run build:electron"
+    "version:check": "node scripts/verify-version.mjs",
+    "release:prepare": "node scripts/prepare-release.mjs",
+    "check": "npm run version:check && npm run typecheck && npm run lint && npm test && npm run build && npm run build:electron"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",
+    "@quickdrawjs/react": "0.2.0",
     "@xyflow/react": "^12.11.2",
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",
+    "electron-updater": "^6.8.9",
     "express": "^4.22.2",
     "idb-keyval": "^6.3.0",
     "lucide-react": "^0.546.0",
@@ -35,7 +47,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwind-merge": "^3.6.0",
-    "undici": "^7.28.0",
+    "undici": "^7.29.0",
     "uuid": "^14.0.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.14"
@@ -62,8 +74,8 @@
   },
   "overrides": {
     "body-parser": "^1.20.6",
-    "fast-uri": "^3.1.4",
-    "postcss": "^8.5.10",
+    "fast-uri": "^3.1.6",
+    "postcss": "^8.5.26",
     "protobufjs": "^7.6.5",
     "qs": "^6.15.3",
     "ws": "^8.21.1"
@@ -74,6 +86,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sinkinrin",
+        "repo": "banana-canvas"
+      }
+    ],
     "files": [
       "build/electron/main.cjs",
       "dist/**/*",

@@ -1,5 +1,6 @@
 import { FolderOpen, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
 
+import { APP_VERSION } from '../../lib/appVersion';
 import type { ProjectMeta } from '../../lib/projects';
 
 export type ProjectsListProps = {
@@ -39,7 +40,12 @@ export function ProjectsList({
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">香蕉画图</h1>
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-2xl font-bold">香蕉画图</h1>
+              <span className="text-xs font-medium" style={{ color: '#96836F' }}>
+                v{APP_VERSION}
+              </span>
+            </div>
             <p className="mt-1 text-sm" style={{ color: '#96836F' }}>
               本地项目
             </p>

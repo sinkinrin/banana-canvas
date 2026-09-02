@@ -4,7 +4,9 @@
 
 # 香蕉画图
 
-当前版本：`0.2.1`
+当前版本：`0.3.0`
+
+版本变更见 [CHANGELOG.md](CHANGELOG.md)，维护者发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 
 一个类似 Flowith 的无限画布 AI 图像生成工具。你可以在画布上搭建提示词节点和图片节点，把一轮生成的结果继续作为下一轮参考图，逐步迭代出更复杂的视觉方案。
 
@@ -21,6 +23,7 @@
 - 多轮视觉探索：把满意的生成结果继续作为参考图，逐步收敛风格、构图和细节。
 - 海报、KV、角色设定、概念图等方案推演：用画布保留不同分支和中间结果。
 - 局部编辑工作流：在已有图片上涂出需要修改的区域，再用 Image2 生成局部变化。
+- 构图草图：先手绘人物位置、动作和画面关系，再把草图作为视觉提示交给生图模型。
 - 本地项目管理：按项目保存画布、节点关系和图片资产，便于回看和继续创作。
 
 ## 核心功能
@@ -28,6 +31,7 @@
 - 无限画布工作流：基于 React Flow 搭建，可在画布上自由摆放、连线、缩放和整理节点。
 - 创作节点：输入提示词后可直接生成图片，也可以先用 Gemini 3.1 Pro 优化提示词。
 - 参考图输入：支持上传图片和 `Ctrl+V` 粘贴图片，单节点最多挂载 4 张参考图。
+- QuickDraw 构图草图：创作节点可打开固定画幅草图编辑器，支持画笔、橡皮、选择、直线、箭头和独立撤销；草图可重复编辑并自动作为参考图发送。
 - 多参数生图：支持调整画幅比例、输出尺寸、单次生成数量、节点颜色，以及模型专属高级参数。
 - 多模型生图：新创作节点默认使用 `Image2`，也可以切换到 `Banana`；生成出的图片节点会记录当次使用的模型。
 - 批量生成：单个提示词节点一次可生成 `1`、`2` 或 `4` 张图片，并自动连到新图片节点。
@@ -116,11 +120,12 @@ npm run electron
 
 1. 首次使用先在项目列表点击“模型设置”，填写 Image2 连接参数。
 2. 点击底部“新建创作节点”，或在画布空白处右键创建新节点；新节点默认选择 Image2。
-3. 输入提示词；需要时可上传参考图，或直接在文本框里 `Ctrl+V` 粘贴图片。
-4. 可先点击“优化”让 Gemini 3.1 Pro 改写提示词，再点击“开始生成”。
-5. 生成结果会作为新的图片节点出现在当前节点右侧，并自动建立连线。
-6. 悬停图片节点可执行复制、下载、全屏、重新生成、继续作为参考图等操作。
-7. 当画布变复杂后，可以使用自动布局和适应视口快速整理结构。
+3. 输入提示词；需要时可上传参考图、直接在文本框里 `Ctrl+V` 粘贴图片，或点击“绘制构图草图”。
+4. 草图画板自动使用当前生成比例。画出人物相对位置和动作后点击“应用为参考图”；以后可从同一节点继续编辑。
+5. 可先点击“优化”让 Gemini 3.1 Pro 改写文字提示词，再点击“开始生成”。生成请求会同时携带文字和草图参考图。
+6. 生成结果会作为新的图片节点出现在当前节点右侧，并自动建立连线。
+7. 悬停图片节点可执行复制、下载、全屏、重新生成、继续作为参考图等操作。
+8. 当画布变复杂后，可以使用自动布局和适应视口快速整理结构。
 
 ## 快捷键
 
@@ -140,6 +145,8 @@ npm run electron
 - Banana2 支持的分辨率：`512`、`1K`、`2K`、`4K`；旧项目中的 `512px` 会自动按官方 `512` 发送
 - 支持的批量数量：`1`、`2`、`4`
 - 参考图上限：4 张
+- 构图草图占用一个参考图位置；再次应用同一草图会替换旧草图图片，不会重复增加。
+- 草图 PNG 按固定画幅导出，最长边为 2048 像素，不会按笔画边界自动裁切；QuickDraw JSON 快照随项目保存，便于继续编辑。
 - 默认生成模型：`Image2`；`Banana` 使用 `gemini-3.1-flash-image-preview`，`Image2` 使用应用内设置或 `.env` 中配置的 OpenAI-compatible 中转
 - 提示词优化模型：`gemini-3.1-pro-preview`
 
@@ -241,7 +248,9 @@ npm run electron
 | `npm run typecheck` | 运行 TypeScript 类型检查 |
 | `npm run lint` | 运行 ESLint 静态检查 |
 | `npm test` | 运行全部 `src/**/*.test.ts` 和 `src/**/*.test.tsx` 测试 |
-| `npm run check` | 依次运行类型检查、ESLint、测试、Web 构建和 Electron 主进程构建 |
+| `npm run version:check` | 校验 package、lockfile、README 与 Changelog 版本一致 |
+| `npm run release:prepare -- v<version>` | 校验打包产物并生成 Release Notes 与 SHA256 清单 |
+| `npm run check` | 依次运行版本校验、类型检查、ESLint、测试、Web 构建和 Electron 主进程构建 |
 | `npm run preview` | 仅预览 Vite 构建产物，不包含 Express API |
 | `npm run clean` | 删除 `dist/` 目录 |
 | `npm run clean:release` | 删除旧的 `release/` 打包产物，避免更新元数据与旧安装包混用 |
@@ -254,7 +263,15 @@ npm run dist:win
 
 安装包输出为 `release/banana-canvas-setup-<version>.exe`。Windows 打包会先在系统临时目录完成 Electron 资源编辑，再把产物复制回 `release/`，避免桌面目录实时扫描导致新生成的 EXE 被短暂锁定。应用图标来自 `assets/icon.ico`，可以运行 `python scripts/generate_icon.py` 从确定性的图标源重新生成 PNG/ICO。
 
-正式公开发布建议配置代码签名证书。`electron-builder` 会自动读取常见的 `CSC_LINK`、`CSC_KEY_PASSWORD` 等签名环境变量；未配置证书时仍可生成本地测试安装包，但 Windows SmartScreen 可能提示未知发布者。
+当前 Windows 安装包未配置代码签名证书，因此首次安装和后续更新时 Windows SmartScreen 可能提示未知发布者。未来配置证书后，`electron-builder` 可读取 `CSC_LINK`、`CSC_KEY_PASSWORD` 等签名环境变量。
+
+## 客户端自动更新
+
+正式打包的 Windows 客户端启动后会延迟检查 GitHub Releases，并每 4 小时复查一次稳定版本。发现新版本后在后台自动下载；下载完成时提示用户选择“立即重启并安装”或“稍后”，选择稍后会在退出应用后安装。
+
+更新源固定为 [sinkinrin/banana-canvas Releases](https://github.com/sinkinrin/banana-canvas/releases)。每个可更新版本必须同时发布 NSIS 安装包、`.blockmap` 和 `latest.yml`；tag 驱动的 Release workflow 会在 Windows 上重新执行检查、打包 smoke 和元数据校验，全部通过后才创建正式 Release。
+
+v0.2.1 客户端不含更新器，需要手动安装一次 v0.3.0。从 v0.3.0 开始，后续稳定版可通过上述流程自动更新。
 
 ## 主要目录
 
@@ -275,6 +292,7 @@ npm run dist:win
 │  │  │  ├─ useImageNodeActions.ts # 图片节点复制、下载、重跑与参考节点动作
 │  │  │  └─ useMaskGeneration.ts   # Image2 局部编辑共享请求逻辑
 │  │  ├─ mask/                     # Image2 蒙版编辑与对比弹窗
+│  │  ├─ sketch/                   # QuickDraw 固定画幅草图编辑、导出与测试
 │  │  ├─ projects/                 # 项目列表、缺失项目状态
 │  │  └─ edges/
 │  │     └─ DeletableEdge.tsx      # 可悬停删除的边
@@ -308,10 +326,12 @@ npm test
 
 ## 当前架构概览
 
-- 前端：React 19 + Vite + Tailwind CSS 4 + React Flow
+- 前端：React 19 + Vite + Tailwind CSS 4 + React Flow + QuickDraw
 - 状态：Zustand + Zundo
 - 持久化：本地 Express 文件存储；无本地 API 时回退 IndexedDB
 - 后端：Express
 - AI SDK：`@google/genai`
 
 前端通过 `/api/projects` 读写本地项目，通过 `/api/generate-image` 和 `/api/optimize-prompt` 调用后端，再由后端统一请求 Gemini 或 Image2 中转。这样前端交互、项目存储和模型调用可以保持清晰分层。
+
+构图草图使用 MIT 许可的 [`@quickdrawjs/react`](https://github.com/quickdrawjs/quickdraw)。第三方许可文本随 Web/Electron 构建产物保存在 `THIRD_PARTY_NOTICES.txt`。

@@ -15,6 +15,8 @@ function runBuilder() {
       builderCli,
       '--win',
       'nsis',
+      '--publish',
+      'never',
       `--config.directories.output=${stagingDir}`,
     ], {
       cwd: rootDir,

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildSketchReferenceImageIds,
   createReferenceImagePayload,
   areHistoryStatesEqual,
   collectReferencedAssetIdsFromHistory,
@@ -12,6 +13,73 @@ import {
   pruneAssets,
   type PersistedCanvasState,
 } from './canvasState';
+
+test('sketch reference replaces its previous raster without changing reference order', () => {
+  assert.deepEqual(
+    buildSketchReferenceImageIds({
+      referenceImageIds: ['style-1', 'sketch-old', 'character-1'],
+      previousSketchAssetId: 'sketch-old',
+      nextSketchAssetId: 'sketch-new',
+    }),
+    ['style-1', 'sketch-new', 'character-1']
+  );
+});
+
+test('new sketch reference respects the four-image limit', () => {
+  assert.deepEqual(
+    buildSketchReferenceImageIds({
+      referenceImageIds: ['style-1'],
+      nextSketchAssetId: 'sketch-new',
+    }),
+    ['style-1', 'sketch-new']
+  );
+  assert.equal(
+    buildSketchReferenceImageIds({
+      referenceImageIds: ['a', 'b', 'c', 'd'],
+      nextSketchAssetId: 'sketch-new',
+    }),
+    null
+  );
+});
+
+test('history snapshot preserves an editable QuickDraw sketch document', () => {
+  const sketch = {
+    snapshot: {
+      document: {
+        store: {
+          'shape-1': {
+            id: 'shape-1',
+            typeName: 'shape' as const,
+            type: 'draw' as const,
+            x: 10,
+            y: 20,
+            rot: 0,
+            z: 1,
+            props: { pts: [0, 0, 0.5] },
+          },
+        },
+      },
+    },
+    aspectRatio: '16:9' as const,
+    referenceImageAssetId: 'sketch-image',
+    updatedAt: '2026-08-28T00:00:00.000Z',
+  };
+  const history = createHistorySnapshot({
+    nodes: [{
+      id: 'prompt-1',
+      type: 'promptNode',
+      position: { x: 0, y: 0 },
+      data: { referenceImageIds: ['sketch-image'], sketch },
+    }],
+    edges: [],
+    assets: {
+      'sketch-image': { id: 'sketch-image', data: 'png', mimeType: 'image/png' },
+    },
+  });
+
+  assert.deepEqual(history.nodes[0].data.sketch, sketch);
+  assert.ok(collectReferencedAssetIdsFromHistory([history]).has('sketch-image'));
+});
 
 test('history snapshot excludes inline image payloads but keeps asset ids', () => {
   const state: PersistedCanvasState = {

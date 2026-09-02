@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.17.1
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Verify source and version metadata
+        run: npm run check
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build Windows installer and update metadata
+        run: npm run dist:win
+
+      - name: Smoke test packaged client
+        run: npm run smoke:electron:packaged
+
+      - name: Verify release assets and generate checksums
+        shell: bash
+        run: npm run release:prepare -- "$GITHUB_REF_NAME"
+
+      - name: Preserve verified artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: banana-canvas-${{ github.ref_name }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/banana-canvas-setup-*.exe
+            release/banana-canvas-setup-*.exe.blockmap
+            release/latest.yml
+            release/SHA256SUMS.txt
+
+      - name: Publish complete GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          installer="release/banana-canvas-setup-${version}.exe"
+          blockmap="${installer}.blockmap"
+          gh release create "$GITHUB_REF_NAME" \
+            "${installer}#Windows x64 安装包（未签名）" \
+            "${blockmap}#electron-updater blockmap" \
+            "release/latest.yml#electron-updater metadata" \
+            "release/SHA256SUMS.txt#SHA256 校验清单" \
+            --verify-tag \
+            --latest \
+            --title "Banana Canvas $GITHUB_REF_NAME" \
+            --notes-file "release/release-notes.md"
