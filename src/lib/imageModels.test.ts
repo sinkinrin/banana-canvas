@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  BANANA_ASPECT_RATIO_VALUES,
+  BANANA_STANDARD_ASPECT_RATIO_VALUES,
   DEFAULT_IMAGE_MODEL,
   buildBananaGenerateContentRequest,
   buildImage2ChatCompletionRequest,
@@ -11,6 +13,9 @@ import {
   extractBananaImageUrl,
   extractImage2ImageUrlFromSse,
   getBananaParameterTips,
+  getBananaAspectRatioValues,
+  getBananaImageSizeValues,
+  getBananaModelCapabilities,
   getImage2RelayParameterTips,
   getImage2AttemptGroups,
   extractImage2ImageUrl,
@@ -19,8 +24,12 @@ import {
   getImageModelConfig,
   isImage2RetriableNetworkError,
   isImage2RetriableHttpStatus,
+  isBananaImageModel,
+  normalizeBananaAspectRatioForModel,
   normalizeBananaImageSize,
+  normalizeBananaImageSizeForModel,
   normalizeBananaOptions,
+  normalizeBananaOptionsForModel,
   normalizeImage2Options,
   normalizeImageModel,
   resolveImage2AllowH2,
@@ -32,11 +41,17 @@ test('normalizeImageModel falls back to image2 for unknown values', () => {
   assert.equal(DEFAULT_IMAGE_MODEL, 'image2');
   assert.equal(normalizeImageModel('image2'), 'image2');
   assert.equal(normalizeImageModel('banana'), 'banana');
+  assert.equal(normalizeImageModel('banana-lite'), 'banana-lite');
+  assert.equal(normalizeImageModel('banana-pro'), 'banana-pro');
   assert.equal(normalizeImageModel('unknown-model'), 'image2');
   assert.equal(normalizeImageModel(undefined), 'image2');
+  assert.equal(isBananaImageModel('banana'), true);
+  assert.equal(isBananaImageModel('banana-lite'), true);
+  assert.equal(isBananaImageModel('banana-pro'), true);
+  assert.equal(isBananaImageModel('image2'), false);
 });
 
-test('getImageModelConfig exposes provider metadata for both image models', () => {
+test('getImageModelConfig exposes provider metadata for every image model', () => {
   assert.deepEqual(
     {
       id: getImageModelConfig('banana').id,
@@ -47,6 +62,9 @@ test('getImageModelConfig exposes provider metadata for both image models', () =
       provider: 'gemini',
     }
   );
+
+  assert.equal(getImageModelConfig('banana-lite').provider, 'gemini');
+  assert.equal(getImageModelConfig('banana-pro').provider, 'gemini');
 
   assert.deepEqual(
     {
@@ -60,6 +78,31 @@ test('getImageModelConfig exposes provider metadata for both image models', () =
   );
 });
 
+test('Banana model capabilities expose official model IDs and output constraints', () => {
+  assert.equal(getBananaModelCapabilities('banana').apiModel, 'gemini-3.1-flash-image');
+  assert.equal(getBananaModelCapabilities('banana-lite').apiModel, 'gemini-3.1-flash-lite-image');
+  assert.equal(getBananaModelCapabilities('banana-pro').apiModel, 'gemini-3-pro-image');
+
+  assert.deepEqual(getBananaAspectRatioValues('banana'), [...BANANA_ASPECT_RATIO_VALUES]);
+  assert.deepEqual(
+    getBananaAspectRatioValues('banana-lite'),
+    [...BANANA_ASPECT_RATIO_VALUES]
+  );
+  assert.deepEqual(
+    getBananaAspectRatioValues('banana-pro'),
+    [...BANANA_STANDARD_ASPECT_RATIO_VALUES]
+  );
+  assert.deepEqual(getBananaImageSizeValues('banana-lite'), ['1K']);
+  assert.deepEqual(getBananaImageSizeValues('banana-pro'), ['1K', '2K', '4K']);
+
+  assert.equal(normalizeBananaAspectRatioForModel('banana', '1:8'), '1:8');
+  assert.equal(normalizeBananaAspectRatioForModel('banana-lite', '1:8'), '1:8');
+  assert.equal(normalizeBananaAspectRatioForModel('banana-pro', '21:9'), '21:9');
+  assert.equal(normalizeBananaImageSizeForModel('banana', '512px'), '512');
+  assert.equal(normalizeBananaImageSizeForModel('banana-lite', '4K'), undefined);
+  assert.equal(normalizeBananaImageSizeForModel('banana-pro', '4K'), '4K');
+});
+
 test('normalizeBananaImageSize converts legacy 512px to the official 512 value', () => {
   assert.equal(normalizeBananaImageSize('512px'), '512');
   assert.equal(normalizeBananaImageSize('512'), '512');
@@ -71,7 +114,7 @@ test('normalizeBananaOptions keeps only user-tunable Banana2 advanced options', 
   assert.deepEqual(
     normalizeBananaOptions({
       responseMode: 'image',
-      thinkingLevel: 'medium',
+      thinkingLevel: 'high',
       mediaResolution: 'MEDIA_RESOLUTION_HIGH',
       searchGrounding: true,
       safetySettings: {
@@ -82,7 +125,7 @@ test('normalizeBananaOptions keeps only user-tunable Banana2 advanced options', 
       outputFormat: 'png',
     }),
     {
-      thinkingLevel: 'MEDIUM',
+      thinkingLevel: 'HIGH',
       mediaResolution: 'MEDIA_RESOLUTION_HIGH',
       searchGrounding: true,
     }
@@ -102,6 +145,23 @@ test('normalizeBananaOptions keeps only user-tunable Banana2 advanced options', 
   );
 });
 
+test('normalizeBananaOptionsForModel drops controls unsupported by the selected variant', () => {
+  const options = {
+    thinkingLevel: 'HIGH',
+    mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+    searchGrounding: true,
+  } as const;
+
+  assert.deepEqual(normalizeBananaOptionsForModel('banana', options), options);
+  assert.deepEqual(normalizeBananaOptionsForModel('banana-lite', options), {
+    thinkingLevel: 'HIGH',
+    mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+  });
+  assert.deepEqual(normalizeBananaOptionsForModel('banana-pro', options), {
+    searchGrounding: true,
+  });
+});
+
 test('buildBananaGenerateContentRequest fixes image-only output and disables default safety filtering', () => {
   assert.deepEqual(
     buildBananaGenerateContentRequest({
@@ -116,7 +176,7 @@ test('buildBananaGenerateContentRequest fixes image-only output and disables def
       ],
       bananaOptions: {
         responseMode: 'image',
-        thinkingLevel: 'LOW',
+        thinkingLevel: 'HIGH',
         mediaResolution: 'MEDIA_RESOLUTION_HIGH',
         searchGrounding: true,
         safetySettings: {
@@ -140,7 +200,7 @@ test('buildBananaGenerateContentRequest fixes image-only output and disables def
         },
         responseModalities: ['IMAGE'],
         thinkingConfig: {
-          thinkingLevel: 'LOW',
+          thinkingLevel: 'HIGH',
         },
         mediaResolution: 'MEDIA_RESOLUTION_HIGH',
         tools: [{ googleSearch: {} }],
@@ -165,6 +225,46 @@ test('buildBananaGenerateContentRequest fixes image-only output and disables def
       },
     }
   );
+});
+
+test('buildBananaGenerateContentRequest routes Lite and Pro with model-specific constraints', () => {
+  const liteRequest = buildBananaGenerateContentRequest({
+    imageModel: 'banana-lite',
+    prompt: 'draw quickly',
+    aspectRatio: '1:8',
+    imageSize: '4K',
+    bananaOptions: {
+      thinkingLevel: 'HIGH',
+      searchGrounding: true,
+    },
+  });
+  assert.equal(liteRequest.model, 'gemini-3.1-flash-lite-image');
+  assert.deepEqual(liteRequest.config.imageConfig, {
+    aspectRatio: '1:8',
+    imageSize: '1K',
+  });
+  assert.deepEqual(liteRequest.config.thinkingConfig, { thinkingLevel: 'HIGH' });
+  assert.equal('tools' in liteRequest.config, false);
+
+  const proRequest = buildBananaGenerateContentRequest({
+    imageModel: 'banana-pro',
+    prompt: 'draw precisely',
+    aspectRatio: '21:9',
+    imageSize: '4K',
+    bananaOptions: {
+      thinkingLevel: 'HIGH',
+      mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+      searchGrounding: true,
+    },
+  });
+  assert.equal(proRequest.model, 'gemini-3-pro-image');
+  assert.deepEqual(proRequest.config.imageConfig, {
+    aspectRatio: '21:9',
+    imageSize: '4K',
+  });
+  assert.equal('thinkingConfig' in proRequest.config, false);
+  assert.equal('mediaResolution' in proRequest.config, false);
+  assert.deepEqual(proRequest.config.tools, [{ googleSearch: {} }]);
 });
 
 test('buildBananaGenerateContentRequest omits mediaResolution when there are no reference images', () => {
@@ -245,13 +345,15 @@ test('extractBananaImageUrl corrects misleading inline image MIME metadata from 
   );
 });
 
-test('getBananaParameterTips documents Banana2-specific parameter differences', () => {
-  const tips = getBananaParameterTips();
+test('getBananaParameterTips documents variant-specific parameter differences', () => {
+  const tips = getBananaParameterTips('banana');
 
   assert.ok(tips.some((tip) => tip.includes('固定仅返回图片')));
   assert.ok(tips.some((tip) => tip.includes('安全过滤固定关闭')));
   assert.ok(tips.some((tip) => tip.includes('transparent')));
   assert.ok(tips.some((tip) => tip.includes('Image2')));
+  assert.ok(getBananaParameterTips('banana-lite').some((tip) => tip.includes('固定为 1K')));
+  assert.ok(getBananaParameterTips('banana-pro').some((tip) => tip.includes('品牌一致性')));
 });
 
 test('buildImage2ChatCompletionRequest sends prompt and references as multimodal chat content', () => {

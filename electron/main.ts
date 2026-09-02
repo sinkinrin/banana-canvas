@@ -3,7 +3,10 @@ import path from 'node:path';
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
+  ipcMain,
+  nativeImage,
   safeStorage,
   shell,
   type MessageBoxOptions,
@@ -21,12 +24,43 @@ import {
   createDesktopUpdateManager,
   type DesktopUpdateInfo,
 } from './updateManager';
+import { WRITE_IMAGE_TO_CLIPBOARD_CHANNEL } from './ipcChannels';
 
 let mainWindow: BrowserWindow | null = null;
 let serverHandle: LocalServerHandle | null = null;
 let serverStartPromise: Promise<LocalServerHandle> | null = null;
 let updateManager: ReturnType<typeof createDesktopUpdateManager> | null = null;
 let isQuitting = false;
+
+const MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH = 128 * 1024 * 1024;
+const SUPPORTED_CLIPBOARD_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i;
+
+async function writeImageDataUrlToClipboard(imageDataUrl: unknown) {
+  if (
+    typeof imageDataUrl !== 'string'
+    || imageDataUrl.length > MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH
+    || !SUPPORTED_CLIPBOARD_IMAGE_DATA_URL.test(imageDataUrl)
+  ) {
+    throw new Error('Unsupported clipboard image payload');
+  }
+
+  const image = nativeImage.createFromDataURL(imageDataUrl);
+  if (image.isEmpty()) throw new Error('Clipboard image could not be decoded');
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    clipboard.writeImage(image);
+    if (!clipboard.readImage().isEmpty()) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('System clipboard did not accept the image');
+}
+
+ipcMain.handle(WRITE_IMAGE_TO_CLIPBOARD_CHANNEL, async (event, imageDataUrl: unknown) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('Clipboard request did not come from the application window');
+  }
+  await writeImageDataUrlToClipboard(imageDataUrl);
+});
 
 function isSmokeTest() {
   return process.env.BANANA_SMOKE_TEST === '1';
@@ -218,6 +252,177 @@ async function waitForSmokePredicate(
   throw new Error(failureMessage);
 }
 
+async function waitForSmokeClipboardImage() {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const image = clipboard.readImage();
+    if (!image.isEmpty()) return image.getSize();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('Image copy smoke test did not write to the system clipboard');
+}
+
+function captureSmokeClipboard() {
+  const data: Parameters<typeof clipboard.write>[0] = {};
+  const text = clipboard.readText();
+  const html = clipboard.readHTML();
+  const rtf = clipboard.readRTF();
+  const image = clipboard.readImage();
+  const bookmark = process.platform === 'linux' ? undefined : clipboard.readBookmark();
+
+  if (text) data.text = text;
+  if (html) data.html = html;
+  if (rtf) data.rtf = rtf;
+  if (!image.isEmpty()) data.image = image;
+  if (bookmark?.url) {
+    data.text = bookmark.url;
+    data.bookmark = bookmark.title;
+  }
+  return data;
+}
+
+function restoreSmokeClipboard(data: Parameters<typeof clipboard.write>[0]) {
+  if (Object.keys(data).length > 0) {
+    clipboard.write(data);
+    return;
+  }
+  clipboard.clear();
+}
+
+function createSmokeJpegDataUrl() {
+  const width = 4;
+  const height = 3;
+  const bitmap = Buffer.alloc(width * height * 4);
+  for (let index = 0; index < bitmap.length; index += 4) {
+    bitmap[index] = 0x34;
+    bitmap[index + 1] = 0x9a;
+    bitmap[index + 2] = 0xeb;
+    bitmap[index + 3] = 0xff;
+  }
+  const jpeg = nativeImage.createFromBitmap(bitmap, { width, height }).toJPEG(90);
+  if (jpeg.length === 0) throw new Error('Could not create JPEG fixture for clipboard smoke test');
+  return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+}
+
+async function runImageClipboardSmokeTest(window: BrowserWindow) {
+  const previousClipboard = captureSmokeClipboard();
+  try {
+    clipboard.clear();
+    const clicked = await window.webContents.executeJavaScript(`(() => {
+      const button = [...document.querySelectorAll('button')]
+        .find((item) => item.getAttribute('title') === '复制图片');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`) as boolean;
+    if (!clicked) throw new Error('Image copy smoke test could not find the copy button');
+
+    const size = await waitForSmokeClipboardImage();
+    if (size.width !== 4 || size.height !== 3) {
+      throw new Error(`Image copy smoke test wrote an unexpected size: ${size.width}x${size.height}`);
+    }
+  } finally {
+    restoreSmokeClipboard(previousClipboard);
+  }
+}
+
+async function runBananaModelSelectionSmokeTest(window: BrowserWindow) {
+  await window.webContents.executeJavaScript(`
+    document.querySelector('button[title="设置"]')?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `(() => {
+      const select = [...document.querySelectorAll('select')]
+        .find((item) => [...item.options].some((option) => option.value === 'banana-lite'));
+      const values = select ? [...select.options].map((option) => option.value) : [];
+      return ['banana', 'banana-lite', 'banana-pro', 'image2']
+        .every((value) => values.includes(value));
+    })()`,
+    'Banana model smoke selector did not expose every model'
+  );
+
+  await window.webContents.executeJavaScript(`(() => {
+    const select = [...document.querySelectorAll('select')]
+      .find((item) => [...item.options].some((option) => option.value === 'banana-lite'));
+    if (!select) return false;
+    select.value = 'banana-lite';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `(() => {
+      const byLabel = (text) => [...document.querySelectorAll('label')]
+        .find((label) => label.textContent?.trim() === text)
+        ?.parentElement?.querySelector('select');
+      const aspectValues = [...(byLabel('画面比例')?.options ?? [])].map((option) => option.value);
+      const sizeValues = [...(byLabel('分辨率')?.options ?? [])].map((option) => option.value);
+      const thinking = byLabel('思考等级');
+      const mediaResolution = byLabel('参考图解析');
+      const search = byLabel('Search grounding');
+      return document.body.textContent?.includes('Banana 2 Lite 高级参数')
+        && aspectValues.includes('1:8')
+        && aspectValues.includes('8:1')
+        && sizeValues.length === 1
+        && sizeValues[0] === '1K'
+        && thinking instanceof HTMLSelectElement
+        && !thinking.disabled
+        && [...thinking.options].some((option) => option.value === 'HIGH')
+        && mediaResolution instanceof HTMLSelectElement
+        && [...mediaResolution.options].some((option) => option.value === 'MEDIA_RESOLUTION_HIGH')
+        && search instanceof HTMLSelectElement
+        && search.disabled
+        && ![...search.options].some((option) => option.value === 'on');
+    })()`,
+    'Banana model smoke Lite capabilities did not render correctly'
+  );
+
+  await window.webContents.executeJavaScript(`(() => {
+    const select = [...document.querySelectorAll('select')]
+      .find((item) => [...item.options].some((option) => option.value === 'banana-pro'));
+    if (!select) return false;
+    select.value = 'banana-pro';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `(() => {
+      const byLabel = (text) => [...document.querySelectorAll('label')]
+        .find((label) => label.textContent?.trim() === text)
+        ?.parentElement?.querySelector('select');
+      const aspectValues = [...(byLabel('画面比例')?.options ?? [])].map((option) => option.value);
+      const sizeValues = [...(byLabel('分辨率')?.options ?? [])].map((option) => option.value);
+      const thinking = byLabel('思考等级');
+      const mediaResolution = byLabel('参考图解析');
+      const search = byLabel('Search grounding');
+      return document.body.textContent?.includes('Banana Pro 高级参数')
+        && !aspectValues.includes('1:8')
+        && aspectValues.includes('21:9')
+        && ['1K', '2K', '4K'].every((value) => sizeValues.includes(value))
+        && thinking instanceof HTMLSelectElement
+        && thinking.disabled
+        && mediaResolution instanceof HTMLSelectElement
+        && mediaResolution.disabled
+        && ![...mediaResolution.options].some((option) => option.value === 'MEDIA_RESOLUTION_HIGH')
+        && search instanceof HTMLSelectElement
+        && !search.disabled
+        && [...search.options].some((option) => option.value === 'on');
+    })()`,
+    'Banana model smoke Pro capabilities did not render correctly'
+  );
+
+  await window.webContents.executeJavaScript(`(() => {
+    const select = [...document.querySelectorAll('select')]
+      .find((item) => [...item.options].some((option) => option.value === 'image2'));
+    if (!select) return false;
+    select.value = 'image2';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+}
+
 async function runSketchSmokeTest(localUrl: string, window: BrowserWindow) {
   const createResponse = await fetch(`${localUrl}/api/projects`, {
     method: 'POST',
@@ -230,6 +435,17 @@ async function runSketchSmokeTest(localUrl: string, window: BrowserWindow) {
           type: 'promptNode',
           position: { x: 250, y: 250 },
           data: { prompt: 'a person in motion', imageModel: 'image2', aspectRatio: '1:1' },
+        }, {
+          id: 'clipboard-smoke-image',
+          type: 'imageNode',
+          position: { x: 720, y: 250 },
+          data: {
+            prompt: 'clipboard JPEG smoke fixture',
+            imageModel: 'banana',
+            aspectRatio: '1:1',
+            imageSize: '1K',
+            imageUrl: createSmokeJpegDataUrl(),
+          },
         }],
         edges: [],
         assets: {},
@@ -248,6 +464,8 @@ async function runSketchSmokeTest(localUrl: string, window: BrowserWindow) {
     `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('绘制构图草图'))`,
     'QuickDraw smoke prompt node did not become ready'
   );
+  await runImageClipboardSmokeTest(window);
+  await runBananaModelSelectionSmokeTest(window);
   await window.webContents.executeJavaScript(`
     [...document.querySelectorAll('button')]
       .find((button) => button.textContent?.includes('绘制构图草图'))
@@ -334,7 +552,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
 
   await runSketchSmokeTest(localUrl, window);
 
-  console.info('[banana:smoke] page, runtime settings, renderer, and QuickDraw probes passed');
+  console.info('[banana:smoke] page, runtime settings, renderer, image clipboard, Banana models, and QuickDraw probes passed');
 }
 
 async function ensureLocalServer() {
@@ -394,6 +612,7 @@ async function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 

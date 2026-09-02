@@ -16,7 +16,8 @@ Banana Canvas 采用直接发布模式：维护者在本地完成复审和全套
 ```bash
 npm ci
 npm run check
-npm audit
+npm audit --audit-level=high
+npm run smoke:electron
 npm run dist:win
 npm run smoke:electron:packaged
 npm run release:prepare -- v<version>

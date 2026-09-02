@@ -3,16 +3,19 @@ import {
   buildBananaGenerateContentRequest,
   extractBananaImageUrl,
   type BananaOptions,
+  type ImageModelId,
   type ReferenceImageInput,
 } from '../../lib/imageModels';
 
 export function buildBananaProviderRequest({
+  imageModel,
   prompt,
   aspectRatio,
   imageSize,
   images,
   bananaOptions,
 }: {
+  imageModel?: ImageModelId;
   prompt: string;
   aspectRatio?: unknown;
   imageSize?: unknown;
@@ -20,6 +23,7 @@ export function buildBananaProviderRequest({
   bananaOptions: BananaOptions;
 }) {
   return buildBananaGenerateContentRequest({
+    imageModel,
     prompt,
     aspectRatio,
     imageSize,
@@ -33,6 +37,7 @@ export function extractBananaProviderImageUrl(response: unknown) {
 }
 
 export async function generateBananaImage({
+  imageModel,
   prompt,
   apiKey,
   aspectRatio,
@@ -41,6 +46,7 @@ export async function generateBananaImage({
   bananaOptions,
   signal,
 }: {
+  imageModel: ImageModelId;
   prompt: string;
   apiKey: string;
   aspectRatio?: unknown;
@@ -51,6 +57,7 @@ export async function generateBananaImage({
 }) {
   const ai = new GoogleGenAI({ apiKey });
   const request = buildBananaProviderRequest({
+    imageModel,
     prompt,
     aspectRatio,
     imageSize,

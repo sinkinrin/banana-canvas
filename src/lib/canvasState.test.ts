@@ -194,7 +194,7 @@ test('history snapshot preserves normalized Banana2 advanced options', () => {
           imageModel: 'banana',
           bananaOptions: {
             responseMode: 'image',
-            thinkingLevel: 'medium',
+            thinkingLevel: 'high',
             mediaResolution: 'MEDIA_RESOLUTION_HIGH',
             searchGrounding: true,
             safetySettings: {
@@ -212,7 +212,7 @@ test('history snapshot preserves normalized Banana2 advanced options', () => {
   const history = createHistorySnapshot(state);
 
   assert.deepEqual(history.nodes[0].data.bananaOptions, {
-    thinkingLevel: 'MEDIUM',
+    thinkingLevel: 'HIGH',
     mediaResolution: 'MEDIA_RESOLUTION_HIGH',
     searchGrounding: true,
   });

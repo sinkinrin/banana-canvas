@@ -1,10 +1,26 @@
 export const DEFAULT_IMAGE_MODEL = 'image2';
 
+export const BANANA_MODEL = 'gemini-3.1-flash-image';
+export const BANANA_LITE_MODEL = 'gemini-3.1-flash-lite-image';
+export const BANANA_PRO_MODEL = 'gemini-3-pro-image';
+
 export const IMAGE_MODELS = [
   {
     id: 'banana',
-    label: 'Banana',
-    description: 'Gemini image preview model',
+    label: 'Banana 2',
+    description: '通用稳定版 · 0.5K–4K',
+    provider: 'gemini',
+  },
+  {
+    id: 'banana-lite',
+    label: 'Banana 2 Lite',
+    description: '极速低成本 · 仅 1K',
+    provider: 'gemini',
+  },
+  {
+    id: 'banana-pro',
+    label: 'Banana Pro',
+    description: '专业复杂任务 · 1K–4K',
     provider: 'gemini',
   },
   {
@@ -16,13 +32,14 @@ export const IMAGE_MODELS = [
 ] as const;
 
 export type ImageModelId = (typeof IMAGE_MODELS)[number]['id'];
+export const BANANA_IMAGE_MODEL_IDS = ['banana', 'banana-lite', 'banana-pro'] as const;
+export type BananaImageModelId = (typeof BANANA_IMAGE_MODEL_IDS)[number];
 
 export type ReferenceImageInput = {
   data: string;
   mimeType: string;
 };
 
-export const BANANA_MODEL = 'gemini-3.1-flash-image';
 export const BANANA_ASPECT_RATIO_VALUES = [
   '1:1',
   '1:4',
@@ -39,9 +56,23 @@ export const BANANA_ASPECT_RATIO_VALUES = [
   '16:9',
   '21:9',
 ] as const;
+export const BANANA_STANDARD_ASPECT_RATIO_VALUES = [
+  '1:1',
+  '2:3',
+  '3:2',
+  '3:4',
+  '4:3',
+  '4:5',
+  '5:4',
+  '9:16',
+  '16:9',
+  '21:9',
+] as const;
 export const BANANA_IMAGE_SIZE_VALUES = ['512', '1K', '2K', '4K'] as const;
+export const BANANA_LITE_IMAGE_SIZE_VALUES = ['1K'] as const;
+export const BANANA_PRO_IMAGE_SIZE_VALUES = ['1K', '2K', '4K'] as const;
 export const BANANA_RESPONSE_MODE_VALUES = ['image', 'text-image'] as const;
-export const BANANA_THINKING_LEVEL_VALUES = ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH'] as const;
+export const BANANA_THINKING_LEVEL_VALUES = ['MINIMAL', 'HIGH'] as const;
 export const BANANA_MEDIA_RESOLUTION_VALUES = [
   'MEDIA_RESOLUTION_LOW',
   'MEDIA_RESOLUTION_MEDIUM',
@@ -68,6 +99,42 @@ export type BananaThinkingLevel = (typeof BANANA_THINKING_LEVEL_VALUES)[number];
 export type BananaMediaResolution = (typeof BANANA_MEDIA_RESOLUTION_VALUES)[number];
 export type BananaSafetyCategory = (typeof BANANA_SAFETY_CATEGORIES)[number];
 export type BananaSafetyThreshold = (typeof BANANA_SAFETY_THRESHOLDS)[number];
+
+type BananaModelCapabilities = {
+  apiModel: string;
+  aspectRatios: readonly BananaAspectRatio[];
+  imageSizes: readonly BananaImageSize[];
+  supportsThinkingLevelControl: boolean;
+  supportsMediaResolutionControl: boolean;
+  supportsSearchGrounding: boolean;
+};
+
+const BANANA_MODEL_CAPABILITIES: Record<BananaImageModelId, BananaModelCapabilities> = {
+  banana: {
+    apiModel: BANANA_MODEL,
+    aspectRatios: BANANA_ASPECT_RATIO_VALUES,
+    imageSizes: BANANA_IMAGE_SIZE_VALUES,
+    supportsThinkingLevelControl: true,
+    supportsMediaResolutionControl: true,
+    supportsSearchGrounding: true,
+  },
+  'banana-lite': {
+    apiModel: BANANA_LITE_MODEL,
+    aspectRatios: BANANA_ASPECT_RATIO_VALUES,
+    imageSizes: BANANA_LITE_IMAGE_SIZE_VALUES,
+    supportsThinkingLevelControl: true,
+    supportsMediaResolutionControl: true,
+    supportsSearchGrounding: false,
+  },
+  'banana-pro': {
+    apiModel: BANANA_PRO_MODEL,
+    aspectRatios: BANANA_STANDARD_ASPECT_RATIO_VALUES,
+    imageSizes: BANANA_PRO_IMAGE_SIZE_VALUES,
+    supportsThinkingLevelControl: false,
+    supportsMediaResolutionControl: false,
+    supportsSearchGrounding: true,
+  },
+};
 
 export type BananaOptions = {
   responseMode?: BananaResponseMode;
@@ -195,6 +262,38 @@ export function normalizeBananaImageSize(value: unknown): BananaImageSize | unde
   return normalizeStringValue(value, BANANA_IMAGE_SIZE_VALUES);
 }
 
+export function getBananaModelCapabilities(imageModel: unknown): BananaModelCapabilities {
+  return BANANA_MODEL_CAPABILITIES[normalizeBananaImageModel(imageModel)];
+}
+
+export function getBananaAspectRatioValues(imageModel: unknown): readonly BananaAspectRatio[] {
+  return getBananaModelCapabilities(imageModel).aspectRatios;
+}
+
+export function getBananaImageSizeValues(imageModel: unknown): readonly BananaImageSize[] {
+  return getBananaModelCapabilities(imageModel).imageSizes;
+}
+
+export function normalizeBananaAspectRatioForModel(
+  imageModel: unknown,
+  value: unknown
+): BananaAspectRatio | undefined {
+  const normalized = normalizeBananaAspectRatio(value);
+  return normalized && getBananaAspectRatioValues(imageModel).includes(normalized)
+    ? normalized
+    : undefined;
+}
+
+export function normalizeBananaImageSizeForModel(
+  imageModel: unknown,
+  value: unknown
+): BananaImageSize | undefined {
+  const normalized = normalizeBananaImageSize(value);
+  return normalized && getBananaImageSizeValues(imageModel).includes(normalized)
+    ? normalized
+    : undefined;
+}
+
 function normalizeBananaThinkingLevel(value: unknown): BananaThinkingLevel | undefined {
   const direct = normalizeStringValue(value, BANANA_THINKING_LEVEL_VALUES);
   if (direct) return direct;
@@ -222,20 +321,37 @@ export function normalizeBananaOptions(value: unknown): BananaOptions {
   return options;
 }
 
+export function normalizeBananaOptionsForModel(
+  imageModel: unknown,
+  value: unknown
+): BananaOptions {
+  const options = normalizeBananaOptions(value);
+  const capabilities = getBananaModelCapabilities(imageModel);
+
+  if (!capabilities.supportsThinkingLevelControl) delete options.thinkingLevel;
+  if (!capabilities.supportsMediaResolutionControl) delete options.mediaResolution;
+  if (!capabilities.supportsSearchGrounding) delete options.searchGrounding;
+  return options;
+}
+
 export function buildBananaGenerateContentRequest({
+  imageModel = 'banana',
   prompt,
   aspectRatio,
   imageSize,
   referenceImages = [],
   bananaOptions,
 }: {
+  imageModel?: unknown;
   prompt: string;
   aspectRatio?: unknown;
   imageSize?: unknown;
   referenceImages?: ReferenceImageInput[];
   bananaOptions?: BananaOptions;
 }) {
-  const options = normalizeBananaOptions(bananaOptions);
+  const normalizedModel = normalizeBananaImageModel(imageModel);
+  const capabilities = getBananaModelCapabilities(normalizedModel);
+  const options = normalizeBananaOptionsForModel(normalizedModel, bananaOptions);
   const hasReferenceImages = referenceImages.length > 0;
   const parts = [
     ...referenceImages.map((image) => ({
@@ -248,8 +364,8 @@ export function buildBananaGenerateContentRequest({
   ];
   const config: UnknownRecord = {
     imageConfig: {
-      aspectRatio: normalizeBananaAspectRatio(aspectRatio) ?? '1:1',
-      imageSize: normalizeBananaImageSize(imageSize) ?? '1K',
+      aspectRatio: normalizeBananaAspectRatioForModel(normalizedModel, aspectRatio) ?? '1:1',
+      imageSize: normalizeBananaImageSizeForModel(normalizedModel, imageSize) ?? '1K',
     },
     responseModalities: ['IMAGE'],
     safetySettings: BANANA_DEFAULT_SAFETY_SETTINGS,
@@ -270,7 +386,7 @@ export function buildBananaGenerateContentRequest({
   }
 
   return {
-    model: BANANA_MODEL,
+    model: capabilities.apiModel,
     contents: { parts },
     config,
   };
@@ -323,12 +439,27 @@ export function extractBananaImageUrl(response: unknown): string | null {
   return null;
 }
 
-export function getBananaParameterTips() {
+export function getBananaParameterTips(imageModel: unknown = 'banana') {
+  const normalizedModel = normalizeBananaImageModel(imageModel);
+  const variantTips: Record<BananaImageModelId, string[]> = {
+    banana: [
+      'Banana 2 是通用首选，支持 512、1K、2K、4K、全部 14 种画幅、Google Search，以及 MINIMAL / HIGH 思考等级。',
+    ],
+    'banana-lite': [
+      'Banana 2 Lite 固定为 1K，支持全部 14 种画幅与 MINIMAL / HIGH 思考等级，但不支持 Google Search grounding；适合低延迟、低成本和批量任务。',
+      '官方没有针对多参考图或连续多轮编辑优化 Lite，复杂一致性任务建议改用 Banana 2 或 Pro。',
+    ],
+    'banana-pro': [
+      'Banana Pro 支持 1K、2K、4K 与 Google Search，适合复杂设计、品牌一致性和事实可视化；思考过程由模型自动管理，且当前 API 不接受 mediaResolution。',
+    ],
+  };
+
   return [
+    ...variantTips[normalizedModel],
     '输出类型固定仅返回图片，避免 Gemini 返回文本 part 但本项目最终不消费。',
-    'thinkingLevel、mediaResolution、Google Search grounding 会增加延迟或成本；复杂构图、含文字、需要实时资料时再开启。',
+    '参考图解析和 Google Search grounding 可能增加延迟或成本；仅在任务确实需要时开启。',
     '安全过滤固定关闭：骚扰、仇恨、色情、危险四类 safetySettings 默认发送 OFF，不在前端开放调节。',
-    'Banana2 没有 Image2 的 output_format、transparent background、压缩、partial_images、mask 参数；透明背景只能写进提示词尝试。',
+    'Banana 系列没有 Image2 的 output_format、transparent background、压缩、partial_images、mask 参数；透明背景只能写进提示词尝试。',
   ];
 }
 
@@ -390,6 +521,14 @@ export function createImage2MaskEditPrompt(prompt: string) {
 
 export function isImageModelId(value: unknown): value is ImageModelId {
   return typeof value === 'string' && IMAGE_MODELS.some((model) => model.id === value);
+}
+
+export function isBananaImageModel(value: unknown): value is BananaImageModelId {
+  return typeof value === 'string' && (BANANA_IMAGE_MODEL_IDS as readonly string[]).includes(value);
+}
+
+export function normalizeBananaImageModel(value: unknown): BananaImageModelId {
+  return isBananaImageModel(value) ? value : 'banana';
 }
 
 export function normalizeImageModel(value: unknown): ImageModelId {

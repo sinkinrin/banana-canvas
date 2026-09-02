@@ -13,6 +13,34 @@ test('inferImageMimeTypeFromUrl falls back from file extensions', () => {
   assert.equal(inferImageMimeTypeFromUrl('https://example.com/file'), 'image/png');
 });
 
+test('copyImageToClipboard uses the Electron bridge for generated data URLs', async () => {
+  const imageUrl = 'data:image/jpeg;base64,generated-image';
+  const copiedImages: string[] = [];
+  let browserClipboardCalled = false;
+  let fetchCalled = false;
+
+  await copyImageToClipboard(imageUrl, {
+    desktopClipboard: {
+      async copyImageToClipboard(value) {
+        copiedImages.push(value);
+      },
+    },
+    fetcher: async () => {
+      fetchCalled = true;
+      throw new Error('Electron data URL copy must not fetch');
+    },
+    clipboard: {
+      async write() {
+        browserClipboardCalled = true;
+      },
+    },
+  });
+
+  assert.deepEqual(copiedImages, [imageUrl]);
+  assert.equal(fetchCalled, false);
+  assert.equal(browserClipboardCalled, false);
+});
+
 test('copyImageToClipboard starts clipboard write before image fetch resolves', async () => {
   let resolveFetch!: (response: Response) => void;
   const fetchStarted = new Promise<Response>((resolve) => {

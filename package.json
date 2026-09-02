@@ -1,7 +1,7 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "本地优先的 AI 图像创作画布，默认使用 Image2 并支持应用内连接配置。",
   "author": "Banana Canvas Contributors",
   "repository": {
@@ -18,7 +18,7 @@
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "vite build",
-    "build:electron": "esbuild electron/main.ts --bundle --platform=node --target=node20 --format=cjs --outfile=build/electron/main.cjs --external:electron --external:vite",
+    "build:electron": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --target=node20 --format=cjs --outdir=build/electron --out-extension:.js=.cjs --external:electron --external:vite",
     "electron": "npm run build && npm run build:electron && electron .",
     "smoke:electron": "npm run build && npm run build:electron && node scripts/electron-smoke.mjs",
     "smoke:electron:packaged": "node scripts/electron-smoke.mjs \"release/win-unpacked/香蕉画图.exe\"",
@@ -94,7 +94,7 @@
       }
     ],
     "files": [
-      "build/electron/main.cjs",
+      "build/electron/*.cjs",
       "dist/**/*",
       ".env.example",
       "package.json",

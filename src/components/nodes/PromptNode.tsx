@@ -9,7 +9,10 @@ import { PromptTextarea } from './PromptTextarea';
 import {
   BANANA_IMAGE_SIZE_VALUES,
   IMAGE_MODELS,
+  getBananaImageSizeValues,
+  isBananaImageModel,
   normalizeBananaImageSize,
+  normalizeBananaImageSizeForModel,
   normalizeImageModel,
   type BananaAspectRatio,
   type BananaImageSize,
@@ -87,9 +90,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     updateNodeData,
   });
   const { generateMaskImage } = useMaskGeneration();
-  const imageSize = normalizeBananaImageSize(data.imageSize) ?? '1K';
   const batchCount = data.batchCount || 1;
   const imageModel = normalizeImageModel(data.imageModel);
+  const imageSize = isBananaImageModel(imageModel)
+    ? normalizeBananaImageSizeForModel(imageModel, data.imageSize) ?? '1K'
+    : normalizeBananaImageSize(data.imageSize) ?? '1K';
+  const imageSizeOptions = isBananaImageModel(imageModel)
+    ? getBananaImageSizeValues(imageModel)
+    : BANANA_IMAGE_SIZE_VALUES;
   const aspectRatio = getEffectivePromptAspectRatio(imageModel, data.aspectRatio);
   const aspectRatioOptions = getPromptAspectRatioOptions(imageModel);
   const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Image2';
@@ -425,7 +433,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <select
                   value={imageModel}
                   onChange={(e) => {
-                    updateNodeData(id, { imageModel: e.target.value as ImageModelId });
+                    const nextModel = e.target.value as ImageModelId;
+                    updateNodeData(id, {
+                      imageModel: nextModel,
+                      aspectRatio: getEffectivePromptAspectRatio(nextModel, data.aspectRatio),
+                      imageSize: isBananaImageModel(nextModel)
+                        ? normalizeBananaImageSizeForModel(nextModel, data.imageSize) ?? '1K'
+                        : normalizeBananaImageSize(data.imageSize) ?? '1K',
+                    });
                   }}
                   className="nowheel w-full p-2 rounded-lg text-sm outline-none"
                   style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
@@ -458,8 +473,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 </select>
               </div>
 
-              {imageModel === 'banana' && (
+              {isBananaImageModel(imageModel) && (
                 <BananaOptionsPanel
+                  imageModel={imageModel}
                   value={bananaOptions}
                   hasReferenceImages={referenceImages.length > 0}
                   onChange={(nextOptions) => {
@@ -494,7 +510,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
-                  {BANANA_IMAGE_SIZE_VALUES.map((size) => (
+                  {imageSizeOptions.map((size) => (
                     <option key={size} value={size}>{imageSizeLabels[size]}</option>
                   ))}
                 </select>

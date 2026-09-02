@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ZoomIn, ZoomOut, Download, Copy, Check } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, Download, Copy, Check, CircleAlert } from 'lucide-react';
 import { motion } from 'motion/react';
 import { copyImageToClipboard } from '../lib/clipboard';
 import { buildImageDownloadFileName } from '../lib/imageDownloads';
@@ -17,6 +17,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,12 +74,15 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
   };
 
   const handleCopy = async () => {
+    setCopyFailed(false);
     try {
       await copyImageToClipboard(imageUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy image: ', err);
+      setCopyFailed(true);
+      setTimeout(() => setCopyFailed(false), 2500);
     }
   };
 
@@ -117,10 +121,11 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
           <div className="w-px h-6 mx-1" style={{background: 'rgba(242,193,78,0.15)'}} />
           <button
             onClick={handleCopy}
-            className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors flex items-center gap-2"
-            title="复制图片"
+            className={`p-2 hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors flex items-center gap-2 ${copyFailed ? 'text-red-400' : 'text-white'}`}
+            title={copyFailed ? '复制失败，请重试' : copied ? '图片已复制' : '复制图片'}
           >
-            {copied ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}
+            {copyFailed ? <CircleAlert size={20} /> : copied ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}
+            {copyFailed && <span className="text-xs">复制失败</span>}
           </button>
           <button
             onClick={handleDownload}

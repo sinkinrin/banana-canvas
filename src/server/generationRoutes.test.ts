@@ -72,9 +72,10 @@ test('generate-image returns 400 for validation failures without calling provide
 
 test('generate-image returns provider result for valid Banana request', async () => {
   const app = createApp({
-    generateBananaImage: async ({ prompt, images }) => {
+    generateBananaImage: async ({ prompt, images, imageModel }) => {
       assert.equal(prompt, 'draw');
       assert.equal(images.length, 0);
+      assert.equal(imageModel, 'banana');
       return 'data:image/png;base64,banana';
     },
     generateImage2Image: async () => {
@@ -92,6 +93,31 @@ test('generate-image returns provider result for valid Banana request', async ()
   assert.deepEqual(response.body, {
     imageUrl: 'data:image/png;base64,banana',
     imageModel: 'banana',
+  });
+});
+
+test('generate-image forwards the selected Banana variant to the Gemini provider', async () => {
+  const app = createApp({
+    generateBananaImage: async ({ imageModel, imageSize }) => {
+      assert.equal(imageModel, 'banana-pro');
+      assert.equal(imageSize, '4K');
+      return 'data:image/png;base64,pro';
+    },
+    generateImage2Image: async () => {
+      throw new Error('Image2 should not be called');
+    },
+  });
+
+  const response = await requestJson(app, '/api/generate-image', {
+    prompt: 'professional asset',
+    imageModel: 'banana-pro',
+    imageSize: '4K',
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, {
+    imageUrl: 'data:image/png;base64,pro',
+    imageModel: 'banana-pro',
   });
 });
 

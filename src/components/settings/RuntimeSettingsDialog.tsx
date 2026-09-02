@@ -278,7 +278,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                 <KeyRound size={18} style={{ color: '#D97B3A' }} />
                 <div>
                   <h3 className="font-semibold">Gemini Key（可选）</h3>
-                  <p className="text-xs" style={{ color: '#96836F' }}>仅用于 Banana 模型和提示词优化。</p>
+                  <p className="text-xs" style={{ color: '#96836F' }}>仅用于 Banana 系列模型和提示词优化。</p>
                 </div>
               </div>
               <label className="space-y-1.5">

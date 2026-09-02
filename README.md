@@ -4,7 +4,7 @@
 
 # 香蕉画图
 
-当前版本：`0.3.1`
+当前版本：`0.4.0`
 
 版本变更见 [CHANGELOG.md](CHANGELOG.md)，维护者发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 
@@ -33,7 +33,7 @@
 - 参考图输入：支持上传图片和 `Ctrl+V` 粘贴图片，单节点最多挂载 4 张参考图。
 - QuickDraw 构图草图：创作节点可打开固定画幅草图编辑器，支持画笔、橡皮、选择、直线、箭头和独立撤销；草图可重复编辑并自动作为参考图发送。
 - 多参数生图：支持调整画幅比例、输出尺寸、单次生成数量、节点颜色，以及模型专属高级参数。
-- 多模型生图：新创作节点默认使用 `Image2`，也可以切换到 `Banana`；生成出的图片节点会记录当次使用的模型。
+- 多模型生图：新创作节点默认使用 `Image2`，也可以切换到 `Banana 2`、`Banana 2 Lite` 或 `Banana Pro`；生成出的图片节点会记录当次使用的模型和专属参数。
 - 批量生成：单个提示词节点一次可生成 `1`、`2` 或 `4` 张图片，并自动连到新图片节点。
 - 图片节点操作：支持全屏查看、复制图片、复制提示词、下载、重新生成，以及“以此为参考新建节点”。
 - 画布辅助：支持撤销/重做、适应视口、右键菜单、新建节点、自动布局、清空画布。
@@ -44,7 +44,7 @@
 ## 运行环境
 
 - Node.js 22.17.1 或更高版本
-- 可用的 Image2/OpenAI-compatible 中转服务；如需 Banana 或提示词优化，再配置 Gemini API Key
+- 可用的 Image2/OpenAI-compatible 中转服务；如需 Banana 系列或提示词优化，再配置 Gemini API Key
 
 ## 本地启动
 
@@ -66,7 +66,7 @@ IMAGE2_API_KEY=你的_Image2_Key
 IMAGE2_MODEL=你的_Image2_模型名
 ```
 
-如需使用 Banana 模型或 Gemini 提示词优化，再配置：
+如需使用 Banana 系列模型或 Gemini 提示词优化，再配置：
 
 ```bash
 GEMINI_API_KEY=你的_Gemini_API_Key
@@ -141,14 +141,22 @@ npm run electron
 
 ### 创作节点
 
-- Banana2 支持的画面比例：`1:1`、`1:4`、`1:8`、`2:3`、`3:2`、`3:4`、`4:1`、`4:3`、`4:5`、`5:4`、`8:1`、`9:16`、`16:9`、`21:9`
-- Banana2 支持的分辨率：`512`、`1K`、`2K`、`4K`；旧项目中的 `512px` 会自动按官方 `512` 发送
+- Banana 2 与 Banana 2 Lite 支持的 14 种画面比例：`1:1`、`1:4`、`1:8`、`2:3`、`3:2`、`3:4`、`4:1`、`4:3`、`4:5`、`5:4`、`8:1`、`9:16`、`16:9`、`21:9`
+- Banana Pro 支持其中 10 种标准比例，不支持 `1:4`、`1:8`、`4:1`、`8:1`；切换模型时不兼容的旧比例会回退为 `1:1`
 - 支持的批量数量：`1`、`2`、`4`
 - 参考图上限：4 张
 - 构图草图占用一个参考图位置；再次应用同一草图会替换旧草图图片，不会重复增加。
 - 草图 PNG 按固定画幅导出，最长边为 2048 像素，不会按笔画边界自动裁切；QuickDraw JSON 快照随项目保存，便于继续编辑。
-- 默认生成模型：`Image2`；`Banana` 使用 Nano Banana 2 稳定版 `gemini-3.1-flash-image`，`Image2` 使用应用内设置或 `.env` 中配置的 OpenAI-compatible 中转
+- 默认生成模型：`Image2`；Banana 系列使用 Gemini API，`Image2` 使用应用内设置或 `.env` 中配置的 OpenAI-compatible 中转
 - 提示词优化模型：`gemini-3.1-pro-preview`
+
+| 界面模型 | Gemini API 模型 | 输出尺寸 | 思考等级 | Google Search | 参考图解析等级 | 建议场景 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Banana 2 | `gemini-3.1-flash-image` | `512`、`1K`、`2K`、`4K` | `MINIMAL` / `HIGH` | 支持 | 支持 | 默认通用选择，多参考图和一致性任务 |
+| Banana 2 Lite | `gemini-3.1-flash-lite-image` | 固定 `1K` | `MINIMAL` / `HIGH` | 不支持 | 支持 | 低延迟、低成本和批量草稿 |
+| Banana Pro | `gemini-3-pro-image` | `1K`、`2K`、`4K` | 模型自动管理 | 支持 | 不支持 | 复杂设计、文字排版和事实可视化 |
+
+上述能力按 2026-09-02 的 Google 官方文档与 Gemini API 实测配置。项目会在模型切换、前端请求和服务端校验三处过滤不支持的参数，避免旧节点参数导致 API 400。
 
 ### 图片节点
 
@@ -180,17 +188,30 @@ npm run electron
 - Image2 局部编辑的画笔移动不会反复扫描整张 mask 画布；大图撤销历史会按约 32 MB 内存预算动态减少帧数，小图最多保留 10 帧。
 - 代理和 Image2 runtime 配置支持 `.env` 热重载；旧连接池由运行时 agent 缓存管理，频繁切换代理配置时建议观察连接数和内存。
 
-### Banana2 高级参数
+### Banana 系列高级参数
 
-选择 `Banana` 模型后，提示词节点的设置面板会显示 Gemini Nano Banana 2 官方高级参数：
+选择任一 Banana 模型后，提示词节点的设置面板会按所选模型显示可用参数：
 
 - `responseModalities`：固定发送仅 `IMAGE`，因为本项目只消费图片 part。
-- `thinkingConfig.thinkingLevel`：发送官方枚举 `MINIMAL`、`LOW`、`MEDIUM`、`HIGH`；复杂文字、构图和多约束任务可提高等级，但会增加延迟。
-- `mediaResolution`：控制参考图解析强度，支持 `MEDIA_RESOLUTION_LOW`、`MEDIA_RESOLUTION_MEDIUM`、`MEDIA_RESOLUTION_HIGH`。
-- `tools.googleSearch`：可开启 Google Search grounding，让模型使用实时网页/图片搜索信息；通常会增加延迟和成本。
+- `thinkingConfig.thinkingLevel`：Banana 2 与 Banana 2 Lite 可发送官方枚举 `MINIMAL`、`HIGH`；默认是 `MINIMAL`，提高到 `HIGH` 会增加延迟。Banana Pro 由模型管理思考过程。
+- `mediaResolution`：Banana 2 与 Banana 2 Lite 在带参考图时可控制解析强度，支持 `MEDIA_RESOLUTION_LOW`、`MEDIA_RESOLUTION_MEDIUM`、`MEDIA_RESOLUTION_HIGH`；Banana Pro 当前会拒绝该参数，因此界面禁用且请求不会发送。
+- `tools.googleSearch`：Banana 2 与 Banana Pro 可开启 Google Search grounding，让模型使用实时网页/图片搜索信息；Banana 2 Lite 不支持。Search 通常会增加延迟和成本。
 - `safetySettings`：骚扰、仇恨、色情、危险四类默认固定发送 `OFF`，前端不提供调节。
-- Banana2 没有 Image2 的 `output_format`、透明背景独立开关、压缩、`partial_images`、mask 参数；透明背景只能通过提示词尝试。
+- Banana 系列没有 Image2 的 `output_format`、透明背景独立开关、压缩、`partial_images`、mask 参数；透明背景只能通过提示词尝试。
 - 服务端会使用 Gemini 返回的 `inlineData.mimeType` 生成 data URL，不再强制按 PNG 处理。
+
+### Interactions API 评估
+
+Google 已在 2026 年 6 月将 [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview?hl=zh-cn) 全面推出，并建议新项目采用。它对本项目最有价值的能力是：用 `previous_interaction_id` 保存连续编辑上下文、通过 `steps` 展示思考/搜索/工具执行过程，以及用 `background=true` 承载耗时较长的 Pro 任务；后续 Gemini 新模型与智能体能力也会优先在此接口发布。
+
+v0.4.0 暂不从 `generateContent` 迁移，原因如下：
+
+- 当前 `@google/genai` 为 1.x，而 Interactions 要求 2.3.0+；升级到 2.x 并迁移请求/响应结构需要单独回归现有三个模型和提示词优化链路。
+- Interactions 默认 `store=true`。付费层 Interaction 保留 55 天、免费层保留 1 天；设为 `store=false` 虽可避免 Interaction 存储，却不能使用后台任务或 `previous_interaction_id`，与本项目的本地优先语义需要明确的产品开关和隐私说明。
+- Interactions 目前不支持自定义安全设置、Batch API 和显式缓存；本项目的 `generateContent` 请求仍在使用自定义 `safetySettings`。
+- 官方支持列表明确包含 Banana 2 与 Banana Pro，但截至 2026-09-01 尚未列出 Banana 2 Lite。
+
+因此本版继续使用仍受官方完整支持的 `generateContent`。后续适合做独立适配层：默认保持现有无服务端会话模式；用户显式开启“连续云端编辑”时才使用状态续接，并为 Pro 提供可恢复的后台任务与搜索步骤/来源展示。
 
 ### Image2 高级参数
 
@@ -240,9 +261,9 @@ npm run electron
 | --- | --- |
 | `npm run dev` | 启动 Express + Vite 开发环境，包含图像生成和提示词优化接口 |
 | `npm run build` | 构建前端静态资源到 `dist/` |
-| `npm run build:electron` | 构建 Electron 主进程到 `build/electron/main.cjs` |
+| `npm run build:electron` | 构建 Electron 主进程与隔离的 preload 桥接到 `build/electron/` |
 | `npm run electron` | 构建并从源码启动 Electron 桌面版 |
-| `npm run smoke:electron` | 构建后启动隐藏 Electron 窗口，验证页面、设置 API 与 Renderer |
+| `npm run smoke:electron` | 构建后启动隐藏 Electron 窗口，验证页面、设置 API、系统图片剪贴板、模型能力切换、Renderer 与 QuickDraw |
 | `npm run smoke:electron:packaged` | 验证 `release/win-unpacked` 中的已打包桌面程序 |
 | `npm run dist:win` | 构建 Windows x64 NSIS 安装包到 `release/` |
 | `npm run typecheck` | 运行 TypeScript 类型检查 |
@@ -284,7 +305,7 @@ v0.2.1 客户端不含更新器，需要手动安装一次 v0.3.0。从 v0.3.0 �
 │  │  │  ├─ PromptNode.tsx         # 提示词节点
 │  │  │  ├─ ImageNode.tsx          # 图片节点
 │  │  │  ├─ Image2OptionsPanel.tsx # Image2 高级参数面板
-│  │  │  ├─ BananaOptionsPanel.tsx # Banana2 高级参数面板
+│  │  │  ├─ BananaOptionsPanel.tsx # Banana 系列高级参数面板
 │  │  │  ├─ GeneratingImagePlaceholder.tsx # 生成中过渡卡片
 │  │  │  ├─ PromptTextarea.tsx     # 文本框与 Ctrl/Cmd+Enter 提交
 │  │  │  ├─ useReferenceImages.ts  # 参考图解析、上传/粘贴与上限控制

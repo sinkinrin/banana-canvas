@@ -7,7 +7,7 @@ import {
 } from '../../lib/canvasState';
 import { generateImage } from '../../services/gemini';
 import type { AppNode } from '../../store';
-import { normalizeImageModel } from '../../lib/imageModels';
+import { isBananaImageModel, normalizeImageModel } from '../../lib/imageModels';
 import { buildImageDownloadFileName } from '../../lib/imageDownloads';
 
 export function canRerunImageNode(data: Partial<AppNode['data']>) {
@@ -44,7 +44,7 @@ export function buildReferenceNodeData({
   return {
     prompt: '',
     imageModel: normalizedModel,
-    bananaOptions: normalizedModel === 'banana' ? bananaOptions : undefined,
+    bananaOptions: isBananaImageModel(normalizedModel) ? bananaOptions : undefined,
     image2Options: normalizedModel === 'image2' ? image2Options : undefined,
     ...referencePayload,
   };

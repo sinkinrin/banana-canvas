@@ -9,11 +9,13 @@ import type {
   BananaImageSize,
   BananaOptions,
   Image2Options,
+  ImageModelId,
   ReferenceImageInput,
 } from '../lib/imageModels';
 import { getRuntimeConfig, type RuntimeConfigManager } from './runtimeConfig';
 
 export type BananaGenerateInput = {
+  imageModel: ImageModelId;
   prompt: string;
   apiKey: string;
   aspectRatio?: BananaAspectRatio;
@@ -129,6 +131,7 @@ export function mountGenerationRoutes(
       );
       const imageUrl = body.provider === 'gemini'
         ? await providers.generateBananaImage({
+            imageModel: body.imageModel,
             prompt: body.prompt,
             apiKey: apiKey!,
             aspectRatio: body.aspectRatio,

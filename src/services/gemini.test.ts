@@ -91,6 +91,35 @@ test('createGenerateImagePayload includes normalized Banana2 advanced options', 
   );
 });
 
+test('createGenerateImagePayload preserves Banana variants and filters unsupported controls', () => {
+  assert.deepEqual(
+    createGenerateImagePayload({
+      prompt: 'fast draft',
+      imageModel: 'banana-lite',
+      imageSize: '1K',
+      bananaOptions: {
+        thinkingLevel: 'HIGH',
+        mediaResolution: 'MEDIA_RESOLUTION_LOW',
+        searchGrounding: true,
+      },
+    }),
+    {
+      prompt: 'fast draft',
+      imageModel: 'banana-lite',
+      imageSize: '1K',
+      bananaOptions: {
+        thinkingLevel: 'HIGH',
+        mediaResolution: 'MEDIA_RESOLUTION_LOW',
+      },
+    }
+  );
+
+  assert.equal(
+    createGenerateImagePayload({ prompt: 'pro', imageModel: 'banana-pro' }).imageModel,
+    'banana-pro'
+  );
+});
+
 test('createGenerateImagePayload normalizes missing model selection to image2', () => {
   assert.deepEqual(
     createGenerateImagePayload(
@@ -107,5 +136,7 @@ test('createGenerateImagePayload normalizes missing model selection to image2', 
 
 test('getGenerateImageTimeoutMs gives image2 a longer timeout than banana', () => {
   assert.equal(getGenerateImageTimeoutMs('banana'), 60000);
+  assert.equal(getGenerateImageTimeoutMs('banana-lite'), 60000);
+  assert.equal(getGenerateImageTimeoutMs('banana-pro'), 300000);
   assert.equal(getGenerateImageTimeoutMs('image2'), 300000);
 });

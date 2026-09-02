@@ -2,7 +2,12 @@ import { useRef, useState } from 'react';
 import { generateImage, type GenerateImageParams } from '../../services/gemini';
 import type { AppNode } from '../../store';
 import type { InlineImageData } from '../../lib/canvasState';
-import type { BananaOptions, Image2Options, ImageModelId } from '../../lib/imageModels';
+import {
+  isBananaImageModel,
+  type BananaOptions,
+  type Image2Options,
+  type ImageModelId,
+} from '../../lib/imageModels';
 
 type GeneratedEdge = { id: string; source: string; target: string };
 
@@ -46,7 +51,7 @@ export function buildImagePlaceholderData({
     imageModel,
     aspectRatio,
     imageSize,
-    bananaOptions: imageModel === 'banana' ? bananaOptions : undefined,
+    bananaOptions: isBananaImageModel(imageModel) ? bananaOptions : undefined,
     image2Options: imageModel === 'image2' ? image2Options : undefined,
     isLoading: true,
     error: undefined,
@@ -172,7 +177,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 imageModel: input.imageModel,
                 aspectRatio: input.aspectRatio,
                 imageSize: input.imageSize,
-                bananaOptions: input.imageModel === 'banana' ? input.bananaOptions : undefined,
+                bananaOptions: isBananaImageModel(input.imageModel) ? input.bananaOptions : undefined,
                 image2Options: input.imageModel === 'image2' ? input.image2Options : undefined,
                 referenceImages: toReferencePayload(input.referenceImages),
                 signal: controller.signal,
@@ -189,7 +194,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 imageModel: input.imageModel,
                 aspectRatio: input.aspectRatio,
                 imageSize: input.imageSize,
-                bananaOptions: input.imageModel === 'banana' ? input.bananaOptions : undefined,
+                bananaOptions: isBananaImageModel(input.imageModel) ? input.bananaOptions : undefined,
                 image2Options: input.imageModel === 'image2' ? input.image2Options : undefined,
                 isLoading: false,
                 error: undefined,

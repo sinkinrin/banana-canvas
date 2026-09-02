@@ -1,6 +1,7 @@
 
 import {
-  normalizeBananaOptions,
+  isBananaImageModel,
+  normalizeBananaOptionsForModel,
   normalizeImage2Options,
   normalizeImageModel,
   type BananaAspectRatio,
@@ -27,7 +28,8 @@ export type GenerateImagePayload = Omit<GenerateImageParams, 'signal' | 'imageMo
 };
 
 export function getGenerateImageTimeoutMs(imageModel?: ImageModelId) {
-  return normalizeImageModel(imageModel) === 'image2' ? 300000 : 60000;
+  const normalizedModel = normalizeImageModel(imageModel);
+  return normalizedModel === 'image2' || normalizedModel === 'banana-pro' ? 300000 : 60000;
 }
 
 export function createGenerateImagePayload(
@@ -35,14 +37,19 @@ export function createGenerateImagePayload(
 ): GenerateImagePayload {
   const { signal, imageModel, bananaOptions, image2Options, ...restParams } = params;
   void signal;
-  const normalizedBananaOptions = normalizeBananaOptions(bananaOptions);
-  const normalizedImage2Options = normalizeImage2Options(image2Options);
+  const normalizedModel = normalizeImageModel(imageModel);
+  const normalizedBananaOptions = isBananaImageModel(normalizedModel)
+    ? normalizeBananaOptionsForModel(normalizedModel, bananaOptions)
+    : {};
+  const normalizedImage2Options = normalizedModel === 'image2'
+    ? normalizeImage2Options(image2Options)
+    : {};
 
   return {
     ...restParams,
     ...(Object.keys(normalizedBananaOptions).length > 0 ? { bananaOptions: normalizedBananaOptions } : {}),
     ...(Object.keys(normalizedImage2Options).length > 0 ? { image2Options: normalizedImage2Options } : {}),
-    imageModel: normalizeImageModel(imageModel),
+    imageModel: normalizedModel,
   };
 }
 

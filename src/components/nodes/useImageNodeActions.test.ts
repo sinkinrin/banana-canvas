@@ -42,6 +42,22 @@ test('buildReferenceNodeData carries current model options into a new prompt nod
       referenceImageIds: ['asset-1'],
     }
   );
+
+  assert.deepEqual(
+    buildReferenceNodeData({
+      imageModel: 'banana-pro',
+      bananaOptions: { searchGrounding: true },
+      image2Options: { quality: 'high' },
+      referencePayload: { referenceImageIds: ['asset-2'] },
+    }),
+    {
+      prompt: '',
+      imageModel: 'banana-pro',
+      bananaOptions: { searchGrounding: true },
+      image2Options: undefined,
+      referenceImageIds: ['asset-2'],
+    }
+  );
 });
 
 test('buildDownloadFileName uses banana-art prefix and png suffix by default', () => {

@@ -54,6 +54,21 @@ test('buildImagePlaceholderData keeps model-specific options on generated placeh
       generationTitle: 'Banana | draw',
     }
   );
+
+  assert.equal(
+    buildImagePlaceholderData({
+      prompt: 'pro asset',
+      imageModel: 'banana-pro',
+      imageModelLabel: 'Banana Pro',
+      aspectRatio: '16:9',
+      imageSize: '4K',
+      bananaOptions: { searchGrounding: true },
+      image2Options: { quality: 'high' },
+      createdAt: '2026-09-02T00:00:00.000Z',
+      referenceData: {},
+    }).bananaOptions?.searchGrounding,
+    true
+  );
 });
 
 test('buildPromptGenerationEdges creates one edge per generated image node', () => {

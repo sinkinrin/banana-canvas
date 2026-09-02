@@ -3,12 +3,16 @@ type ClipboardTextWriter = Pick<Clipboard, 'writeText'>;
 type Fetcher = typeof fetch;
 type ClipboardItemConstructor = typeof ClipboardItem;
 type BlobToPngConverter = (blob: Blob) => Promise<Blob>;
+type DesktopClipboardWriter = {
+  copyImageToClipboard: (imageDataUrl: string) => Promise<void>;
+};
 
 interface CopyImageDeps {
   fetcher?: Fetcher;
   clipboard?: ClipboardWriter;
   clipboardItem?: ClipboardItemConstructor;
   convertBlobToPng?: BlobToPngConverter;
+  desktopClipboard?: DesktopClipboardWriter;
 }
 
 interface CopyTextDeps {
@@ -23,6 +27,14 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   webp: 'image/webp',
 };
 const CLIPBOARD_IMAGE_MIME_TYPE = 'image/png';
+const BASE64_IMAGE_DATA_URL = /^data:image\/[^;,]+;base64,/i;
+
+function getDesktopClipboardWriter(override?: DesktopClipboardWriter) {
+  if (override) return override;
+  return (globalThis as typeof globalThis & {
+    bananaDesktop?: DesktopClipboardWriter;
+  }).bananaDesktop;
+}
 
 export function inferImageMimeTypeFromUrl(imageUrl: string): string {
   return inferExplicitImageMimeTypeFromUrl(imageUrl) || 'image/png';
@@ -115,6 +127,12 @@ async function normalizeImageBlobForClipboard(
 }
 
 export async function copyImageToClipboard(imageUrl: string, deps: CopyImageDeps = {}): Promise<void> {
+  const desktopClipboard = getDesktopClipboardWriter(deps.desktopClipboard);
+  if (desktopClipboard && BASE64_IMAGE_DATA_URL.test(imageUrl)) {
+    await desktopClipboard.copyImageToClipboard(imageUrl);
+    return;
+  }
+
   const fetcher = deps.fetcher ?? globalThis.fetch;
   if (!fetcher) {
     throw new Error('Fetch is not available');

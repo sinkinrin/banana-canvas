@@ -4,6 +4,29 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-02
+
+### 新增
+
+- 生图模型选择新增 Banana 2 Lite（`gemini-3.1-flash-lite-image`）与 Banana Pro（`gemini-3-pro-image`），并在生成结果、重新生成和“以此为参考”链路中保留所选变体。
+- 为三个 Banana 变体加入统一能力矩阵，按模型动态提供画幅、输出尺寸、思考等级、参考图解析和 Google Search 选项。
+
+### 改进
+
+- 修复 Windows 桌面端生成图片无法复制的问题：通过隔离的 Electron 原生剪贴板桥接写入 JPEG/PNG 等图片，并在失败时给出可见提示。
+- Banana 2 Lite 固定输出 1K，但开放官方支持的 14 种比例与 `MINIMAL` / `HIGH` 思考等级，并自动过滤不支持的 Google Search。
+- Banana Pro 提供 1K、2K、4K、10 种标准比例与 Google Search；思考由模型管理，并自动过滤会触发 API 400 的 `mediaResolution`。
+- 模型切换、前端请求和服务端校验都会规范化不兼容的旧节点参数；Banana Pro 请求超时提高到 5 分钟。
+- 使用 Gemini Models API 与实际生图请求验证三个稳定模型；Lite 的极端画幅/高思考、Lite/常规版的参考图解析及 Pro 的参考图生成均通过。
+
+### 调研
+
+- 评估 Google 已全面推出的 Interactions API。它的服务端多轮状态、执行步骤和后台任务对连续编辑与 Pro 长任务有价值，但当前存在 SDK 大版本迁移、默认云端存储、自定义安全设置缺失及 Lite 未列入支持表等差异，本版继续使用官方仍完整支持的 `generateContent`。
+
+### 已知限制
+
+- Windows 安装包暂未进行代码签名，安装和自动更新时可能出现 SmartScreen 未知发布者提示。
+
 ## [0.3.1] - 2026-09-02
 
 ### 改进
@@ -58,7 +81,8 @@
 - 改进 Image2 请求、代理、取消、校验与生成结果处理。
 - 增强本地项目资产持久化与可恢复删除。
 
-[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/sinkinrin/banana-canvas/releases/tag/v0.2.1

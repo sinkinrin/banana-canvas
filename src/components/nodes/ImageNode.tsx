@@ -1,5 +1,5 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, Edit3, GitCompare } from 'lucide-react';
+import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, Edit3, GitCompare, CircleAlert } from 'lucide-react';
 import React, { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
@@ -11,7 +11,11 @@ import {
   type InlineImageData,
 } from '../../lib/canvasState';
 import { copyImageToClipboard, copyTextToClipboard } from '../../lib/clipboard';
-import { getImageModelConfig, normalizeImageModel } from '../../lib/imageModels';
+import {
+  getImageModelConfig,
+  isBananaImageModel,
+  normalizeImageModel,
+} from '../../lib/imageModels';
 import { GeneratingImagePlaceholder } from './GeneratingImagePlaceholder';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { MaskCompareModal } from '../mask/MaskCompareModal';
@@ -31,6 +35,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [showViewer, setShowViewer] = useState(false);
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
+  const [copyImageFailed, setCopyImageFailed] = useState(false);
   const {
     copiedImage,
     copiedPrompt,
@@ -87,12 +92,15 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const handleCopyImage = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!imageUrl) return;
+    setCopyImageFailed(false);
     try {
       await copyImageToClipboard(imageUrl);
       setCopiedImage(true);
       setTimeout(() => setCopiedImage(false), 2000);
     } catch (err) {
       console.error('Failed to copy image:', err);
+      setCopyImageFailed(true);
+      setTimeout(() => setCopyImageFailed(false), 2500);
     }
   };
 
@@ -122,7 +130,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         imageModel,
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
-        bananaOptions: imageModel === 'banana' ? data.bananaOptions : undefined,
+        bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
         image2Options: imageModel === 'image2' ? data.image2Options : undefined,
         referenceImages: getRerunReferenceImages(data, assets),
         signal: controller.signal,
@@ -133,7 +141,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
           imageUrl: newUrl,
           imageAssetId: undefined,
           imageModel,
-          bananaOptions: imageModel === 'banana' ? data.bananaOptions : undefined,
+          bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
           image2Options: imageModel === 'image2' ? data.image2Options : undefined,
         });
       }
@@ -310,10 +318,11 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
               <div className="flex items-center gap-2 p-2 rounded-2xl shadow-2xl" style={{background: 'rgba(22,19,15,0.85)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(8px)'}}>
                 <button
                   onClick={handleCopyImage}
-                  className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                  title="复制图片"
+                  className={`p-2.5 hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all flex items-center gap-1.5 ${copyImageFailed ? 'text-red-400' : 'text-white'}`}
+                  title={copyImageFailed ? '复制失败，请重试' : copiedImage ? '图片已复制' : '复制图片'}
                 >
-                  {copiedImage ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
+                  {copyImageFailed ? <CircleAlert size={18} /> : copiedImage ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
+                  {copyImageFailed && <span className="text-xs whitespace-nowrap">复制失败</span>}
                 </button>
                 <button
                   onClick={handleDownload}

@@ -59,6 +59,51 @@ test('rejects maskImage for Banana requests', () => {
   if (!result.ok) assert.equal(result.error, 'maskImage is only supported for Image2 requests');
 });
 
+test('normalizes model-specific fields for Banana Lite and Pro requests', () => {
+  const lite = validateGenerateImageRequest({
+    prompt: 'fast draft',
+    imageModel: 'banana-lite',
+    aspectRatio: '1:8',
+    imageSize: '4K',
+    bananaOptions: {
+      thinkingLevel: 'HIGH',
+      mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+      searchGrounding: true,
+    },
+  });
+  assert.equal(lite.ok, true);
+  if (lite.ok) {
+    assert.equal(lite.value.provider, 'gemini');
+    assert.equal(lite.value.imageModel, 'banana-lite');
+    assert.equal(lite.value.aspectRatio, '1:8');
+    assert.equal(lite.value.imageSize, undefined);
+    assert.deepEqual(lite.value.bananaOptions, {
+      thinkingLevel: 'HIGH',
+      mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+    });
+  }
+
+  const pro = validateGenerateImageRequest({
+    prompt: 'professional asset',
+    imageModel: 'banana-pro',
+    aspectRatio: '21:9',
+    imageSize: '4K',
+    bananaOptions: {
+      thinkingLevel: 'HIGH',
+      mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+      searchGrounding: true,
+    },
+  });
+  assert.equal(pro.ok, true);
+  if (pro.ok) {
+    assert.equal(pro.value.provider, 'gemini');
+    assert.equal(pro.value.imageModel, 'banana-pro');
+    assert.equal(pro.value.aspectRatio, '21:9');
+    assert.equal(pro.value.imageSize, '4K');
+    assert.deepEqual(pro.value.bananaOptions, { searchGrounding: true });
+  }
+});
+
 test('rejects non-PNG mask payloads for Image2 requests', () => {
   const result = validateGenerateImageRequest({
     imageModel: 'image2',

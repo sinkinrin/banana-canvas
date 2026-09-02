@@ -1,8 +1,11 @@
 import {
   getImageModelConfig,
+  isBananaImageModel,
   normalizeBananaAspectRatio,
+  normalizeBananaAspectRatioForModel,
   normalizeBananaImageSize,
-  normalizeBananaOptions,
+  normalizeBananaImageSizeForModel,
+  normalizeBananaOptionsForModel,
   normalizeImage2Options,
   normalizeImageModel,
   type BananaAspectRatio,
@@ -142,6 +145,7 @@ export function validateGenerateImageRequest(body: unknown): ValidationResult<Va
 
   const imageModel = normalizeImageModel(requestBody.imageModel);
   const modelConfig = getImageModelConfig(imageModel);
+  const isBananaModel = isBananaImageModel(imageModel);
   const references = collectEffectiveReferences(requestBody);
   if (!references.ok) return references;
 
@@ -168,12 +172,20 @@ export function validateGenerateImageRequest(body: unknown): ValidationResult<Va
       prompt: requestBody.prompt ?? '',
       imageModel,
       provider: modelConfig.provider,
-      aspectRatio: normalizeBananaAspectRatio(requestBody.aspectRatio),
-      imageSize: normalizeBananaImageSize(requestBody.imageSize),
+      aspectRatio: isBananaModel
+        ? normalizeBananaAspectRatioForModel(imageModel, requestBody.aspectRatio)
+        : normalizeBananaAspectRatio(requestBody.aspectRatio),
+      imageSize: isBananaModel
+        ? normalizeBananaImageSizeForModel(imageModel, requestBody.imageSize)
+        : normalizeBananaImageSize(requestBody.imageSize),
       referenceImages: references.value.images,
       maskImage,
-      bananaOptions: normalizeBananaOptions(requestBody.bananaOptions),
-      image2Options: normalizeImage2Options(requestBody.image2Options),
+      bananaOptions: isBananaModel
+        ? normalizeBananaOptionsForModel(imageModel, requestBody.bananaOptions)
+        : {},
+      image2Options: imageModel === 'image2'
+        ? normalizeImage2Options(requestBody.image2Options)
+        : {},
     },
   };
 }
