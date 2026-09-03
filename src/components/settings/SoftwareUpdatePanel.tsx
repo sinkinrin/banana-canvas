@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import appI18n, { useAppTranslation } from '../../i18n';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -23,17 +24,19 @@ function formatBytes(value: number) {
   return `${(value / 1024 / 1024).toFixed(value >= 100 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
-export function describeUpdateState(state: DesktopUpdateState) {
-  if (state.phase === 'checking') return '正在获取最新版本信息…';
-  if (state.phase === 'available') return `发现新版本 v${state.latestVersion}`;
-  if (state.phase === 'downloading') return `正在下载 v${state.latestVersion ?? ''}`.trim();
-  if (state.phase === 'downloaded') return `v${state.latestVersion} 已下载，等待安装`;
-  if (state.phase === 'up-to-date') return '当前已是最新版本';
-  if (state.phase === 'error') return '更新操作失败';
-  return '尚未检查最新版本';
+export function describeUpdateState(state: DesktopUpdateState, language = 'zh-CN') {
+  const t = appI18n.getFixedT(language);
+  if (state.phase === 'checking') return t('updates.checking');
+  if (state.phase === 'available') return t('updates.available', { version: state.latestVersion });
+  if (state.phase === 'downloading') return t('updates.downloading', { version: state.latestVersion ?? '' }).trim();
+  if (state.phase === 'downloaded') return t('updates.downloaded', { version: state.latestVersion });
+  if (state.phase === 'up-to-date') return t('updates.upToDate');
+  if (state.phase === 'error') return t('updates.error');
+  return t('updates.notChecked');
 }
 
 export function SoftwareUpdatePanel() {
+  const { t, i18n } = useAppTranslation();
   const [state, setState] = useState<DesktopUpdateState>(() =>
     createUnavailableUpdateState(APP_VERSION)
   );
@@ -57,7 +60,7 @@ export function SoftwareUpdatePanel() {
         if (!disposed) setState(nextState);
       })
       .catch((error) => {
-        if (!disposed) setActionError(error instanceof Error ? error.message : '读取更新状态失败');
+        if (!disposed) setActionError(error instanceof Error ? error.message : t('updates.readFailed'));
       })
       .finally(() => {
         if (!disposed) setLoaded(true);
@@ -75,7 +78,7 @@ export function SoftwareUpdatePanel() {
     try {
       setState(await action());
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : '更新操作失败');
+      setActionError(error instanceof Error ? error.message : t('updates.error'));
     } finally {
       setActionPending(false);
     }
@@ -88,16 +91,16 @@ export function SoftwareUpdatePanel() {
   const statusIsSuccess = state.phase === 'up-to-date' || state.phase === 'downloaded';
 
   return (
-    <div className="space-y-5 p-6">
+    <div data-software-update-panel="true" className="space-y-5 p-6">
       <section
         className="rounded-xl border p-5"
         style={{ background: '#18150F', borderColor: 'rgba(242,193,78,0.14)' }}
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold">版本与更新</h3>
+            <h3 className="text-base font-semibold">{t('updates.title')}</h3>
             <p className="mt-1 text-xs" style={{ color: '#96836F' }}>
-              手动检查最新版本、阅读更新日志，并在下载时查看实时进度。自动更新默认关闭。
+              {t('updates.description')}
             </p>
           </div>
           <div
@@ -118,19 +121,21 @@ export function SoftwareUpdatePanel() {
                 : statusIsSuccess
                   ? <CheckCircle2 size={13} />
                   : <RefreshCw size={13} />}
-            {loaded ? describeUpdateState(state) : '读取更新状态中…'}
+            {loaded
+              ? describeUpdateState(state, i18n.resolvedLanguage ?? i18n.language)
+              : t('updates.loading')}
           </div>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border p-4" style={{ borderColor: 'rgba(242,193,78,0.12)', background: '#141210' }}>
-            <p className="text-xs" style={{ color: '#96836F' }}>当前版本</p>
+            <p className="text-xs" style={{ color: '#96836F' }}>{t('updates.currentVersion')}</p>
             <p className="mt-1 text-xl font-semibold" style={{ color: '#EEE4CE' }}>v{state.currentVersion || APP_VERSION}</p>
           </div>
           <div className="rounded-lg border p-4" style={{ borderColor: 'rgba(242,193,78,0.12)', background: '#141210' }}>
-            <p className="text-xs" style={{ color: '#96836F' }}>线上最新版本</p>
+            <p className="text-xs" style={{ color: '#96836F' }}>{t('updates.latestVersion')}</p>
             <p className="mt-1 text-xl font-semibold" style={{ color: '#F2C14E' }}>
-              {state.latestVersion ? `v${state.latestVersion}` : '待检查'}
+              {state.latestVersion ? `v${state.latestVersion}` : t('updates.pendingCheck')}
             </p>
           </div>
         </div>
@@ -149,22 +154,25 @@ export function SoftwareUpdatePanel() {
               }}
             />
             <span>
-              <span className="block text-sm font-medium">自动检查并在后台下载更新</span>
+              <span className="block text-sm font-medium">{t('updates.automaticTitle')}</span>
               <span className="mt-1 block text-xs leading-5" style={{ color: '#96836F' }}>
-                默认关闭。开启后每 4 小时检查一次；下载完成仍会询问是否立即重启安装。
+                {t('updates.automaticDescription')}
               </span>
             </span>
           </label>
         ) : (
           <div className="mt-4 rounded-lg border px-4 py-3 text-xs leading-5" style={{ borderColor: 'rgba(217,123,58,0.22)', color: '#D9A06E', background: 'rgba(217,123,58,0.07)' }}>
-            应用内更新仅在正式安装的桌面版中可用。当前运行模式可前往 Releases 手动查看和下载安装包。
+            {t('updates.unavailable')}
           </div>
         )}
 
         {progress && state.phase === 'downloading' && (
           <div className="mt-4" aria-live="polite">
             <div className="mb-2 flex items-center justify-between text-xs" style={{ color: '#B8A58D' }}>
-              <span>已下载 {formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span>
+              <span>{t('updates.downloadedProgress', {
+                transferred: formatBytes(progress.transferred),
+                total: formatBytes(progress.total),
+              })}</span>
               <span>{Math.round(progress.percent)}% · {formatBytes(progress.bytesPerSecond)}/s</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full" style={{ background: '#2A251D' }}>
@@ -192,7 +200,7 @@ export function SoftwareUpdatePanel() {
             style={{ background: '#F2C14E', color: '#16130F' }}
           >
             {state.phase === 'checking' ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-            手动检查更新
+            {t('updates.check')}
           </button>
           {state.phase === 'available' && (
             <button
@@ -203,7 +211,7 @@ export function SoftwareUpdatePanel() {
               style={{ background: '#D97B3A', color: '#16130F' }}
             >
               <Download size={15} />
-              下载更新
+              {t('updates.download')}
             </button>
           )}
           {state.phase === 'downloaded' && (
@@ -215,7 +223,7 @@ export function SoftwareUpdatePanel() {
               style={{ background: '#7CCB8A', color: '#132016' }}
             >
               <Rocket size={15} />
-              立即重启并安装
+              {t('updates.install')}
             </button>
           )}
           <a
@@ -226,23 +234,23 @@ export function SoftwareUpdatePanel() {
             style={{ background: '#141210', color: '#B8A58D' }}
           >
             <ExternalLink size={14} />
-            打开 Releases
+            {t('updates.openReleases')}
           </a>
         </div>
 
         <p className="mt-4 text-xs leading-5" style={{ color: '#96836F' }}>
-          Windows 安装包目前未签名，安装或更新时可能出现 SmartScreen“未知发布者”提示。
+          {t('updates.unsignedWarning')}
         </p>
       </section>
 
       {(state.releaseName || state.releaseNotes) && (
         <section className="rounded-xl border p-5" style={{ background: '#18150F', borderColor: 'rgba(242,193,78,0.14)' }}>
-          <h3 className="font-semibold">{state.releaseName || `v${state.latestVersion} 更新日志`}</h3>
+          <h3 className="font-semibold">{state.releaseName || t('updates.releaseNotesTitle', { version: state.latestVersion })}</h3>
           <div
             className="mt-3 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border p-4 text-sm leading-6"
             style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.1)', color: '#B8A58D' }}
           >
-            {state.releaseNotes || '该版本暂未提供更新日志。'}
+            {state.releaseNotes || t('updates.noReleaseNotes')}
           </div>
         </section>
       )}

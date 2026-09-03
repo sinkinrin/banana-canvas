@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, Pencil, Save, Settings } from 'lucide-react';
+import { useAppTranslation } from '../i18n';
 
 import { MissingProjectState } from '../components/projects/MissingProjectState';
 import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
@@ -33,15 +34,15 @@ function navigateToProjects() {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function saveStatusText(saveStatus: SaveStatus) {
-  if (saveStatus === 'loading') return '加载中';
-  if (saveStatus === 'saving') return '保存中';
-  if (saveStatus === 'error') return '保存失败';
-  return '已保存';
+function saveStatusKey(saveStatus: SaveStatus) {
+  if (saveStatus === 'loading') return 'projects.saveStatus.loading' as const;
+  if (saveStatus === 'saving') return 'projects.saveStatus.saving' as const;
+  if (saveStatus === 'error') return 'projects.saveStatus.error' as const;
+  return 'projects.saveStatus.saved' as const;
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '未知错误';
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export function hasProjectSnapshotChanged(previous: ProjectSnapshot | null, current: ProjectSnapshot) {
@@ -78,6 +79,8 @@ export function ProjectCanvasPageView({
   onOpenSettings = () => {},
   children,
 }: ProjectCanvasPageViewProps) {
+  const { t } = useAppTranslation();
+
   return (
     <main className="relative h-screen w-full overflow-hidden" style={{ background: '#16130F' }}>
       <div
@@ -92,14 +95,14 @@ export function ProjectCanvasPageView({
             style={{ background: '#141210', color: '#EEE4CE' }}
           >
             <ArrowLeft size={15} />
-            返回项目列表
+            {t('projects.backToList')}
           </button>
           <button
             type="button"
             onClick={onRename}
             className="inline-flex min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold"
             style={{ color: '#EEE4CE' }}
-            title="重命名项目"
+            title={t('projects.rename')}
           >
             <span className="truncate">{project.name}</span>
             <Pencil size={14} className="shrink-0" style={{ color: '#96836F' }} />
@@ -107,16 +110,17 @@ export function ProjectCanvasPageView({
         </div>
         <div className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs" style={{ color: '#96836F' }}>
           <Save size={14} />
-          {saveStatusText(saveStatus)}
+          {t(saveStatusKey(saveStatus))}
         </div>
         <button
           type="button"
+          data-app-settings-entry="true"
           onClick={onOpenSettings}
           className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
           style={{ background: '#141210', color: '#EEE4CE' }}
         >
           <Settings size={14} />
-          模型设置
+          {t('settings.title')}
         </button>
       </div>
       {children}
@@ -131,6 +135,7 @@ export function ProjectCanvasPage({
   projectId: string;
   onOpenSettings?: () => void;
 }) {
+  const { t } = useAppTranslation();
   const [status, setStatus] = useState<ProjectLoadStatus>('loading');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('loading');
   const [project, setProject] = useState<ProjectMeta | null>(null);
@@ -164,7 +169,7 @@ export function ProjectCanvasPage({
         setStatus('ready');
       } catch (error) {
         if (disposed) return;
-        setErrorMessage(getErrorMessage(error));
+        setErrorMessage(getErrorMessage(error, t('common.unknownError')));
         setSaveStatus('error');
         setStatus('error');
       }
@@ -175,7 +180,7 @@ export function ProjectCanvasPage({
     return () => {
       disposed = true;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     if (status !== 'ready' || !project) return undefined;
@@ -249,7 +254,7 @@ export function ProjectCanvasPage({
   if (status === 'loading') {
     return (
       <main className="flex h-screen items-center justify-center" style={{ background: '#16130F', color: '#96836F' }}>
-        加载项目中...
+        {t('projects.loadingProject')}
       </main>
     );
   }
@@ -262,15 +267,15 @@ export function ProjectCanvasPage({
     return (
       <main className="flex h-screen items-center justify-center px-6" style={{ background: '#16130F', color: '#EEE4CE' }}>
         <section className="rounded-lg border p-8 text-center" style={{ background: '#1D1A14', borderColor: 'rgba(217,123,58,0.3)' }}>
-          <h1 className="text-xl font-semibold">项目加载失败</h1>
-          <p className="mt-2 text-sm" style={{ color: '#96836F' }}>{errorMessage || '无法打开这个项目。'}</p>
+          <h1 className="text-xl font-semibold">{t('projects.loadFailed')}</h1>
+          <p className="mt-2 text-sm" style={{ color: '#96836F' }}>{errorMessage || t('projects.openFailed')}</p>
           <button
             type="button"
             onClick={navigateToProjects}
             className="mt-6 rounded-lg px-4 py-2 text-sm font-medium"
             style={{ background: '#F2C14E', color: '#16130F' }}
           >
-            返回项目列表
+            {t('projects.backToList')}
           </button>
         </section>
       </main>
@@ -289,7 +294,7 @@ export function ProjectCanvasPage({
         <Suspense
           fallback={
             <div className="flex h-screen items-center justify-center" style={{ color: '#96836F' }}>
-              加载画布中...
+              {t('projects.loadingCanvas')}
             </div>
           }
         >
@@ -298,10 +303,11 @@ export function ProjectCanvasPage({
       </ProjectCanvasPageView>
       {isRenameDialogOpen && (
         <ProjectNameDialog
-          title="重命名项目"
+          title={t('projects.rename')}
           initialValue={project.name}
-          confirmLabel="保存"
-          cancelLabel="取消"
+          fallbackValue={t('projects.unnamed')}
+          confirmLabel={t('common.save')}
+          cancelLabel={t('common.cancel')}
           onConfirm={handleConfirmRename}
           onCancel={() => setIsRenameDialogOpen(false)}
         />

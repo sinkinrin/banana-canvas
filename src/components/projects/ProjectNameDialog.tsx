@@ -11,6 +11,7 @@ export type ProjectNameDialogProps = {
   initialValue: string;
   confirmLabel: string;
   cancelLabel: string;
+  fallbackValue?: string;
   onConfirm: (name: string) => void;
   onCancel: () => void;
 };
@@ -20,6 +21,7 @@ export function ProjectNameDialog({
   initialValue,
   confirmLabel,
   cancelLabel,
+  fallbackValue,
   onConfirm,
   onCancel,
 }: ProjectNameDialogProps) {
@@ -35,7 +37,7 @@ export function ProjectNameDialog({
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    onConfirm(getProjectNameSubmissionValue(value));
+    onConfirm(getProjectNameSubmissionValue(value, fallbackValue));
   };
 
   return (

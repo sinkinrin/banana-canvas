@@ -17,6 +17,11 @@ import type { RuntimeConfigLogger } from '../src/server/runtimeConfig';
 import { isAllowedExternalUrl, isInternalAppUrl } from '../src/lib/electronNavigation';
 import { createUnavailableUpdateState, type DesktopUpdateState } from '../src/lib/desktopUpdates';
 import {
+  getNativeAppMessages,
+  normalizeNativeAppLanguage,
+  type NativeAppLanguage,
+} from '../src/lib/nativeAppMessages';
+import {
   removeDotEnvKeys,
   type RuntimeSettingsSecretStore,
   type RuntimeSettingsSecretValues,
@@ -33,6 +38,7 @@ import {
   UPDATE_INSTALL_CHANNEL,
   UPDATE_SET_AUTOMATIC_CHANNEL,
   UPDATE_STATE_CHANGED_CHANNEL,
+  SET_APP_LANGUAGE_CHANNEL,
   WRITE_IMAGE_TO_CLIPBOARD_CHANNEL,
 } from './ipcChannels';
 
@@ -42,6 +48,7 @@ let serverStartPromise: Promise<LocalServerHandle> | null = null;
 let updateManager: ReturnType<typeof createDesktopUpdateManager> | null = null;
 let updatePreferencesStore: ReturnType<typeof createUpdatePreferencesStore> | null = null;
 let isQuitting = false;
+let desktopLanguage: NativeAppLanguage = 'en';
 
 const MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH = 128 * 1024 * 1024;
 const SUPPORTED_CLIPBOARD_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i;
@@ -75,6 +82,15 @@ async function writeImageDataUrlToClipboard(imageDataUrl: unknown) {
 ipcMain.handle(WRITE_IMAGE_TO_CLIPBOARD_CHANNEL, async (event, imageDataUrl: unknown) => {
   assertApplicationWindowSender(event, 'Clipboard');
   await writeImageDataUrlToClipboard(imageDataUrl);
+});
+
+ipcMain.handle(SET_APP_LANGUAGE_CHANNEL, async (event, language: unknown) => {
+  assertApplicationWindowSender(event, 'Language');
+  if (language !== 'en' && language !== 'zh-CN') {
+    throw new Error('Unsupported application language');
+  }
+  desktopLanguage = language;
+  mainWindow?.setTitle(getNativeAppMessages(desktopLanguage).appName);
 });
 
 function getUpdatePreferencesStore() {
@@ -181,16 +197,17 @@ async function prepareForUpdateInstall() {
 }
 
 async function promptToRestartForUpdate(info: DesktopUpdateInfo) {
+  const messages = getNativeAppMessages(desktopLanguage);
   const options: MessageBoxOptions = {
     type: 'info',
-    title: '香蕉画图更新已就绪',
-    message: `版本 ${info.version} 已在后台下载完成`,
+    title: messages.updateReadyTitle,
+    message: messages.updateDownloaded(info.version),
     detail: [
       info.releaseName?.trim(),
-      '是否立即重启并安装？选择“稍后”会在退出应用后自动安装。',
-      '当前安装包未进行代码签名，Windows 可能显示安全提示。',
+      messages.restartDetail,
+      messages.unsignedDetail,
     ].filter(Boolean).join('\n\n'),
-    buttons: ['立即重启并安装', '稍后'],
+    buttons: [messages.installNow, messages.later],
     defaultId: 0,
     cancelId: 1,
     noLink: true,
@@ -212,6 +229,7 @@ function startDesktopUpdates() {
     logger: (level, message) => logger({ level, message: `[update] ${message}` }),
     promptToRestart: promptToRestartForUpdate,
     beforeInstall: prepareForUpdateInstall,
+    getMessage: (key) => getNativeAppMessages(desktopLanguage)[key],
     onStateChange: emitDesktopUpdateState,
   });
   updateManager.start();
@@ -229,7 +247,7 @@ function ensureUserEnvFile(userDataDir: string, appRoot: string) {
   const examplePath = path.join(appRoot, '.env.example');
   const initialContent = fs.existsSync(examplePath)
     ? fs.readFileSync(examplePath, 'utf8')
-    : 'GEMINI_API_KEY=""\nIMAGE2_BASE_URL=""\nIMAGE2_API_KEY=""\nIMAGE2_MODEL="gpt-image-2"\n';
+    : 'GEMINI_API_KEY=""\nGEMINI_PROMPT_OPTIMIZER_MODEL="gemini-3.8-flash"\nIMAGE2_BASE_URL=""\nIMAGE2_API_KEY=""\nIMAGE2_MODEL="gpt-image-2"\n';
   fs.writeFileSync(envPath, initialContent, { encoding: 'utf8', mode: 0o600 });
   return envPath;
 }
@@ -586,8 +604,7 @@ async function runPromptLibrarySmokeTest(localUrl: string, window: BrowserWindow
 
 async function runApplicationSettingsSmokeTest(window: BrowserWindow) {
   const opened = await window.webContents.executeJavaScript(`(() => {
-    const button = [...document.querySelectorAll('button')]
-      .find((item) => item.textContent?.trim() === '模型设置');
+    const button = document.querySelector('[data-app-settings-entry="true"]');
     button?.click();
     return Boolean(button);
   })()`) as boolean;
@@ -627,8 +644,11 @@ async function runApplicationSettingsSmokeTest(window: BrowserWindow) {
       const dialog = document.querySelector('[data-runtime-settings-dialog="true"]');
       const proxyInput = [...(dialog?.querySelectorAll('input') ?? [])]
         .find((input) => input.placeholder === 'http://127.0.0.1:7890');
+      const optimizerInput = dialog?.querySelector('input[name="geminiPromptOptimizerModel"]');
       return dialog?.textContent?.includes('Banana 与提示词优化使用代理')
-        && proxyInput instanceof HTMLInputElement;
+        && proxyInput instanceof HTMLInputElement
+        && optimizerInput instanceof HTMLInputElement
+        && optimizerInput.value === 'gemini-3.8-flash';
     })()`,
     'Application settings smoke Banana proxy controls were incomplete'
   );
@@ -640,6 +660,70 @@ async function runApplicationSettingsSmokeTest(window: BrowserWindow) {
     window,
     `!document.querySelector('[data-runtime-settings-dialog="true"]')`,
     'Application settings smoke dialog did not close'
+  );
+}
+
+async function runLanguageSwitchSmokeTest(window: BrowserWindow) {
+  await waitForSmokePredicate(
+    window,
+    `document.querySelector('[data-app-settings-entry="true"]')`,
+    'Language smoke settings entry was unavailable'
+  );
+  await window.webContents.executeJavaScript(`
+    document.querySelector('[data-app-settings-entry="true"]')?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `document.querySelector('[data-runtime-settings-dialog="true"] [data-language-selector="true"]')`,
+    'Language smoke selector was unavailable'
+  );
+
+  await window.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('[data-language-selector="true"]');
+    if (!(select instanceof HTMLSelectElement)) return false;
+    select.value = 'en';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `document.documentElement.lang === 'en'
+      && document.title === 'Banana Canvas'
+      && document.querySelector('[data-runtime-settings-dialog="true"]')?.textContent?.includes('App settings')
+      && localStorage.getItem('banana-canvas-language') === 'en'`,
+    'Language smoke did not switch the renderer to English'
+  );
+
+  const titleDeadline = Date.now() + 5_000;
+  while (Date.now() < titleDeadline && window.getTitle() !== 'Banana Canvas') {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  if (window.getTitle() !== 'Banana Canvas') {
+    throw new Error('Language smoke did not synchronize the native window title');
+  }
+
+  await window.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('[data-language-selector="true"]');
+    if (!(select instanceof HTMLSelectElement)) return false;
+    select.value = 'zh-CN';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await waitForSmokePredicate(
+    window,
+    `document.documentElement.lang === 'zh-CN'
+      && document.title === '香蕉画图'
+      && localStorage.getItem('banana-canvas-language') === 'zh-CN'`,
+    'Language smoke did not switch the renderer back to Simplified Chinese'
+  );
+
+  await window.webContents.executeJavaScript(`
+    document.querySelector('[data-settings-close="true"]')?.click()
+  `);
+  await waitForSmokePredicate(
+    window,
+    `!document.querySelector('[data-runtime-settings-dialog="true"]')`,
+    'Language smoke settings dialog did not close'
   );
 }
 
@@ -892,6 +976,8 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
 
   await waitForSmokeRenderer(window);
 
+  await runLanguageSwitchSmokeTest(window);
+
   await runSketchSmokeTest(localUrl, window);
 
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, and QuickDraw probes passed');
@@ -942,6 +1028,8 @@ async function ensureLocalServer() {
 
 async function createMainWindow() {
   const localServer = await ensureLocalServer();
+  desktopLanguage = isSmokeTest() ? 'zh-CN' : normalizeNativeAppLanguage(app.getLocale());
+  const messages = getNativeAppMessages(desktopLanguage);
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -949,7 +1037,7 @@ async function createMainWindow() {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    title: '香蕉画图',
+    title: messages.appName,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -967,7 +1055,7 @@ async function createMainWindow() {
     mainWindow = null;
   });
 
-  await mainWindow.loadURL(localServer.url);
+  await mainWindow.loadURL(isSmokeTest() ? `${localServer.url}?lng=zh-CN` : localServer.url);
 
   if (isSmokeTest()) {
     await runSmokeTest(localServer.url, mainWindow);
@@ -1005,7 +1093,7 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
     }
     console.error('[banana:startup] failed', message);
     const displayMessage = error instanceof Error ? error.message : String(error);
-    dialog.showErrorBox('香蕉画图启动失败', displayMessage);
+    dialog.showErrorBox(getNativeAppMessages(desktopLanguage).startupFailed, displayMessage);
     app.quit();
   }
 });

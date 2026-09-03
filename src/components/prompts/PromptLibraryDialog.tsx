@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAppTranslation } from '../../i18n';
 import {
   BookOpen,
   Check,
@@ -49,6 +50,7 @@ export function PromptLibraryDialog({
   onUsePrompt?: (prompt: string) => void;
   initialPrompt?: string;
 }) {
+  const { t } = useAppTranslation();
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [query, setQuery] = useState('');
   const [editor, setEditor] = useState<PromptEditorState>();
@@ -64,7 +66,7 @@ export function PromptLibraryDialog({
       .then((items) => setPrompts(sortPromptTemplates(items)))
       .catch((error) => {
         if (!controller.signal.aborted) {
-          setErrorMessage(error instanceof Error ? error.message : '加载提示词库失败');
+          setErrorMessage(error instanceof Error ? error.message : t('promptLibrary.errors.load'));
         }
       })
       .finally(() => {
@@ -93,7 +95,7 @@ export function PromptLibraryDialog({
 
   const handleSave = async () => {
     if (!editor || !editor.content.trim()) {
-      setErrorMessage('请输入提示词内容。');
+      setErrorMessage(t('promptLibrary.errors.contentRequired'));
       return;
     }
     setSaving(true);
@@ -113,7 +115,7 @@ export function PromptLibraryDialog({
       ]));
       setEditor(undefined);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '保存提示词失败');
+      setErrorMessage(error instanceof Error ? error.message : t('promptLibrary.errors.save'));
     } finally {
       setSaving(false);
     }
@@ -130,7 +132,7 @@ export function PromptLibraryDialog({
       setPrompts((items) => items.filter((item) => item.id !== promptId));
       setDeleteConfirmationId(undefined);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '删除提示词失败');
+      setErrorMessage(error instanceof Error ? error.message : t('promptLibrary.errors.delete'));
     }
   };
 
@@ -156,8 +158,8 @@ export function PromptLibraryDialog({
               <BookOpen size={20} />
             </div>
             <div>
-              <h2 id="prompt-library-title" className="text-lg font-semibold">提示词管理</h2>
-              <p className="mt-0.5 text-xs" style={{ color: '#96836F' }}>跨项目保存、搜索和复用常用提示词。</p>
+              <h2 id="prompt-library-title" className="text-lg font-semibold">{t('promptLibrary.title')}</h2>
+              <p className="mt-0.5 text-xs" style={{ color: '#96836F' }}>{t('promptLibrary.description')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -169,19 +171,20 @@ export function PromptLibraryDialog({
                 style={{ background: 'rgba(124,203,138,0.1)', color: '#7CCB8A' }}
               >
                 <Sparkles size={14} />
-                收藏当前提示词
+                {t('promptLibrary.saveCurrent')}
               </button>
             )}
             <button
               type="button"
+              data-prompt-library-action="new"
               onClick={() => startCreate()}
               className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
               style={{ background: '#F2C14E', color: '#16130F' }}
             >
               <Plus size={14} />
-              新建提示词
+              {t('promptLibrary.new')}
             </button>
-            <button type="button" aria-label="关闭提示词管理" onClick={onClose} className="rounded-lg p-2" style={{ color: '#96836F' }}>
+            <button type="button" aria-label={t('promptLibrary.close')} onClick={onClose} className="rounded-lg p-2" style={{ color: '#96836F' }}>
               <X size={18} />
             </button>
           </div>
@@ -194,7 +197,7 @@ export function PromptLibraryDialog({
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索标题、内容或标签"
+              placeholder={t('promptLibrary.searchPlaceholder')}
               className={`${inputClassName} pl-10`}
               style={inputStyle}
             />
@@ -210,15 +213,15 @@ export function PromptLibraryDialog({
             {loading ? (
               <div className="flex min-h-64 items-center justify-center gap-2 text-sm" style={{ color: '#96836F' }}>
                 <Loader2 size={17} className="animate-spin" />
-                加载提示词库中…
+                {t('promptLibrary.loading')}
               </div>
             ) : filteredPrompts.length === 0 ? (
               <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed px-6 text-center" style={{ borderColor: 'rgba(242,193,78,0.18)', color: '#96836F' }}>
                 <BookOpen size={34} style={{ color: '#F2C14E' }} />
                 <p className="mt-3 text-sm font-medium" style={{ color: '#EEE4CE' }}>
-                  {query ? '没有匹配的提示词' : '提示词库还是空的'}
+                  {query ? t('promptLibrary.noMatches') : t('promptLibrary.empty')}
                 </p>
-                <p className="mt-1 text-xs">新建一条，或从创作节点收藏当前提示词。</p>
+                <p className="mt-1 text-xs">{t('promptLibrary.emptyHint')}</p>
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
@@ -245,6 +248,7 @@ export function PromptLibraryDialog({
                       {onUsePrompt && (
                         <button
                           type="button"
+                          data-prompt-library-action="use"
                           onClick={() => {
                             onUsePrompt(prompt.content);
                             onClose();
@@ -252,7 +256,7 @@ export function PromptLibraryDialog({
                           className="rounded-lg px-3 py-1.5 text-xs font-medium"
                           style={{ background: '#F2C14E', color: '#16130F' }}
                         >
-                          使用此提示词
+                          {t('promptLibrary.use')}
                         </button>
                       )}
                       <button
@@ -261,24 +265,24 @@ export function PromptLibraryDialog({
                           void copyTextToClipboard(prompt.content).then(() => {
                             setCopiedId(prompt.id);
                             setTimeout(() => setCopiedId(undefined), 1_800);
-                          }).catch((error) => setErrorMessage(error instanceof Error ? error.message : '复制失败'));
+                          }).catch((error) => setErrorMessage(error instanceof Error ? error.message : t('common.copyFailed')));
                         }}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs"
                         style={{ background: '#141210', color: '#B8A58D' }}
                       >
                         {copiedId === prompt.id ? <Check size={13} /> : <Copy size={13} />}
-                        {copiedId === prompt.id ? '已复制' : '复制'}
+                        {copiedId === prompt.id ? t('common.copied') : t('common.copy')}
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           setErrorMessage(undefined);
-                          setEditor({ id: prompt.id, title: prompt.title, content: prompt.content, tagsText: prompt.tags.join('，') });
+                          setEditor({ id: prompt.id, title: prompt.title, content: prompt.content, tagsText: prompt.tags.join(', ') });
                         }}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs"
                         style={{ background: '#141210', color: '#B8A58D' }}
                       >
-                        <Pencil size={13} />编辑
+                        <Pencil size={13} />{t('common.edit')}
                       </button>
                       <button
                         type="button"
@@ -287,7 +291,7 @@ export function PromptLibraryDialog({
                         style={{ background: deleteConfirmationId === prompt.id ? 'rgba(217,123,58,0.18)' : '#141210', color: '#D97B3A' }}
                       >
                         <Trash2 size={13} />
-                        {deleteConfirmationId === prompt.id ? '确认删除' : '删除'}
+                        {deleteConfirmationId === prompt.id ? t('promptLibrary.confirmDelete') : t('common.delete')}
                       </button>
                     </div>
                   </article>
@@ -309,7 +313,7 @@ export function PromptLibraryDialog({
               }}
             >
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{editor.id ? '编辑提示词' : '新建提示词'}</h3>
+                <h3 className="font-semibold">{editor.id ? t('promptLibrary.editTitle') : t('promptLibrary.newTitle')}</h3>
                 <button type="button" onClick={() => setEditor(undefined)} className="rounded-lg p-2" style={{ color: '#96836F' }}><X size={16} /></button>
               </div>
               <div className="mt-4 space-y-4">
@@ -319,18 +323,18 @@ export function PromptLibraryDialog({
                   </div>
                 )}
                 <label className="block space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>标题（留空将从内容生成）</span>
+                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.titleLabel')}</span>
                   <input
                     value={editor.title}
                     maxLength={120}
                     onChange={(event) => setEditor({ ...editor, title: event.target.value })}
                     className={inputClassName}
                     style={inputStyle}
-                    placeholder="例如：电影感产品海报"
+                    placeholder={t('promptLibrary.titlePlaceholder')}
                   />
                 </label>
                 <label className="block space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>提示词内容</span>
+                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.contentLabel')}</span>
                   <textarea
                     autoFocus
                     value={editor.content}
@@ -338,25 +342,25 @@ export function PromptLibraryDialog({
                     onChange={(event) => setEditor({ ...editor, content: event.target.value })}
                     className={`${inputClassName} min-h-48 resize-y`}
                     style={inputStyle}
-                    placeholder="输入完整提示词…"
+                    placeholder={t('promptLibrary.contentPlaceholder')}
                   />
                 </label>
                 <label className="block space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>标签（使用逗号分隔）</span>
+                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.tagsLabel')}</span>
                   <input
                     value={editor.tagsText}
                     onChange={(event) => setEditor({ ...editor, tagsText: event.target.value })}
                     className={inputClassName}
                     style={inputStyle}
-                    placeholder="海报，摄影，电影感"
+                    placeholder={t('promptLibrary.tagsPlaceholder')}
                   />
                 </label>
               </div>
               <footer className="mt-5 flex justify-end gap-2">
-                <button type="button" onClick={() => setEditor(undefined)} className="rounded-lg px-4 py-2 text-sm" style={{ background: '#141210', color: '#B8A58D' }}>取消</button>
+                <button type="button" onClick={() => setEditor(undefined)} className="rounded-lg px-4 py-2 text-sm" style={{ background: '#141210', color: '#B8A58D' }}>{t('common.cancel')}</button>
                 <button type="submit" disabled={saving || !editor.content.trim()} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ background: '#F2C14E', color: '#16130F' }}>
                   {saving && <Loader2 size={14} className="animate-spin" />}
-                  保存提示词
+                  {t('promptLibrary.save')}
                 </button>
               </footer>
             </form>

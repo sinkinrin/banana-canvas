@@ -18,6 +18,7 @@ export type RuntimeSettingsSnapshot = {
   };
   gemini: {
     apiKeyConfigured: boolean;
+    promptOptimizerModel: string;
     proxyUrl: string;
     proxyEnabled: boolean;
   };
@@ -40,6 +41,7 @@ export type RuntimeSettingsUpdate = {
   gemini?: {
     apiKey?: string;
     clearApiKey?: boolean;
+    promptOptimizerModel?: string;
     proxyUrl?: string;
     proxyEnabled?: boolean;
   };
@@ -59,6 +61,7 @@ export type RuntimeSettingsForm = {
   image2RequestTimeoutMs: number;
   geminiApiKey: string;
   clearGeminiApiKey: boolean;
+  geminiPromptOptimizerModel: string;
   geminiProxyUrl: string;
   geminiProxyEnabled: boolean;
 };
@@ -78,6 +81,7 @@ export function createRuntimeSettingsForm(settings: RuntimeSettingsSnapshot): Ru
     image2RequestTimeoutMs: settings.image2.requestTimeoutMs,
     geminiApiKey: '',
     clearGeminiApiKey: false,
+    geminiPromptOptimizerModel: settings.gemini.promptOptimizerModel,
     geminiProxyUrl: settings.gemini.proxyUrl,
     geminiProxyEnabled: settings.gemini.proxyEnabled,
   };
@@ -101,6 +105,7 @@ export function createRuntimeSettingsUpdate(form: RuntimeSettingsForm): RuntimeS
     gemini: {
       ...(form.geminiApiKey.trim() ? { apiKey: form.geminiApiKey.trim() } : {}),
       clearApiKey: form.clearGeminiApiKey,
+      promptOptimizerModel: form.geminiPromptOptimizerModel.trim(),
       proxyUrl: form.geminiProxyUrl.trim(),
       proxyEnabled: form.geminiProxyEnabled,
     },

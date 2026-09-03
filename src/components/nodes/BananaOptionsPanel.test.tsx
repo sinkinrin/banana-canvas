@@ -47,7 +47,7 @@ test('BananaOptionsPanel disables mediaResolution without reference images', () 
     />
   );
 
-  assert.match(html, /<select disabled=""/);
+  assert.match(html, /<select name="bananaMediaResolution" disabled=""/);
   assert.match(html, /value="MEDIA_RESOLUTION_HIGH" selected="">high/);
   assert.match(html, /纯文生图发送会被 Gemini 拒绝/);
 });

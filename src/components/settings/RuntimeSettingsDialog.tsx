@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound, Loader2, RefreshCw, Server, Settings, X } from 'lucide-react';
+import { useAppTranslation } from '../../i18n';
 
 import {
   createRuntimeSettingsForm,
@@ -9,6 +10,7 @@ import {
 } from '../../lib/runtimeSettings';
 import { loadRuntimeSettings, saveRuntimeSettings } from '../../services/runtimeSettings';
 import { SoftwareUpdatePanel } from './SoftwareUpdatePanel';
+import { LanguageSelector } from './LanguageSelector';
 
 const fieldClassName = 'w-full rounded-lg border px-3 py-2 text-sm outline-none';
 const fieldStyle = {
@@ -45,14 +47,17 @@ function NumberField({
 }
 
 function ConfiguredState({ configured }: { configured: boolean }) {
+  const { t } = useAppTranslation();
+
   return (
     <span className="text-xs" style={{ color: configured ? '#7CCB8A' : '#D97B3A' }}>
-      {configured ? '已保存；留空保持不变' : '尚未配置'}
+      {configured ? t('settings.savedSecret') : t('settings.notConfigured')}
     </span>
   );
 }
 
 export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useAppTranslation();
   const [settings, setSettings] = useState<RuntimeSettingsSnapshot>();
   const [form, setForm] = useState<RuntimeSettingsForm>();
   const [isSaving, setIsSaving] = useState(false);
@@ -69,7 +74,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        setErrorMessage(error instanceof Error ? error.message : '加载配置失败');
+        setErrorMessage(error instanceof Error ? error.message : t('settings.loadFailed'));
       });
     return () => controller.abort();
   }, []);
@@ -97,9 +102,9 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
       const saved = await saveRuntimeSettings(createRuntimeSettingsUpdate(form));
       setSettings(saved);
       setForm(createRuntimeSettingsForm(saved));
-      setMessage('配置已保存并立即生效；下次启动会自动加载。');
+      setMessage(t('settings.saveSuccess'));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '保存配置失败');
+      setErrorMessage(error instanceof Error ? error.message : t('settings.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -130,25 +135,29 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
               <Settings size={20} />
             </div>
             <div>
-              <h2 id="runtime-settings-title" className="text-lg font-semibold">应用设置</h2>
+              <h2 id="runtime-settings-title" className="text-lg font-semibold">{t('settings.title')}</h2>
               <p className="mt-0.5 text-xs" style={{ color: '#96836F' }}>
-                管理模型连接、网络代理与桌面版本更新。
+                {t('settings.description')}
               </p>
             </div>
           </div>
-          <button type="button" aria-label="关闭设置" onClick={onClose} className="rounded-lg p-2" style={{ color: '#96836F' }}>
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <LanguageSelector />
+            <button data-settings-close="true" type="button" aria-label={t('settings.close')} onClick={onClose} className="rounded-lg p-2" style={{ color: '#96836F' }}>
+              <X size={18} />
+            </button>
+          </div>
         </header>
 
         <nav
           className="sticky top-[73px] z-10 flex gap-1 border-b px-6 py-2"
           style={{ background: 'rgba(29,26,20,0.98)', borderColor: 'rgba(242,193,78,0.12)' }}
-          aria-label="设置分类"
+          aria-label={t('settings.categories')}
           role="tablist"
         >
           <button
             type="button"
+            data-settings-tab="models"
             role="tab"
             aria-selected={activeTab === 'models'}
             onClick={() => setActiveTab('models')}
@@ -158,10 +167,11 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
               : { color: '#96836F' }}
           >
             <Server size={15} />
-            模型与连接
+            {t('settings.connectionTab')}
           </button>
           <button
             type="button"
+            data-settings-tab="updates"
             role="tab"
             aria-selected={activeTab === 'updates'}
             onClick={() => setActiveTab('updates')}
@@ -171,7 +181,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
               : { color: '#96836F' }}
           >
             <RefreshCw size={15} />
-            软件更新
+            {t('settings.updatesTab')}
           </button>
         </nav>
 
@@ -179,7 +189,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
           <SoftwareUpdatePanel />
         ) : !form || !settings ? (
           <div className="flex min-h-64 items-center justify-center gap-3" style={{ color: '#96836F' }}>
-            {errorMessage ? errorMessage : <><Loader2 size={18} className="animate-spin" />加载配置中...</>}
+            {errorMessage ? errorMessage : <><Loader2 size={18} className="animate-spin" />{t('settings.loading')}</>}
           </div>
         ) : (
           <div className="space-y-6 p-6">
@@ -187,11 +197,13 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Server size={18} style={{ color: '#F2C14E' }} />
-                  <h3 className="font-semibold">Image2（默认模型）</h3>
+                  <h3 className="font-semibold">{t('settings.image2Default')}</h3>
                 </div>
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs" style={{ background: settings.image2.ready ? 'rgba(124,203,138,0.12)' : 'rgba(217,123,58,0.12)', color: settings.image2.ready ? '#7CCB8A' : '#D97B3A' }}>
                   {settings.image2.ready && <CheckCircle2 size={13} />}
-                  {settings.image2.ready ? '连接参数完整' : `缺少 ${settings.image2.missingKeys.join('、')}`}
+                  {settings.image2.ready
+                    ? t('settings.connectionReady')
+                    : t('settings.missingKeys', { keys: settings.image2.missingKeys.join(', ') })}
                 </span>
               </div>
 
@@ -210,8 +222,9 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                 </label>
 
                 <label className="space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>模型名称</span>
+                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.modelName')}</span>
                   <input
+                    name="image2Model"
                     value={form.image2Model}
                     onChange={(event) => patchForm({ image2Model: event.target.value })}
                     placeholder="gpt-image-2"
@@ -221,14 +234,15 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                 </label>
 
                 <label className="space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>接口类型</span>
+                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.endpointType')}</span>
                   <select
+                    name="image2EndpointType"
                     value={form.image2EndpointType}
                     onChange={(event) => patchForm({ image2EndpointType: event.target.value as RuntimeSettingsForm['image2EndpointType'] })}
                     className={fieldClassName}
                     style={fieldStyle}
                   >
-                    <option value="auto">自动判断</option>
+                    <option value="auto">{t('settings.endpointAuto')}</option>
                     <option value="images">Images API</option>
                     <option value="chat">Chat Completions</option>
                   </select>
@@ -240,10 +254,11 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                     <ConfiguredState configured={settings.image2.apiKeyConfigured} />
                   </span>
                   <input
+                    name="image2ApiKey"
                     type="password"
                     value={form.image2ApiKey}
                     onChange={(event) => patchForm({ image2ApiKey: event.target.value, clearImage2ApiKey: false })}
-                    placeholder={settings.image2.apiKeyConfigured ? '输入新 Key 可替换已保存值' : '请输入 API Key'}
+                    placeholder={settings.image2.apiKeyConfigured ? t('settings.newKeyPlaceholder') : t('settings.apiKeyPlaceholder')}
                     className={fieldClassName}
                     style={fieldStyle}
                   />
@@ -254,18 +269,19 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                         checked={form.clearImage2ApiKey}
                         onChange={(event) => patchForm({ clearImage2ApiKey: event.target.checked, image2ApiKey: '' })}
                       />
-                      清除已保存的 Image2 Key
+                      {t('settings.clearImage2Key')}
                     </label>
                   )}
                 </label>
               </div>
 
               <details className="mt-5 rounded-lg border p-4" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
-                <summary className="cursor-pointer text-sm font-medium" style={{ color: '#F2C14E' }}>网络与高级设置</summary>
+                <summary className="cursor-pointer text-sm font-medium" style={{ color: '#F2C14E' }}>{t('settings.networkAdvanced')}</summary>
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <label className="space-y-1.5 md:col-span-2">
-                    <span className="text-xs" style={{ color: '#B8A58D' }}>Image2 专用代理 URL（可选）</span>
+                    <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.image2ProxyUrl')}</span>
                     <input
+                      name="image2ProxyUrl"
                       type="url"
                       inputMode="url"
                       value={form.image2ProxyUrl}
@@ -276,16 +292,17 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                     />
                   </label>
                   <label className="space-y-1.5">
-                    <span className="text-xs" style={{ color: '#B8A58D' }}>代理模式</span>
+                    <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.proxyMode')}</span>
                     <select
+                      name="image2ProxyMode"
                       value={form.image2ProxyMode}
                       onChange={(event) => patchForm({ image2ProxyMode: event.target.value as RuntimeSettingsForm['image2ProxyMode'] })}
                       className={fieldClassName}
                       style={fieldStyle}
                     >
-                      <option value="direct">直连</option>
-                      <option value="auto">失败后自动切换</option>
-                      <option value="proxy">仅代理</option>
+                      <option value="direct">{t('settings.proxyDirect')}</option>
+                      <option value="auto">{t('settings.proxyAuto')}</option>
+                      <option value="proxy">{t('settings.proxyOnly')}</option>
                     </select>
                   </label>
                   <label className="flex items-center gap-3 self-end rounded-lg border px-3 py-2 text-sm" style={{ borderColor: 'rgba(242,193,78,0.12)', color: '#B8A58D' }}>
@@ -294,18 +311,18 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                       checked={form.image2Stream}
                       onChange={(event) => patchForm({ image2Stream: event.target.checked })}
                     />
-                    启用 SSE 流式结果
+                    {t('settings.enableSse')}
                   </label>
                   <label className="space-y-1.5">
-                    <span className="text-xs" style={{ color: '#B8A58D' }}>局部图数量（0–3）</span>
+                    <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.partialImages')}</span>
                     <NumberField value={form.image2PartialImages} min={0} max={3} onChange={(value) => patchForm({ image2PartialImages: value })} />
                   </label>
                   <label className="space-y-1.5">
-                    <span className="text-xs" style={{ color: '#B8A58D' }}>最大尝试次数（1–8）</span>
+                    <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.maxAttempts')}</span>
                     <NumberField value={form.image2MaxAttempts} min={1} max={8} onChange={(value) => patchForm({ image2MaxAttempts: value })} />
                   </label>
                   <label className="space-y-1.5 md:col-span-2">
-                    <span className="text-xs" style={{ color: '#B8A58D' }}>单次请求超时（毫秒）</span>
+                    <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.requestTimeout')}</span>
                     <NumberField value={form.image2RequestTimeoutMs} min={1_000} max={900_000} onChange={(value) => patchForm({ image2RequestTimeoutMs: value })} />
                   </label>
                 </div>
@@ -316,20 +333,37 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="mb-4 flex items-center gap-2">
                 <KeyRound size={18} style={{ color: '#D97B3A' }} />
                 <div>
-                  <h3 className="font-semibold">Gemini Key（可选）</h3>
-                  <p className="text-xs" style={{ color: '#96836F' }}>仅用于 Banana 系列模型和提示词优化。</p>
+                  <h3 className="font-semibold">{t('settings.geminiOptional')}</h3>
+                  <p className="text-xs" style={{ color: '#96836F' }}>{t('settings.geminiDescription')}</p>
                 </div>
               </div>
+              <label className="mb-4 block space-y-1.5">
+                <span className="text-xs" style={{ color: '#B8A58D' }}>
+                  {t('settings.geminiPromptOptimizerModel')}
+                </span>
+                <input
+                  name="geminiPromptOptimizerModel"
+                  value={form.geminiPromptOptimizerModel}
+                  onChange={(event) => patchForm({ geminiPromptOptimizerModel: event.target.value })}
+                  placeholder="gemini-3.8-flash"
+                  className={fieldClassName}
+                  style={fieldStyle}
+                />
+                <span className="block text-xs leading-5" style={{ color: '#96836F' }}>
+                  {t('settings.geminiPromptOptimizerDescription')}
+                </span>
+              </label>
               <label className="space-y-1.5">
                 <span className="flex items-center justify-between gap-2 text-xs" style={{ color: '#B8A58D' }}>
                   <span>Gemini API Key</span>
                   <ConfiguredState configured={settings.gemini.apiKeyConfigured} />
                 </span>
                 <input
+                  name="geminiApiKey"
                   type="password"
                   value={form.geminiApiKey}
                   onChange={(event) => patchForm({ geminiApiKey: event.target.value, clearGeminiApiKey: false })}
-                  placeholder={settings.gemini.apiKeyConfigured ? '输入新 Key 可替换已保存值' : 'AIza...'}
+                  placeholder={settings.gemini.apiKeyConfigured ? t('settings.newKeyPlaceholder') : 'AIza...'}
                   className={fieldClassName}
                   style={fieldStyle}
                 />
@@ -341,7 +375,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                     checked={form.clearGeminiApiKey}
                     onChange={(event) => patchForm({ clearGeminiApiKey: event.target.checked, geminiApiKey: '' })}
                   />
-                  清除已保存的 Gemini Key
+                  {t('settings.clearGeminiKey')}
                 </label>
               )}
               <div className="mt-5 border-t pt-4" style={{ borderColor: 'rgba(242,193,78,0.1)' }}>
@@ -353,15 +387,16 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                     onChange={(event) => patchForm({ geminiProxyEnabled: event.target.checked })}
                   />
                   <span>
-                    <span className="block text-sm font-medium">Banana 与提示词优化使用代理</span>
+                    <span className="block text-sm font-medium">{t('settings.geminiProxy')}</span>
                     <span className="mt-1 block text-xs leading-5" style={{ color: '#96836F' }}>
-                      默认关闭；只影响 Gemini API，不会改变 Image2 的独立代理模式。
+                      {t('settings.geminiProxyDescription')}
                     </span>
                   </span>
                 </label>
                 <label className="mt-3 block space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>Banana / Gemini 代理 URL</span>
+                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('settings.geminiProxyUrl')}</span>
                   <input
+                    name="geminiProxyUrl"
                     type="url"
                     inputMode="url"
                     value={form.geminiProxyUrl}
@@ -382,11 +417,11 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
 
             <footer className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs" style={{ color: '#96836F' }}>
-                保存后服务端热更新，无需重启软件。
+                {t('settings.hotReloadHint')}
               </p>
               <div className="flex gap-2">
                 <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm" style={{ background: '#141210', color: '#B8A58D' }}>
-                  取消
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -396,7 +431,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                   style={{ background: '#F2C14E', color: '#16130F' }}
                 >
                   {isSaving && <Loader2 size={15} className="animate-spin" />}
-                  保存并应用
+                  {t('settings.saveAndApply')}
                 </button>
               </div>
             </footer>

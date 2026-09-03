@@ -100,6 +100,7 @@ test('runtime settings store persists, reloads, and returns only key presence', 
       },
       gemini: {
         apiKey: 'secret-gemini-key',
+        promptOptimizerModel: 'custom-optimizer-model',
         proxyUrl: 'http://127.0.0.1:7890',
         proxyEnabled: true,
       },
@@ -109,6 +110,7 @@ test('runtime settings store persists, reloads, and returns only key presence', 
     assert.equal(snapshot.image2.apiKeyConfigured, true);
     assert.equal(snapshot.image2.ready, true);
     assert.equal(snapshot.gemini.apiKeyConfigured, true);
+    assert.equal(snapshot.gemini.promptOptimizerModel, 'custom-optimizer-model');
     assert.equal(snapshot.gemini.proxyUrl, 'http://127.0.0.1:7890');
     assert.equal(snapshot.gemini.proxyEnabled, true);
     assert.equal(JSON.stringify(snapshot).includes('secret-relay-key'), false);
@@ -117,6 +119,7 @@ test('runtime settings store persists, reloads, and returns only key presence', 
     const saved = fs.readFileSync(envFilePath, 'utf8');
     assert.match(saved, /IMAGE2_API_KEY="secret-relay-key"/);
     assert.match(saved, /GEMINI_API_KEY="secret-gemini-key"/);
+    assert.match(saved, /GEMINI_PROMPT_OPTIMIZER_MODEL="custom-optimizer-model"/);
     assert.match(saved, /GEMINI_HTTPS_PROXY="http:\/\/127\.0\.0\.1:7890"/);
     assert.match(saved, /GEMINI_PROXY_ENABLED="true"/);
   } finally {

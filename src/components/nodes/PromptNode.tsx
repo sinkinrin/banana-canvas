@@ -1,6 +1,7 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
+import { useAppTranslation } from '../../i18n';
 import { BookOpen, Edit3, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
@@ -38,33 +39,32 @@ import {
   MAX_TOTAL_INPUT_IMAGE_BYTES,
 } from '../../lib/imageInputLimits';
 
-const referenceImageLimitHint = `单张最多 ${formatMebibytes(MAX_REFERENCE_IMAGE_BYTES)}，合计最多 ${formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES)}`;
-
-const aspectRatioLabels: Record<BananaAspectRatio, string> = {
-  '1:1': '1:1 (正方形)',
-  '1:4': '1:4 (超高)',
-  '1:8': '1:8 (极高)',
-  '2:3': '2:3 (竖版)',
-  '3:2': '3:2 (横版)',
-  '3:4': '3:4 (竖版)',
-  '4:1': '4:1 (超宽)',
-  '4:3': '4:3 (标准)',
-  '4:5': '4:5 (社媒竖版)',
-  '5:4': '5:4 (社媒横版)',
-  '8:1': '8:1 (极宽)',
-  '9:16': '9:16 (手机)',
-  '16:9': '16:9 (宽屏)',
-  '21:9': '21:9 (电影宽屏)',
+const aspectRatioLabelKeys: Record<BananaAspectRatio, string> = {
+  '1:1': 'promptNode.aspectRatios.square',
+  '1:4': 'promptNode.aspectRatios.extraTall',
+  '1:8': 'promptNode.aspectRatios.extremeTall',
+  '2:3': 'promptNode.aspectRatios.portrait23',
+  '3:2': 'promptNode.aspectRatios.landscape32',
+  '3:4': 'promptNode.aspectRatios.portrait34',
+  '4:1': 'promptNode.aspectRatios.extraWide',
+  '4:3': 'promptNode.aspectRatios.standard',
+  '4:5': 'promptNode.aspectRatios.socialPortrait',
+  '5:4': 'promptNode.aspectRatios.socialLandscape',
+  '8:1': 'promptNode.aspectRatios.extremeWide',
+  '9:16': 'promptNode.aspectRatios.phone',
+  '16:9': 'promptNode.aspectRatios.widescreen',
+  '21:9': 'promptNode.aspectRatios.cinematic',
 };
 
-const imageSizeLabels: Record<BananaImageSize, string> = {
-  '512': '512 (0.5K 快速)',
-  '1K': '1K (标准)',
-  '2K': '2K (高清)',
-  '4K': '4K (超清)',
+const imageSizeLabelKeys: Record<BananaImageSize, string> = {
+  '512': 'promptNode.sizes.fast',
+  '1K': 'promptNode.sizes.standard',
+  '2K': 'promptNode.sizes.high',
+  '4K': 'promptNode.sizes.ultra',
 };
 
 export function PromptNode({ id, data }: NodeProps<AppNode>) {
+  const { t } = useAppTranslation();
   const updateNodeData = useStore((state) => state.updateNodeData);
   const saveNodeSketch = useStore((state) => state.saveNodeSketch);
   const addNode = useStore((state) => state.addNode);
@@ -110,6 +110,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const aspectRatio = getEffectivePromptAspectRatio(imageModel, data.aspectRatio);
   const aspectRatioOptions = getPromptAspectRatioOptions(imageModel);
   const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Image2';
+  const referenceImageLimitHint = t('promptNode.referenceLimitHint', {
+    single: formatMebibytes(MAX_REFERENCE_IMAGE_BYTES),
+    total: formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES),
+  });
   const bananaOptions = data.bananaOptions;
   const image2Options = data.image2Options;
   const sketchReferenceIsAttached = Boolean(
@@ -168,7 +172,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         isLoading: true,
         error: undefined,
         createdAt,
-        generationTitle: `Image2 局部编辑 | ${maskPrompt.slice(0, 28) || '生成任务'}`,
         sourceImage,
         sourcePrompt: maskPrompt,
         generationMode: 'mask-edit',
@@ -209,7 +212,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       });
       setMaskEditorSource(null);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '局部编辑生成失败';
+      const errorMessage = error instanceof Error ? error.message : t('promptNode.errors.maskGeneration');
       updateNodeData(placeholderNodeId, {
         isLoading: false,
         error: errorMessage,
@@ -278,15 +281,16 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-yellow-500 to-orange-500 flex items-center justify-center text-white shadow-sm">
               <Sparkles size={16} />
             </div>
-            <span style={{color: '#EEE4CE'}}>香蕉画图</span>
+            <span style={{color: '#EEE4CE'}}>{t('app.name')}</span>
           </div>
           <div className="nodrag nopan nowheel flex items-center gap-1 p-1 rounded-xl shadow-sm" style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)'}} onPointerDown={(event) => event.stopPropagation()}>
             <button
               type="button"
+              data-prompt-node-action="settings"
               onClick={() => setShowSettings(!showSettings)}
               className="p-1.5 rounded-lg transition-colors hover:bg-[rgba(242,193,78,0.1)]"
               style={{color: '#96836F'}}
-              title="设置"
+              title={t('promptNode.settings')}
             >
               <Settings2 size={16} />
             </button>
@@ -295,7 +299,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               onClick={handleDelete}
               className="p-1.5 rounded-lg transition-colors hover:text-red-400 hover:bg-[rgba(239,68,68,0.15)]"
               style={{color: '#96836F'}}
-              title="删除节点"
+              title={t('promptNode.deleteNode')}
             >
               <Trash2 size={16} />
             </button>
@@ -318,10 +322,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               disabled={isOptimizing || !prompt.trim()}
               className="nodrag nopan nowheel absolute bottom-2 right-2 p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[rgba(242,193,78,0.2)]"
               style={{background: 'rgba(242,193,78,0.12)', color: '#F2C14E', border: '1px solid rgba(242,193,78,0.2)'}}
-              title="使用 Gemini 3.1 Pro 优化提示词"
+              title={t('promptNode.optimizeTitle')}
             >
               {isOptimizing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-              优化
+              {t('promptNode.optimize')}
             </button>
             <button
               type="button"
@@ -329,10 +333,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               onClick={() => setIsPromptLibraryOpen(true)}
               className="nodrag nopan nowheel absolute bottom-2 left-2 flex items-center gap-1 rounded-lg p-1.5 text-xs font-medium transition-all hover:bg-[rgba(242,193,78,0.14)]"
               style={{ background: 'rgba(22,19,15,0.84)', color: '#B8A58D', border: '1px solid rgba(242,193,78,0.14)' }}
-              title="打开提示词库"
+              title={t('promptNode.openPromptLibrary')}
             >
               <BookOpen size={14} />
-              提示词库
+              {t('canvas.promptLibrary')}
             </button>
           </div>
 
@@ -340,20 +344,21 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           <div className="nodrag nopan nowheel" onPointerDown={(event) => event.stopPropagation()}>
             <button
               type="button"
+              data-sketch-action="open"
               onClick={() => setIsSketchEditorOpen(true)}
               disabled={!data.sketch && referenceImages.length >= 4}
               className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               style={{ border: '1px solid rgba(91,155,213,0.28)', background: 'rgba(91,155,213,0.09)', color: '#8FC1EA' }}
               title={data.sketch
                 ? sketchReferenceIsAttached
-                  ? '继续编辑已保存的构图草图'
-                  : '继续编辑草图；应用时会重新占用一个参考图位置'
+                  ? t('promptNode.editAttachedSketch')
+                  : t('promptNode.editDetachedSketch')
                 : referenceImages.length >= 4
-                  ? '参考图已达到 4 张上限'
-                  : '绘制人物位置、动作和画面构图'}
+                  ? t('promptNode.referenceLimitReached')
+                  : t('promptNode.sketchHint')}
             >
               <PencilLine size={14} />
-              {data.sketch ? '编辑构图草图' : '绘制构图草图'}
+              {data.sketch ? t('promptNode.editSketch') : t('promptNode.drawSketch')}
               {data.sketch && (
                 <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ background: 'rgba(91,155,213,0.16)' }}>
                   {data.sketch.aspectRatio}
@@ -365,7 +370,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 <div className="grid grid-cols-2 gap-2">
                   {referenceImages.map((img, index) => (
                     <div key={index} className="relative w-full aspect-square rounded-lg overflow-hidden" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)'}}>
-                      <img src={img.url} alt={`参考图 ${index + 1}`} className="w-full h-full object-cover opacity-80" />
+                      <img src={img.url} alt={t('promptNode.referenceAlt', { index: index + 1 })} className="w-full h-full object-cover opacity-80" />
                       <button
                         type="button"
                         onClick={(e) => {
@@ -374,7 +379,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                         }}
                         className="absolute top-1 left-1 z-20 rounded-full p-1 text-[#16130F] shadow transition-colors hover:bg-[#FFD36B]"
                         style={{ background: '#F2C14E' }}
-                        title="使用 Image2 蒙版编辑"
+                        title={t('promptNode.maskEditReference')}
                       >
                         <Edit3 size={10} />
                       </button>
@@ -385,13 +390,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                           handleRemoveImage(index);
                         }}
                         className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full shadow hover:bg-red-600 transition-colors z-20"
-                        title="移除此参考图"
+                        title={t('promptNode.removeReference')}
                       >
                         <X size={10} />
                       </button>
                       <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded" style={{background: 'rgba(22,19,15,0.8)', color: '#F2C14E', fontSize: '10px', fontWeight: 500}}>
                         {referenceImageIds[index] === data.sketch?.referenceImageAssetId
-                          ? `草图 · ${index + 1}/${referenceImages.length}`
+                          ? <span data-reference-kind="sketch">{t('promptNode.sketchBadge', { index: index + 1, total: referenceImages.length })}</span>
                           : `${index + 1}/${referenceImages.length}`}
                       </div>
                     </div>
@@ -410,12 +415,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                     {isReadingFile ? (
                       <>
                         <Loader2 size={12} className="animate-spin" />
-                        正在读取...
+                        {t('promptNode.reading')}
                       </>
                     ) : (
                       <>
                         <Upload size={12} />
-                        添加更多 ({referenceImages.length}/4)
+                        {t('promptNode.addMore', { count: referenceImages.length })}
                       </>
                     )}
                   </button>
@@ -434,12 +439,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 {isReadingFile ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    正在读取图片...
+                    {t('promptNode.readingImage')}
                   </>
                 ) : (
                   <>
                     <Upload size={14} />
-                    上传参考图 (支持 Ctrl+V)
+                    {t('promptNode.uploadReference')}
                   </>
                 )}
               </button>
@@ -459,8 +464,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           {showSettings && (
             <div className="nodrag nopan nowheel p-4 rounded-xl space-y-4" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.1)'}} onPointerDown={(event) => event.stopPropagation()}>
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>生图模型</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.imageModel')}</label>
                 <select
+                  name="imageModel"
                   value={imageModel}
                   onChange={(e) => {
                     const nextModel = e.target.value as ImageModelId;
@@ -479,15 +485,16 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 >
                   {IMAGE_MODELS.map((model) => (
                     <option key={model.id} value={model.id}>
-                      {model.label} - {model.description}
+                      {model.label} - {t(model.descriptionKey)}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>画面比例</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.aspectRatio')}</label>
                 <select
+                  name="aspectRatio"
                   value={aspectRatio}
                   onChange={(e) => {
                     updateNodeData(id, { aspectRatio: e.target.value as typeof aspectRatio });
@@ -498,7 +505,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
                   {aspectRatioOptions.map((ratio) => (
-                    <option key={ratio} value={ratio}>{aspectRatioLabels[ratio]}</option>
+                    <option key={ratio} value={ratio}>{t(aspectRatioLabelKeys[ratio])}</option>
                   ))}
                 </select>
               </div>
@@ -529,8 +536,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               )}
 
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>分辨率</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.resolution')}</label>
                 <select
+                  name="imageSize"
                   value={imageSize}
                   onChange={(e) => {
                     updateNodeData(id, { imageSize: e.target.value as typeof imageSize });
@@ -541,13 +549,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
                 >
                   {imageSizeOptions.map((size) => (
-                    <option key={size} value={size}>{imageSizeLabels[size]}</option>
+                    <option key={size} value={size}>{t(imageSizeLabelKeys[size])}</option>
                   ))}
                 </select>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>生成数量</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.batchCount')}</label>
                 <div className="flex gap-2">
                   {[1, 2, 4].map(count => (
                     <button
@@ -570,7 +578,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>节点颜色</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.nodeColor')}</label>
                 <div className="flex gap-2 flex-wrap">
                   {['', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444'].map(color => (
                     <button
@@ -587,7 +595,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                         backgroundColor: color || '#2A2620',
                         borderColor: (data.color || '') === color ? '#F2C14E' : 'transparent'
                       }}
-                      title={color ? color : '默认'}
+                      title={color ? color : t('common.default')}
                     />
                   ))}
                 </div>
@@ -619,12 +627,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             {data.isLoading ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                <span>{batchCount > 1 ? `生成中 ${generatedCount}/${batchCount}` : '生成中...'}</span>
+                <span>{batchCount > 1
+                  ? t('promptNode.generatingProgress', { generated: generatedCount, total: batchCount })
+                  : t('promptNode.generating')}</span>
               </>
             ) : (
               <>
                 <ImageIcon size={18} />
-                <span>生成图像 · {imageModelLabel}</span>
+                <span>{t('promptNode.generate', { model: imageModelLabel })}</span>
               </>
             )}
           </button>
@@ -639,7 +649,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               className="nodrag nopan nowheel w-full py-1 text-[10px] transition-colors hover:text-[#96836F]"
               style={{color: '#5C4E3E'}}
             >
-              如果长时间无响应，点击此处重置状态
+              {t('promptNode.resetLoading')}
             </button>
           )}
         </div>
@@ -648,7 +658,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       <Handle type="source" position={Position.Right} className="w-3 h-3 border-2" style={{background: '#5B9BD5', borderColor: '#1D1A14'}} />
       {maskEditorSource && (
         <MaskEditorModal
-          title="局部编辑参考图"
+          title={t('promptNode.maskEditTitle')}
           sourceImage={maskEditorSource.image}
           onClose={() => setMaskEditorSource(null)}
           onGenerate={handleMaskGenerate}

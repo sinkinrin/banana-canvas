@@ -89,23 +89,30 @@ test('environment template keeps secrets blank and provides the default Image2 m
   const envExample = await readFile(resolve(repoRoot, '.env.example'), 'utf8');
 
   assert.match(envExample, /^GEMINI_API_KEY=""$/m);
+  assert.match(envExample, /^GEMINI_PROMPT_OPTIMIZER_MODEL="gemini-3\.8-flash"$/m);
   assert.match(envExample, /^IMAGE2_BASE_URL=""$/m);
   assert.match(envExample, /^IMAGE2_API_KEY=""$/m);
   assert.match(envExample, /^IMAGE2_MODEL="gpt-image-2"$/m);
   assert.doesNotMatch(envExample, /YOUR_IMAGE2|MY_GEMINI_API_KEY/);
 });
 
-test('README documents setup and verification commands', async () => {
+test('English and Chinese READMEs stay concise, linked, and release-aware', async () => {
   const readme = await readFile(resolve(repoRoot, 'README.md'), 'utf8');
+  const readmeCn = await readFile(resolve(repoRoot, 'README_CN.md'), 'utf8');
   const packageJson = await readJsonFile<{ version: string }>('package.json');
 
   assert.match(readme, /npm install/);
   assert.match(readme, /npm test/);
   assert.match(readme, /npm run check/);
-  assert.match(readme, /`npm install` 是首次设置步骤/);
-  assert.match(readme, /`npm run check` 不会执行 `npm install`/);
-  assert.ok(readme.includes('当前版本：`' + packageJson.version + '`'));
-  assert.match(readme, /自动更新默认关闭/);
+  assert.match(readme, /`npm install` is the initial dependency setup step/);
+  assert.match(readme, /does not run `npm install`/);
+  assert.ok(readme.includes('Current version: `' + packageJson.version + '`'));
+  assert.match(readme, /> \[!IMPORTANT\]\s*> 🇨🇳 \*\*简体中文：\[阅读中文 README\]\(README_CN\.md\)\*\*/);
+  assert.match(readme, /Automatic updates are off by default/);
+  assert.ok(readmeCn.includes('当前版本：`' + packageJson.version + '`'));
+  assert.match(readmeCn, /\[Read the default README\]\(README\.md\)/);
+  assert.ok(readme.split(/\r?\n/).length < 180);
+  assert.ok(readmeCn.split(/\r?\n/).length < 180);
 });
 
 test('release workflow builds update metadata before creating GitHub Release', async () => {

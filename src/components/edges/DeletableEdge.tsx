@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getStraightPath, useReactFlow, type EdgeProps } from '@xyflow/react';
 import { X } from 'lucide-react';
+import { useAppTranslation } from '../../i18n';
 
 export function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, style }: EdgeProps) {
+  const { t } = useAppTranslation();
   const { setEdges } = useReactFlow();
   const [hovered, setHovered] = useState(false);
   const [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY });
@@ -33,7 +35,7 @@ export function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, markerEn
                 setEdges(edges => edges.filter(edge => edge.id !== id));
               }}
               className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-md transition-colors"
-              title="断开连线"
+              title={t('canvas.disconnectEdge')}
             >
               <X size={10} />
             </button>

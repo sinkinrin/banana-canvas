@@ -1,6 +1,7 @@
 import type { Camera, Editor } from '@quickdrawjs/react';
 
 import type { BananaAspectRatio } from '../../lib/imageModels';
+import i18n from '../../i18n';
 import type {
   CanvasSketchSavePayload,
   InlineImageData,
@@ -60,7 +61,7 @@ export function getFixedArtboardCamera(
 function canvasToInlinePng(canvas: HTMLCanvasElement): InlineImageData {
   const url = canvas.toDataURL('image/png');
   const match = url.match(/^data:(image\/png);base64,(.+)$/);
-  if (!match) throw new Error('无法导出草图 PNG。');
+  if (!match) throw new Error(i18n.t('sketch.exportFailed'));
   return { mimeType: match[1], data: match[2], url };
 }
 
@@ -74,7 +75,7 @@ export function exportFixedArtboardPng(
   canvas.width = output.width;
   canvas.height = output.height;
   const context = canvas.getContext('2d');
-  if (!context) throw new Error('无法创建草图导出画布。');
+  if (!context) throw new Error(i18n.t('sketch.exportCanvasFailed'));
 
   const zoom = output.width / artboard.width;
   editor.renderScene(

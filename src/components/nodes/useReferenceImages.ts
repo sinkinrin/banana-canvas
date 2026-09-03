@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { resolveReferenceImages, type InlineImageData } from '../../lib/canvasState';
 import type { AppNode } from '../../store';
+import i18n from '../../i18n';
 import {
   decodedBase64ByteLength,
   formatMebibytes,
@@ -34,7 +35,7 @@ export function createBrowserImageFileReader({
         reject(error);
       }
     };
-    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.onerror = () => reject(new Error(i18n.t('promptNode.errors.readImage')));
     reader.readAsDataURL(file);
   });
 }
@@ -63,7 +64,11 @@ export function selectImageFiles(
 
 export function getReferenceImageFileSizeError(file: Pick<File, 'name' | 'size'>) {
   if (!Number.isFinite(file.size) || file.size <= MAX_REFERENCE_IMAGE_BYTES) return null;
-  return `图片“${file.name}”大小为 ${formatMebibytes(file.size)}，超过单张 ${formatMebibytes(MAX_REFERENCE_IMAGE_BYTES)} 限制。请压缩或缩小后重新添加。`;
+  return i18n.t('promptNode.errors.referenceFileTooLarge', {
+    name: file.name,
+    size: formatMebibytes(file.size),
+    limit: formatMebibytes(MAX_REFERENCE_IMAGE_BYTES),
+  });
 }
 
 export function getReferenceImageTotalSizeError(
@@ -76,7 +81,11 @@ export function getReferenceImageTotalSizeError(
   ) {
     return null;
   }
-  return `加入图片“${file.name}”后，参考图合计将达到 ${formatMebibytes(currentBytes + file.size)}，超过 ${formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES)} 总限制。`;
+  return i18n.t('promptNode.errors.referenceTotalTooLarge', {
+    name: file.name,
+    size: formatMebibytes(currentBytes + file.size),
+    limit: formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES),
+  });
 }
 
 function getReferenceImagesByteLength(images: InlineImageData[]) {
@@ -148,7 +157,7 @@ export function buildRemoveReferenceImagePatch({
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '读取图片失败';
+  return error instanceof Error ? error.message : i18n.t('promptNode.errors.readImage');
 }
 
 function alertReadError(message: string) {

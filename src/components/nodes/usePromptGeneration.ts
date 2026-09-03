@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { generateImage, type GenerateImageParams } from '../../services/gemini';
+import i18n from '../../i18n';
 import type { AppNode } from '../../store';
 import type { InlineImageData } from '../../lib/canvasState';
 import {
@@ -56,7 +57,7 @@ export function buildImagePlaceholderData({
     isLoading: true,
     error: undefined,
     createdAt,
-    generationTitle: `${imageModelLabel} | ${prompt.slice(0, 28) || '生成任务'}`,
+    generationTitle: `${imageModelLabel} | ${prompt.slice(0, 28) || i18n.t('promptNode.generationTask')}`,
     ...referenceData,
   };
 }
@@ -98,7 +99,7 @@ export type PromptGenerationRunnerDeps = {
 };
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '生成失败';
+  return error instanceof Error ? error.message : i18n.t('promptNode.errors.generation');
 }
 
 function isAbortError(error: unknown) {
@@ -124,7 +125,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
       if (!prompt || isGenerating) return;
 
       if (input.hasPendingReferenceHydration) {
-        deps.updateNodeData(input.nodeId, { error: '参考图仍在加载中，请稍候' });
+        deps.updateNodeData(input.nodeId, { error: i18n.t('promptNode.errors.referenceHydrating') });
         return;
       }
 

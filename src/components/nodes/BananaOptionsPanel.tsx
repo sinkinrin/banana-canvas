@@ -1,9 +1,10 @@
 import { Info } from 'lucide-react';
+import { useAppTranslation } from '../../i18n';
 import {
   BANANA_MEDIA_RESOLUTION_VALUES,
   BANANA_THINKING_LEVEL_VALUES,
   getBananaModelCapabilities,
-  getBananaParameterTips,
+  getBananaParameterTipKeys,
   getImageModelConfig,
   normalizeBananaOptions,
   type BananaImageModelId,
@@ -27,26 +28,22 @@ const selectStyle = {
 };
 const labelStyle = { color: '#96836F' };
 
-const thinkingLevelLabels: Record<BananaThinkingLevel, string> = {
-  MINIMAL: 'minimal 最低延迟',
-  HIGH: 'high 高推理',
-};
-
 export function BananaOptionsPanel({
   imageModel,
   value,
   hasReferenceImages,
   onChange,
 }: BananaOptionsPanelProps) {
+  const { t } = useAppTranslation();
   const options = normalizeBananaOptions(value);
   const capabilities = getBananaModelCapabilities(imageModel);
   const modelConfig = getImageModelConfig(imageModel);
   const parameterTips = [
-    `这些选项只发送给 ${modelConfig.label}；Image2 会使用单独的中转参数面板。`,
+    t('bananaOptions.onlyForModel', { model: modelConfig.label }),
     capabilities.supportsMediaResolutionControl
-      ? '参考图解析仅在带参考图时发送；纯文生图发送会被 Gemini 拒绝。'
-      : `${modelConfig.label} 当前不支持参考图解析等级，本项目不会发送 mediaResolution。`,
-    ...getBananaParameterTips(imageModel),
+      ? t('bananaOptions.mediaWithReferences')
+      : t('bananaOptions.mediaUnsupported', { model: modelConfig.label }),
+    ...getBananaParameterTipKeys(imageModel).map((key) => t(key)),
   ];
 
   const commit = (nextOptions: BananaOptions) => {
@@ -88,19 +85,20 @@ export function BananaOptionsPanel({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
           <Info size={13} />
-          {modelConfig.label} 高级参数
+          {t('bananaOptions.advanced', { model: modelConfig.label })}
         </div>
         <ParameterTipsTooltip tips={parameterTips} />
       </div>
 
       <p className="text-[11px] leading-relaxed" style={labelStyle}>
-        {modelConfig.description}
+        {t(modelConfig.descriptionKey)}
       </p>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <label className="text-[11px] font-medium" style={labelStyle}>思考等级</label>
+          <label className="text-[11px] font-medium" style={labelStyle}>{t('bananaOptions.thinkingLevel')}</label>
           <select
+            name="bananaThinkingLevel"
             value={capabilities.supportsThinkingLevelControl
               ? options.thinkingLevel ?? 'default'
               : 'default'}
@@ -110,18 +108,19 @@ export function BananaOptionsPanel({
             style={selectStyle}
           >
             <option value="default">
-              {capabilities.supportsThinkingLevelControl ? '默认 / minimal' : '模型自动管理'}
+              {capabilities.supportsThinkingLevelControl ? t('bananaOptions.defaultMinimal') : t('bananaOptions.modelManaged')}
             </option>
             {capabilities.supportsThinkingLevelControl && BANANA_THINKING_LEVEL_VALUES.map((thinkingLevel) => (
               <option key={thinkingLevel} value={thinkingLevel}>
-                {thinkingLevelLabels[thinkingLevel]}
+                {thinkingLevel === 'MINIMAL' ? t('bananaOptions.minimal') : t('bananaOptions.high')}
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-1.5">
-          <label className="text-[11px] font-medium" style={labelStyle}>参考图解析</label>
+          <label className="text-[11px] font-medium" style={labelStyle}>{t('bananaOptions.mediaResolution')}</label>
           <select
+            name="bananaMediaResolution"
             value={capabilities.supportsMediaResolutionControl
               ? options.mediaResolution ?? 'default'
               : 'default'}
@@ -131,7 +130,7 @@ export function BananaOptionsPanel({
             style={selectStyle}
           >
             <option value="default">
-              {capabilities.supportsMediaResolutionControl ? '默认' : '模型不支持'}
+              {capabilities.supportsMediaResolutionControl ? t('common.default') : t('bananaOptions.unsupported')}
             </option>
             {capabilities.supportsMediaResolutionControl && BANANA_MEDIA_RESOLUTION_VALUES.map((mediaResolution) => (
               <option key={mediaResolution} value={mediaResolution}>
@@ -144,6 +143,7 @@ export function BananaOptionsPanel({
         <div className="space-y-1.5">
           <label className="text-[11px] font-medium" style={labelStyle}>Search grounding</label>
           <select
+            name="bananaSearchGrounding"
             value={capabilities.supportsSearchGrounding && options.searchGrounding ? 'on' : 'off'}
             disabled={!capabilities.supportsSearchGrounding}
             onChange={(event) => setSearchGrounding(event.target.value as 'off' | 'on')}
@@ -151,10 +151,10 @@ export function BananaOptionsPanel({
             style={selectStyle}
           >
             <option value="off">
-              {capabilities.supportsSearchGrounding ? '关闭' : 'Lite 不支持'}
+              {capabilities.supportsSearchGrounding ? t('bananaOptions.searchOff') : t('bananaOptions.liteUnsupported')}
             </option>
             {capabilities.supportsSearchGrounding && (
-              <option value="on">开启 Google Search</option>
+              <option value="on">{t('bananaOptions.searchOn')}</option>
             )}
           </select>
         </div>

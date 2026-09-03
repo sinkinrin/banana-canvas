@@ -47,7 +47,7 @@ test('ProjectsPageView renders project list actions when ready', () => {
 
   assert.match(html, /海报项目/);
   assert.match(html, /新建项目/);
-  assert.match(html, /模型设置/);
+  assert.match(html, /应用设置/);
 });
 
 test('ProjectsPageView renders storage errors without hiding navigation context', () => {

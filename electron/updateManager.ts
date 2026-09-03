@@ -33,6 +33,7 @@ export type DesktopAutoUpdater = Pick<
 
 type UpdateLogLevel = 'info' | 'warn' | 'error';
 type UpdateActionSource = 'manual' | 'automatic';
+type UpdateMessageKey = 'checkBeforeDownload' | 'updateNotDownloaded';
 
 type DesktopUpdateManagerOptions = {
   updater: DesktopAutoUpdater;
@@ -41,6 +42,7 @@ type DesktopUpdateManagerOptions = {
   logger: (level: UpdateLogLevel, message: string) => void;
   promptToRestart: (info: DesktopUpdateInfo) => Promise<boolean>;
   beforeInstall: () => Promise<void>;
+  getMessage?: (key: UpdateMessageKey) => string;
   onStateChange?: (state: DesktopUpdateState) => void;
   initialDelayMs?: number;
   checkIntervalMs?: number;
@@ -48,6 +50,12 @@ type DesktopUpdateManagerOptions = {
 
 const DEFAULT_INITIAL_DELAY_MS = 10_000;
 const DEFAULT_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
+function getNativeDefaultMessage(key: UpdateMessageKey) {
+  return key === 'checkBeforeDownload'
+    ? '请先检查更新，确认有可用的新版本。'
+    : '更新尚未下载完成。';
+}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -81,6 +89,7 @@ export function createDesktopUpdateManager({
   logger,
   promptToRestart,
   beforeInstall,
+  getMessage = getNativeDefaultMessage,
   onStateChange,
   initialDelayMs = DEFAULT_INITIAL_DELAY_MS,
   checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
@@ -143,7 +152,7 @@ export function createDesktopUpdateManager({
       return getState();
     }
     if (!availableInfo) {
-      patchState({ phase: 'error', error: '请先检查更新，确认有可用的新版本。' });
+      patchState({ phase: 'error', error: getMessage('checkBeforeDownload') });
       return getState();
     }
 
@@ -310,7 +319,7 @@ export function createDesktopUpdateManager({
 
   const installNow = async () => {
     if (state.phase !== 'downloaded') {
-      patchState({ phase: 'error', error: '更新尚未下载完成。' });
+      patchState({ phase: 'error', error: getMessage('updateNotDownloaded') });
       return getState();
     }
     try {

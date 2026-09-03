@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 import { Edit3, ImagePlus, X } from 'lucide-react';
+import { useAppTranslation } from '../../i18n';
 
 type MaskCompareModalProps = {
   originalImageUrl: string;
@@ -18,6 +19,7 @@ export function MaskCompareModal({
   onContinueEdit,
   onUseAsReference,
 }: MaskCompareModalProps) {
+  const { t } = useAppTranslation();
   const content = (
     <div
       className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#16130F]/95 p-6 backdrop-blur-md"
@@ -30,7 +32,7 @@ export function MaskCompareModal({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold" style={{ color: '#EEE4CE' }}>局部编辑对比</h2>
+            <h2 className="text-lg font-bold" style={{ color: '#EEE4CE' }}>{t('mask.compareTitle')}</h2>
             {prompt && (
               <p className="mt-1 max-w-3xl text-sm" style={{ color: '#96836F' }}>{prompt}</p>
             )}
@@ -39,7 +41,7 @@ export function MaskCompareModal({
             type="button"
             onClick={onClose}
             className="rounded-xl p-2 text-red-300 transition-colors hover:bg-red-900/30"
-            title="关闭"
+            title={t('common.close')}
           >
             <X size={20} />
           </button>
@@ -48,18 +50,18 @@ export function MaskCompareModal({
         <div className="grid gap-4 md:grid-cols-2">
           <figure className="rounded-2xl border p-3" style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.14)' }}>
             <figcaption className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
-              原图
+              {t('mask.original')}
             </figcaption>
             <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl" style={{ background: '#0F0D0A' }}>
-              <img src={originalImageUrl} alt="原图" className="max-h-full max-w-full object-contain" />
+              <img src={originalImageUrl} alt={t('mask.original')} className="max-h-full max-w-full object-contain" />
             </div>
           </figure>
           <figure className="rounded-2xl border p-3" style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.24)' }}>
             <figcaption className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
-              新图
+              {t('mask.result')}
             </figcaption>
             <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl" style={{ background: '#0F0D0A' }}>
-              <img src={generatedImageUrl} alt="新图" className="max-h-full max-w-full object-contain" />
+              <img src={generatedImageUrl} alt={t('mask.result')} className="max-h-full max-w-full object-contain" />
             </div>
           </figure>
         </div>
@@ -72,7 +74,7 @@ export function MaskCompareModal({
             style={{ borderColor: 'rgba(242,193,78,0.2)', color: '#EEE4CE' }}
           >
             <ImagePlus size={16} />
-            以新图为参考
+            {t('mask.useResultAsReference')}
           </button>
           <button
             type="button"
@@ -81,7 +83,7 @@ export function MaskCompareModal({
             style={{ background: '#F2C14E', color: '#16130F' }}
           >
             <Edit3 size={16} />
-            继续编辑新图
+            {t('mask.continueEditing')}
           </button>
         </div>
       </section>

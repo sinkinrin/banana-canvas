@@ -1,4 +1,5 @@
 import { BookOpen, FolderOpen, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
+import { useAppTranslation } from '../../i18n';
 
 import { APP_VERSION } from '../../lib/appVersion';
 import type { ProjectMeta } from '../../lib/projects';
@@ -13,13 +14,13 @@ export type ProjectsListProps = {
   onOpenPromptLibrary?: () => void;
 };
 
-function formatProjectTime(value: string) {
-  if (!value) return '暂无保存记录';
+function formatProjectTime(value: string, locale: string, emptyLabel: string) {
+  if (!value) return emptyLabel;
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '暂无保存记录';
+  if (Number.isNaN(date.getTime())) return emptyLabel;
 
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -37,19 +38,22 @@ export function ProjectsList({
   onOpenSettings = () => {},
   onOpenPromptLibrary = () => {},
 }: ProjectsListProps) {
+  const { t, i18n } = useAppTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+
   return (
     <section className="min-h-screen px-6 py-8" style={{ background: '#16130F', color: '#EEE4CE' }}>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-baseline gap-2">
-              <h1 className="text-2xl font-bold">香蕉画图</h1>
+              <h1 className="text-2xl font-bold">{t('app.name')}</h1>
               <span className="text-xs font-medium" style={{ color: '#96836F' }}>
                 v{APP_VERSION}
               </span>
             </div>
             <p className="mt-1 text-sm" style={{ color: '#96836F' }}>
-              本地项目
+              {t('app.localProjects')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -60,16 +64,17 @@ export function ProjectsList({
               style={{ background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE' }}
             >
               <BookOpen size={16} />
-              提示词管理
+              {t('promptLibrary.title')}
             </button>
             <button
               type="button"
+              data-app-settings-entry="true"
               onClick={onOpenSettings}
               className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
               style={{ background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE' }}
             >
               <Settings size={16} />
-              模型设置
+              {t('settings.title')}
             </button>
             <button
               type="button"
@@ -78,7 +83,7 @@ export function ProjectsList({
               style={{ background: '#F2C14E', color: '#16130F' }}
             >
               <Plus size={16} />
-              新建项目
+              {t('projects.new')}
             </button>
           </div>
         </header>
@@ -89,9 +94,9 @@ export function ProjectsList({
             style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.2)' }}
           >
             <FolderOpen size={40} style={{ color: '#F2C14E' }} />
-            <h2 className="mt-4 text-xl font-semibold">还没有项目</h2>
+            <h2 className="mt-4 text-xl font-semibold">{t('projects.noProjects')}</h2>
             <p className="mt-2 max-w-sm text-sm leading-6" style={{ color: '#96836F' }}>
-              创建第一个项目，开始保存独立的画布和图像资产。
+              {t('projects.noProjectsDescription')}
             </p>
             <button
               type="button"
@@ -100,7 +105,7 @@ export function ProjectsList({
               style={{ background: '#F2C14E', color: '#16130F' }}
             >
               <Plus size={16} />
-              创建第一个项目
+              {t('projects.createFirst')}
             </button>
           </div>
         ) : (
@@ -117,7 +122,9 @@ export function ProjectsList({
                       {project.name}
                     </h2>
                     <p className="mt-1 text-xs" style={{ color: '#96836F' }}>
-                      更新于 {formatProjectTime(project.updatedAt)}
+                      {t('projects.updatedAt', {
+                        time: formatProjectTime(project.updatedAt, locale, t('projects.noSaveRecord')),
+                      })}
                     </p>
                   </div>
                   <FolderOpen size={18} className="shrink-0" style={{ color: '#F2C14E' }} />
@@ -130,11 +137,11 @@ export function ProjectsList({
                     className="flex-1 rounded-lg px-3 py-2 text-sm font-medium"
                     style={{ background: 'rgba(242,193,78,0.14)', color: '#F2C14E' }}
                   >
-                    打开
+                    {t('projects.open')}
                   </button>
                   <button
                     type="button"
-                    aria-label={`重命名 ${project.name}`}
+                    aria-label={t('projects.renameAria', { name: project.name })}
                     onClick={() => onRename(project.id)}
                     className="rounded-lg p-2"
                     style={{ background: '#141210', color: '#96836F' }}
@@ -143,7 +150,7 @@ export function ProjectsList({
                   </button>
                   <button
                     type="button"
-                    aria-label={`删除 ${project.name}`}
+                    aria-label={t('projects.deleteAria', { name: project.name })}
                     onClick={() => onDelete(project.id)}
                     className="rounded-lg p-2"
                     style={{ background: '#141210', color: '#D97B3A' }}

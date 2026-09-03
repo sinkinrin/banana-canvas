@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useEffect, useState, useRef } from 'react';
+import { useAppTranslation } from '../i18n';
 import { useStore as useZustandStore } from 'zustand';
 import {
   ReactFlow,
@@ -22,6 +23,7 @@ import { BookOpen, Plus, Sparkles, Undo2, Redo2, LayoutGrid, Maximize2 } from 'l
 import { PromptLibraryDialog } from './prompts/PromptLibraryDialog';
 
 function CanvasInner() {
+  const { t } = useAppTranslation();
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
   const onNodesChange = useStore((state) => state.onNodesChange);
@@ -204,9 +206,9 @@ function CanvasInner() {
               <Sparkles size={20} />
             </div>
             <div>
-              <h1 className="font-bold text-white text-lg tracking-tight">香蕉画图</h1>
+              <h1 className="font-bold text-white text-lg tracking-tight">{t('app.name')}</h1>
               <p className="text-xs font-medium" style={{color: '#96836F'}}>
-                无限画布 AI 创作工具 · v{APP_VERSION}
+                {t('app.tagline')} · v{APP_VERSION}
               </p>
             </div>
           </div>
@@ -220,7 +222,7 @@ function CanvasInner() {
               style={{ background: 'rgba(29,26,20,0.92)', border: '1px solid rgba(242,193,78,0.15)', color: '#EEE4CE' }}
             >
               <BookOpen size={15} style={{ color: '#F2C14E' }} />
-              提示词库
+              {t('canvas.promptLibrary')}
             </button>
             <button
               type="button"
@@ -228,7 +230,7 @@ function CanvasInner() {
               className={`backdrop-blur-md px-4 py-2 rounded-xl shadow-sm text-xs font-medium transition-colors w-fit ${confirmClear ? 'text-red-300 bg-red-900/60 border-red-500/30 border' : 'text-red-400 hover:bg-red-900/40'}`}
               style={confirmClear ? undefined : {background: 'rgba(29,26,20,0.92)', border: '1px solid rgba(242,193,78,0.15)'}}
             >
-              {confirmClear ? '确认清空?' : '清空画布'}
+              {confirmClear ? t('canvas.confirmClear') : t('canvas.clear')}
             </button>
 
             <div className="p-1 rounded-xl shadow-sm flex items-center gap-1" style={{background: 'rgba(29,26,20,0.92)', backdropFilter: 'blur(16px)', border: '1px solid rgba(242,193,78,0.15)'}}>
@@ -237,7 +239,7 @@ function CanvasInner() {
                 disabled={pastStates.length === 0}
                 className="p-1.5 hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 style={{color: '#EEE4CE'}}
-                title="撤销 (Undo)"
+                title={`${t('canvas.undo')} (Undo)`}
               >
                 <Undo2 size={16} />
               </button>
@@ -246,7 +248,7 @@ function CanvasInner() {
                 disabled={futureStates.length === 0}
                 className="p-1.5 hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 style={{color: '#EEE4CE'}}
-                title="重做 (Redo)"
+                title={`${t('canvas.redo')} (Redo)`}
               >
                 <Redo2 size={16} />
               </button>
@@ -254,7 +256,7 @@ function CanvasInner() {
                 onClick={handleAutoLayout}
                 className="p-1.5 hover:bg-[rgba(242,193,78,0.08)] rounded-lg transition-colors"
                 style={{color: '#EEE4CE'}}
-                title="自动整理布局"
+                title={t('canvas.autoLayout')}
               >
                 <LayoutGrid size={16} />
               </button>
@@ -269,7 +271,7 @@ function CanvasInner() {
             style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(242,193,78,0.1)'}}
           >
             <Plus size={20} style={{color: '#EEE4CE'}} />
-            <span className="font-medium" style={{color: '#EEE4CE'}}>新建创作节点</span>
+            <span className="font-medium" style={{color: '#EEE4CE'}}>{t('canvas.newPromptNode')}</span>
           </button>
         </Panel>
       </ReactFlow>
@@ -298,7 +300,7 @@ function CanvasInner() {
             style={{color: '#EEE4CE'}}
           >
             <Plus size={15} />
-            新建创作节点
+            {t('canvas.newPromptNode')}
           </button>
           <button
             onClick={() => {
@@ -309,7 +311,7 @@ function CanvasInner() {
             style={{color: '#EEE4CE'}}
           >
             <Maximize2 size={15} />
-            适应视口 (F)
+            {t('canvas.fitView')}
           </button>
           <div className="my-1 border-t" style={{borderColor: 'rgba(242,193,78,0.1)'}} />
           <button
@@ -321,7 +323,7 @@ function CanvasInner() {
             style={{color: '#EEE4CE'}}
           >
             <LayoutGrid size={15} />
-            自动整理布局
+            {t('canvas.autoLayout')}
           </button>
         </div>
       )}

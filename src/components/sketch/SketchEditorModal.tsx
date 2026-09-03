@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAppTranslation } from '../../i18n';
 import {
   ArrowUpRight,
   Check,
@@ -40,26 +41,26 @@ type SketchEditorModalProps = {
 
 const TOOL_OPTIONS: Array<{
   id: ToolId;
-  label: string;
+  labelKey: string;
   icon: typeof Pencil;
 }> = [
-  { id: 'draw', label: '画笔', icon: Pencil },
-  { id: 'eraser', label: '橡皮', icon: Eraser },
-  { id: 'select', label: '选择', icon: MousePointer2 },
-  { id: 'line', label: '直线', icon: Minus },
-  { id: 'arrow', label: '箭头', icon: ArrowUpRight },
+  { id: 'draw', labelKey: 'sketch.tools.draw', icon: Pencil },
+  { id: 'eraser', labelKey: 'sketch.tools.eraser', icon: Eraser },
+  { id: 'select', labelKey: 'sketch.tools.select', icon: MousePointer2 },
+  { id: 'line', labelKey: 'sketch.tools.line', icon: Minus },
+  { id: 'arrow', labelKey: 'sketch.tools.arrow', icon: ArrowUpRight },
 ];
 
-const COLOR_OPTIONS: Array<{ id: ColorId; label: string; color: string }> = [
-  { id: 'black', label: '黑色', color: '#1C1B18' },
-  { id: 'blue', label: '蓝色', color: '#2F80EC' },
-  { id: 'red', label: '红色', color: '#D64545' },
+const COLOR_OPTIONS: Array<{ id: ColorId; labelKey: string; color: string }> = [
+  { id: 'black', labelKey: 'sketch.colors.black', color: '#1C1B18' },
+  { id: 'blue', labelKey: 'sketch.colors.blue', color: '#2F80EC' },
+  { id: 'red', labelKey: 'sketch.colors.red', color: '#D64545' },
 ];
 
-const SIZE_OPTIONS: Array<{ id: SizeId; label: string }> = [
-  { id: 's', label: '细' },
-  { id: 'm', label: '中' },
-  { id: 'l', label: '粗' },
+const SIZE_OPTIONS: Array<{ id: SizeId; labelKey: string }> = [
+  { id: 's', labelKey: 'sketch.widths.s' },
+  { id: 'm', labelKey: 'sketch.widths.m' },
+  { id: 'l', labelKey: 'sketch.widths.l' },
 ];
 
 function snapshotHasShapes(snapshot?: Snapshot) {
@@ -80,6 +81,7 @@ export function SketchEditorModal({
   onClose,
   onApply,
 }: SketchEditorModalProps) {
+  const { t } = useAppTranslation();
   const artboard = useMemo(() => getSketchArtboard(aspectRatio), [aspectRatio]);
   const numericRatio = getAspectRatioValue(aspectRatio);
   const cleanupEditorListenersRef = useRef<(() => void) | null>(null);
@@ -176,7 +178,7 @@ export function SketchEditorModal({
         aspectRatio,
       });
     } catch (applyError) {
-      setError(applyError instanceof Error ? applyError.message : '保存草图失败');
+      setError(applyError instanceof Error ? applyError.message : t('sketch.saveFailed'));
     } finally {
       setIsApplying(false);
     }
@@ -198,24 +200,24 @@ export function SketchEditorModal({
       <section
         role="dialog"
         aria-modal="true"
-        aria-label="构图草图编辑器"
+        aria-label={t('sketch.editorAria')}
         className="grid max-h-[96vh] w-full max-w-7xl grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden rounded-3xl border shadow-2xl"
         style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.22)' }}
       >
         <header className="flex items-center justify-between gap-4 border-b px-5 py-4" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
           <div>
-            <h2 className="text-lg font-bold" style={{ color: '#EEE4CE' }}>构图草图</h2>
+            <h2 className="text-lg font-bold" style={{ color: '#EEE4CE' }}>{t('sketch.title')}</h2>
             <p className="mt-1 text-xs" style={{ color: '#96836F' }}>
-              当前画幅 {aspectRatio}；画板边界就是发送给 AI 的完整构图范围。
+              {t('sketch.aspectDescription', { aspectRatio })}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-xl p-2 text-red-300 hover:bg-red-900/30" title="关闭草图编辑器">
+          <button type="button" onClick={onClose} className="rounded-xl p-2 text-red-300 hover:bg-red-900/30" title={t('sketch.close')}>
             <X size={20} />
           </button>
         </header>
 
         <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3" style={{ borderColor: 'rgba(242,193,78,0.1)', background: '#141210' }}>
-          {TOOL_OPTIONS.map(({ id, label, icon: Icon }) => (
+          {TOOL_OPTIONS.map(({ id, labelKey, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -224,15 +226,15 @@ export function SketchEditorModal({
               style={activeTool === id
                 ? { background: '#F2C14E', color: '#16130F' }
                 : { background: '#1D1A14', color: '#EEE4CE' }}
-              title={label}
+              title={t(labelKey)}
             >
               <Icon size={15} />
-              {label}
+              {t(labelKey)}
             </button>
           ))}
 
           <span className="mx-1 h-6 w-px" style={{ background: 'rgba(242,193,78,0.15)' }} />
-          {COLOR_OPTIONS.map(({ id, label, color }) => (
+          {COLOR_OPTIONS.map(({ id, labelKey, color }) => (
             <button
               key={id}
               type="button"
@@ -243,13 +245,13 @@ export function SketchEditorModal({
                 borderColor: activeColor === id ? '#F2C14E' : 'rgba(238,228,206,0.25)',
                 boxShadow: activeColor === id ? '0 0 0 2px #16130F, 0 0 0 3px #F2C14E' : undefined,
               }}
-              aria-label={label}
-              title={label}
+              aria-label={t(labelKey)}
+              title={t(labelKey)}
             />
           ))}
 
           <span className="mx-1 h-6 w-px" style={{ background: 'rgba(242,193,78,0.15)' }} />
-          {SIZE_OPTIONS.map(({ id, label }) => (
+          {SIZE_OPTIONS.map(({ id, labelKey }) => (
             <button
               key={id}
               type="button"
@@ -259,7 +261,7 @@ export function SketchEditorModal({
                 ? { background: 'rgba(242,193,78,0.18)', color: '#F2C14E' }
                 : { color: '#96836F' }}
             >
-              {label}
+              {t(labelKey)}
             </button>
           ))}
 
@@ -270,7 +272,7 @@ export function SketchEditorModal({
             onClick={() => editor?.store.undo()}
             className="rounded-lg p-2 disabled:opacity-30"
             style={{ color: '#EEE4CE' }}
-            title="撤销"
+            title={t('common.undo')}
           >
             <Undo2 size={16} />
           </button>
@@ -280,7 +282,7 @@ export function SketchEditorModal({
             onClick={() => editor?.store.redo()}
             className="rounded-lg p-2 disabled:opacity-30"
             style={{ color: '#EEE4CE' }}
-            title="重做"
+            title={t('common.redo')}
           >
             <Redo2 size={16} />
           </button>
@@ -289,7 +291,7 @@ export function SketchEditorModal({
             disabled={!hasContent}
             onClick={() => editor?.clearBoard()}
             className="rounded-lg p-2 text-red-300 disabled:opacity-30"
-            title="清空草图（可撤销）"
+            title={t('sketch.clearUndoable')}
           >
             <Trash2 size={16} />
           </button>
@@ -304,7 +306,7 @@ export function SketchEditorModal({
               background: '#fbf9f4',
               boxShadow: '0 18px 50px rgba(0,0,0,0.45)',
             }}
-            aria-label={`${aspectRatio} 草图画板`}
+            aria-label={t('sketch.canvasAria', { aspectRatio })}
           >
             <Quickdraw
               snapshot={initialSnapshot}
@@ -323,19 +325,20 @@ export function SketchEditorModal({
         <footer className="flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
           <div>
             <p className="text-xs leading-5" style={{ color: '#96836F' }}>
-              草图会作为构图参考图发送；提示词中仍建议写明人物、场景和最终风格。
+              {t('sketch.hint')}
             </p>
             {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
           </div>
           <button
             type="button"
+            data-sketch-action="apply"
             disabled={!editor || !hasContent || isApplying}
             onClick={handleApply}
             className="inline-flex min-w-36 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40"
             style={{ background: '#F2C14E', color: '#16130F' }}
           >
             {isApplying ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-            应用为参考图
+            {t('sketch.apply')}
           </button>
         </footer>
       </section>

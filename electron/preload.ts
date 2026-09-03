@@ -7,6 +7,7 @@ import {
   UPDATE_INSTALL_CHANNEL,
   UPDATE_SET_AUTOMATIC_CHANNEL,
   UPDATE_STATE_CHANGED_CHANNEL,
+  SET_APP_LANGUAGE_CHANNEL,
   WRITE_IMAGE_TO_CLIPBOARD_CHANNEL,
 } from './ipcChannels';
 
@@ -14,6 +15,9 @@ const updateSubscriptions = new Map<string, (_event: Electron.IpcRendererEvent, 
 let nextUpdateSubscriptionId = 0;
 
 contextBridge.exposeInMainWorld('bananaDesktop', Object.freeze({
+  setLanguage: async (language: string) => {
+    await ipcRenderer.invoke(SET_APP_LANGUAGE_CHANNEL, language);
+  },
   copyImageToClipboard: async (imageDataUrl: string) => {
     await ipcRenderer.invoke(WRITE_IMAGE_TO_CLIPBOARD_CHANNEL, imageDataUrl);
   },

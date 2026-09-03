@@ -64,6 +64,7 @@ export function validateVersionMetadata(rootDir, expectedTag) {
   const packageLock = readJson(path.join(rootDir, 'package-lock.json'));
   const changelog = readFileSync(path.join(rootDir, 'CHANGELOG.md'), 'utf8');
   const readme = readFileSync(path.join(rootDir, 'README.md'), 'utf8');
+  const readmeCn = readFileSync(path.join(rootDir, 'README_CN.md'), 'utf8');
   const version = packageJson.version;
   const errors = [];
 
@@ -80,9 +81,13 @@ export function validateVersionMetadata(rootDir, expectedTag) {
     errors.push('package-lock.json 包名与 package.json 不一致。');
   }
 
-  const readmeVersion = '当前版本：`' + version + '`';
+  const readmeVersion = 'Current version: `' + version + '`';
   if (!readme.includes(readmeVersion)) {
-    errors.push('README.md 当前版本未同步为 ' + version + '。');
+    errors.push('README.md current version was not updated to ' + version + '.');
+  }
+  const readmeCnVersion = '当前版本：`' + version + '`';
+  if (!readmeCn.includes(readmeCnVersion)) {
+    errors.push('README_CN.md 当前版本未同步为 ' + version + '。');
   }
 
   try {

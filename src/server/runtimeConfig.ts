@@ -10,6 +10,7 @@ import {
   type Image2ProxyMode,
 } from '../lib/imageModels';
 import type { EnvLike } from './proxy';
+import { DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL } from '../lib/promptOptimizer';
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_DATA_DIR = 'data';
@@ -23,6 +24,7 @@ const STARTUP_ENV_KEYS = ['PORT', 'NODE_ENV', 'BANANA_DATA_DIR'] as const;
 
 const RUNTIME_ENV_KEYS = [
   'GEMINI_API_KEY',
+  'GEMINI_PROMPT_OPTIMIZER_MODEL',
   'GEMINI_HTTPS_PROXY',
   'GEMINI_PROXY_ENABLED',
   'IMAGE2_BASE_URL',
@@ -68,6 +70,7 @@ export type RuntimeConfigLogger = (entry: RuntimeConfigLogEntry) => void;
 export type RuntimeConfig = {
   env: EnvLike;
   geminiApiKey: string;
+  geminiPromptOptimizerModel: string;
   geminiProxyUrl: string;
   geminiProxyEnabled: boolean;
   startup: {
@@ -323,6 +326,8 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
     config: {
       env,
       geminiApiKey: env.GEMINI_API_KEY ?? '',
+      geminiPromptOptimizerModel:
+        env.GEMINI_PROMPT_OPTIMIZER_MODEL ?? DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL,
       geminiProxyUrl: env.GEMINI_HTTPS_PROXY ?? '',
       geminiProxyEnabled: geminiProxyEnabled && Boolean(env.GEMINI_HTTPS_PROXY),
       startup: {

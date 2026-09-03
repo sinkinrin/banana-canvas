@@ -1,6 +1,7 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, Edit3, GitCompare, CircleAlert } from 'lucide-react';
 import React, { useState } from 'react';
+import { useAppTranslation } from '../../i18n';
 import { AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { ImageViewer } from '../ImageViewer';
@@ -31,6 +32,7 @@ import {
 export { canRerunImageNode, getRerunReferenceImages } from './useImageNodeActions';
 
 export function ImageNode({ id, data }: NodeProps<AppNode>) {
+  const { t } = useAppTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const [showViewer, setShowViewer] = useState(false);
   const [showMaskEditor, setShowMaskEditor] = useState(false);
@@ -73,7 +75,11 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const sourceImageUrl = resolveSourceImageUrl(data, assets);
   const imageModel = normalizeImageModel(data.imageModel);
   const imageModelLabel = getImageModelConfig(imageModel).label;
-  const generationTitle = data.generationTitle || `${imageModelLabel} | ${data.prompt?.slice(0, 24) || '生成任务'}`;
+  const generationTitle = data.generationMode === 'mask-edit'
+    ? t('promptNode.maskGenerationTitle', {
+        prompt: data.prompt?.slice(0, 28) || t('promptNode.generationTask'),
+      })
+    : data.generationTitle || `${imageModelLabel} | ${data.prompt?.slice(0, 24) || t('promptNode.generationTask')}`;
   const canRerun = canRerunImageNode(data);
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -150,7 +156,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
         console.error('Rerun failed:', err);
-        setRerunError(err instanceof Error ? err.message : '重新生成失败，请重试');
+        setRerunError(err instanceof Error ? err.message : t('imageNode.rerunFailed'));
       }
     } finally {
       rerunAbortRef.current = null;
@@ -221,7 +227,6 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         isLoading: true,
         error: undefined,
         createdAt,
-        generationTitle: `Image2 局部编辑 | ${maskPrompt.slice(0, 28) || '生成任务'}`,
       }
     );
 
@@ -261,7 +266,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       });
       setShowMaskEditor(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '局部编辑生成失败';
+      const errorMessage = error instanceof Error ? error.message : t('promptNode.errors.maskGeneration');
       updateNodeData(placeholderNodeId, {
         isLoading: false,
         error: errorMessage,
@@ -314,7 +319,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
           <>
             <img
               src={imageUrl}
-              alt={data.prompt || 'Generated image'}
+              alt={data.prompt || t('imageNode.generatedAlt')}
               className="max-w-[512px] max-h-[512px] object-contain"
             />
 
@@ -328,25 +333,26 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
               >
                 <button
                   type="button"
+                  data-image-action="copy"
                   onClick={handleCopyImage}
                   className={`p-2.5 hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all flex items-center gap-1.5 ${copyImageFailed ? 'text-red-400' : 'text-white'}`}
-                  title={copyImageFailed ? '复制失败，请重试' : copiedImage ? '图片已复制' : '复制图片'}
+                  title={copyImageFailed ? t('common.copyFailedRetry') : copiedImage ? t('imageNode.imageCopied') : t('imageNode.copyImage')}
                 >
                   {copyImageFailed ? <CircleAlert size={18} /> : copiedImage ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
-                  {copyImageFailed && <span className="text-xs whitespace-nowrap">复制失败</span>}
+                  {copyImageFailed && <span className="text-xs whitespace-nowrap">{t('common.copyFailed')}</span>}
                 </button>
                 <button
                   type="button"
                   onClick={handleDownload}
                   className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                  title="下载"
+                  title={t('imageNode.download')}
                 >
                   <Download size={18} />
                 </button>
                 <button
                   type="button"
                   className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                  title="全屏查看"
+                  title={t('imageNode.fullscreen')}
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowViewer(true);
@@ -357,10 +363,11 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 {canRerun && (
                   <button
                     type="button"
+                    data-image-action="rerun"
                     onClick={handleRerun}
                     className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                    title={rerunError ? '重新生成失败，点击重试' : isRegenerating ? '正在重新生成' : '重新生成'}
-                    aria-label="重新生成"
+                    title={rerunError ? t('imageNode.rerunFailedRetry') : isRegenerating ? t('imageNode.rerunning') : t('imageNode.rerun')}
+                    aria-label={t('imageNode.rerunAria')}
                     disabled={isRegenerating}
                   >
                     <RefreshCw size={18} className={isRegenerating ? 'animate-spin' : ''} />
@@ -370,7 +377,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                   type="button"
                   onClick={handleUseAsReference}
                   className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                  title="以此为参考新建节点"
+                  title={t('imageNode.useAsReference')}
                 >
                   <Wand2 size={18} />
                 </button>
@@ -381,7 +388,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                     setShowMaskEditor(true);
                   }}
                   className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                  title="局部编辑"
+                  title={t('imageNode.maskEdit')}
                 >
                   <Edit3 size={18} />
                 </button>
@@ -393,7 +400,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                       setShowCompare(true);
                     }}
                     className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                    title="对比原图和新图"
+                    title={t('imageNode.compare')}
                   >
                     <GitCompare size={18} />
                   </button>
@@ -402,7 +409,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                   type="button"
                   onClick={handleDelete}
                   className="p-2.5 text-white hover:bg-[rgba(239,68,68,0.15)] rounded-xl transition-all"
-                  title="删除"
+                  title={t('common.delete')}
                 >
                   <Trash2 size={18} />
                 </button>
@@ -410,6 +417,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
             </div>
             {(isRegenerating || rerunError || rerunSucceeded) && (
               <div
+                data-rerun-status={rerunError ? 'error' : rerunSucceeded ? 'success' : 'loading'}
                 className="pointer-events-none absolute bottom-3 left-1/2 z-20 max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full px-3 py-1.5 text-center text-xs shadow-lg"
                 style={{
                   background: 'rgba(22,19,15,0.92)',
@@ -419,12 +427,12 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 role="status"
                 aria-live="polite"
               >
-                {rerunError || (rerunSucceeded ? '已重新生成' : '正在重新生成…')}
+                {rerunError || (rerunSucceeded ? t('imageNode.rerunSucceeded') : `${t('imageNode.rerunning')}…`)}
               </div>
             )}
           </>
         ) : (
-          <div className="text-sm" style={{color: '#5C4E3E'}}>无图像数据</div>
+          <div className="text-sm" style={{color: '#5C4E3E'}}>{t('imageNode.noImage')}</div>
         )}
       </div>
 
@@ -445,7 +453,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
             style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)', color: copyPromptFailed ? '#F28B82' : '#96836F'}}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#F2C14E'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.35)'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = copyPromptFailed ? '#F28B82' : '#96836F'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.15)'; }}
-            title={copyPromptFailed ? '提示词复制失败，请重试' : copiedPrompt ? '提示词已复制' : '复制提示词'}
+            title={copyPromptFailed ? t('imageNode.promptCopyFailed') : copiedPrompt ? t('imageNode.promptCopied') : t('imageNode.copyPrompt')}
           >
             {copyPromptFailed ? <CircleAlert size={14} /> : copiedPrompt ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
           </button>
@@ -465,7 +473,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       </AnimatePresence>
       {showMaskEditor && imageUrl && getInlineImage() && (
         <MaskEditorModal
-          title="局部编辑生成图"
+          title={t('imageNode.maskEditGenerated')}
           sourceImage={getInlineImage()!}
           initialPrompt={data.sourcePrompt || data.prompt || ''}
           onClose={() => setShowMaskEditor(false)}

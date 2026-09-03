@@ -11,6 +11,7 @@ import {
   watchRuntimeEnvFile,
   type RuntimeConfigLogEntry,
 } from './runtimeConfig';
+import { DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL } from '../lib/promptOptimizer';
 
 function validImage2Env(overrides: Record<string, string | undefined> = {}) {
   return {
@@ -64,6 +65,24 @@ test('Banana proxy stays disabled until both URL and explicit opt-in are present
     GEMINI_PROXY_ENABLED: 'true',
   })).get();
   assert.equal(enabled.geminiProxyEnabled, true);
+});
+
+test('prompt optimization defaults to Gemini 3.8 Flash and supports runtime overrides', () => {
+  const manager = createRuntimeConfigManager(validImage2Env());
+  assert.equal(
+    manager.get().geminiPromptOptimizerModel,
+    DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL
+  );
+
+  const result = manager.reload(validImage2Env({
+    GEMINI_PROMPT_OPTIMIZER_MODEL: 'custom-optimizer-model',
+  }));
+  assert.equal(result.ok, true);
+  assert.equal(manager.get().geminiPromptOptimizerModel, 'custom-optimizer-model');
+
+  const reset = manager.reload(validImage2Env({ GEMINI_PROMPT_OPTIMIZER_MODEL: '' }));
+  assert.equal(reset.ok, true);
+  assert.equal(manager.get().geminiPromptOptimizerModel, DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL);
 });
 
 test('runtime config recovery drops invalid inherited fields and preserves valid secrets', () => {

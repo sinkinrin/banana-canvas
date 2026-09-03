@@ -2,6 +2,8 @@ type ParameterTipsTooltipProps = {
   tips: string[];
 };
 
+import { useAppTranslation } from '../../i18n';
+
 const tooltipStyle = {
   background: 'rgba(20,18,16,0.98)',
   border: '1px solid rgba(242,193,78,0.18)',
@@ -11,12 +13,13 @@ const tooltipStyle = {
 const tipStyle = { color: '#B8A07E' };
 
 export function ParameterTipsTooltip({ tips }: ParameterTipsTooltipProps) {
+  const { t } = useAppTranslation();
   return (
     <div className="group relative inline-flex">
       <button
         type="button"
-        aria-label="参数说明"
-        title="参数说明"
+        aria-label={t('common.parameterHelp')}
+        title={t('common.parameterHelp')}
         className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold transition-colors hover:bg-[#F2C14E]/15 focus:outline-none focus:ring-1 focus:ring-[#F2C14E]/60"
         style={{
           background: 'rgba(242,193,78,0.08)',

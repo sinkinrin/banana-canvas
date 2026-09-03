@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-03
+
+### 新增
+
+- 应用界面新增 English / 简体中文切换，首次启动跟随系统语言，并在本机记住用户选择。
+
+### 改进
+
+- 将界面文案集中到类型一致的 i18n 资源，覆盖项目、画布、节点、提示词库、设置、更新、蒙版与构图草图流程。
+- 提示词优化默认改用正式版 `gemini-3.8-flash`，并支持在应用设置或 `.env` 中自定义模型。
+
+### 文档
+
+- 默认 README 改为精简英文首页并高亮中文入口；新增 `README_CN.md`，把配置与开发细节拆分到独立文档。
+
 ## [0.5.1] - 2026-09-03
 
 ### 改进
@@ -112,7 +127,8 @@
 - 改进 Image2 请求、代理、取消、校验与生成结果处理。
 - 增强本地项目资产持久化与可恢复删除。
 
-[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.1...v0.4.0

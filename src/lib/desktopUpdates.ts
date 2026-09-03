@@ -38,8 +38,14 @@ export type DesktopUpdateBridge = {
 };
 
 type BananaDesktopBridge = {
+  setLanguage?: (language: string) => Promise<void>;
   updates?: DesktopUpdateBridge;
 };
+
+export function notifyDesktopLanguage(language: string) {
+  return (globalThis as typeof globalThis & { bananaDesktop?: BananaDesktopBridge })
+    .bananaDesktop?.setLanguage?.(language);
+}
 
 export function getDesktopUpdateBridge() {
   return (globalThis as typeof globalThis & { bananaDesktop?: BananaDesktopBridge })

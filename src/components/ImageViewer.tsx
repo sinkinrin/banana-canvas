@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useAppTranslation } from '../i18n';
 import { X, ZoomIn, ZoomOut, Download, Copy, Check, CircleAlert } from 'lucide-react';
 import { motion } from 'motion/react';
 import { copyImageToClipboard } from '../lib/clipboard';
@@ -12,6 +13,7 @@ interface ImageViewerProps {
 }
 
 export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
+  const { t } = useAppTranslation();
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -106,7 +108,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             type="button"
             onClick={() => setScale(prev => Math.max(0.5, prev - 0.2))}
             className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
-            title="缩小"
+            title={t('common.zoomOut')}
           >
             <ZoomOut size={20} />
           </button>
@@ -117,7 +119,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             type="button"
             onClick={() => setScale(prev => Math.min(5, prev + 0.2))}
             className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
-            title="放大"
+            title={t('common.zoomIn')}
           >
             <ZoomIn size={20} />
           </button>
@@ -126,16 +128,16 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             type="button"
             onClick={handleCopy}
             className={`p-2 hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors flex items-center gap-2 ${copyFailed ? 'text-red-400' : 'text-white'}`}
-            title={copyFailed ? '复制失败，请重试' : copied ? '图片已复制' : '复制图片'}
+            title={copyFailed ? t('common.copyFailedRetry') : copied ? t('imageNode.imageCopied') : t('imageNode.copyImage')}
           >
             {copyFailed ? <CircleAlert size={20} /> : copied ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}
-            {copyFailed && <span className="text-xs">复制失败</span>}
+            {copyFailed && <span className="text-xs">{t('common.copyFailed')}</span>}
           </button>
           <button
             type="button"
             onClick={handleDownload}
             className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
-            title="下载图片"
+            title={t('common.download')}
           >
             <Download size={20} />
           </button>
@@ -144,7 +146,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             type="button"
             onClick={onClose}
             className="p-2 text-red-400 hover:bg-red-900/40 rounded-xl transition-colors"
-            title="关闭"
+            title={t('common.close')}
           >
             <X size={20} />
           </button>
@@ -168,7 +170,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
           >
             <img
               src={imageUrl}
-              alt={prompt || 'Generated image'}
+              alt={prompt || t('imageNode.generatedAlt')}
               className="max-w-[90vw] max-h-[80vh] object-contain shadow-2xl rounded-lg select-none"
               draggable={false}
             />

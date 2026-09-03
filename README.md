@@ -1,371 +1,129 @@
 <div align="center">
-  <img src="docs/images/canvas-workflow.png" alt="香蕉画图画布工作流预览" width="1200" />
+  <img src="docs/images/canvas-workflow.png" alt="Banana Canvas workflow" width="1200" />
+
+  <h1>Banana Canvas</h1>
+  <p>A local-first infinite canvas for iterative AI image creation.</p>
 </div>
 
-# 香蕉画图
+> [!IMPORTANT]
+> 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-当前版本：`0.5.1`
+Current version: `0.6.0`
 
-版本变更见 [CHANGELOG.md](CHANGELOG.md)，维护者发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
+See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
-一个类似 Flowith 的无限画布 AI 图像生成工具。你可以在画布上搭建提示词节点和图片节点，把一轮生成的结果继续作为下一轮参考图，逐步迭代出更复杂的视觉方案。
+Banana Canvas turns image generation into a visual workflow. Arrange prompt and image nodes on an infinite canvas, connect results as references, branch ideas, and keep every iteration inside a local project.
 
-## 项目预览
+## Highlights
 
-<img src="docs/images/project-list.png" alt="香蕉画图项目列表" width="900" />
+- **Visual generation workflow** — build and rearrange prompt-to-image flows with React Flow.
+- **Multiple image models** — use Image2 by default, or switch to Banana 2, Banana 2 Lite, and Banana Pro.
+- **Reference-driven iteration** — upload or paste up to four references, then reuse any result in the next step.
+- **Composition sketches** — draw subject positions, actions, arrows, and framing before generating.
+- **Mask editing** — paint the area to change and compare the Image2 result with the original.
+- **Reusable prompt library** — save, search, tag, and apply prompts across projects.
+- **Local-first projects** — persist canvases, relationships, and image assets on your own machine.
+- **English and Simplified Chinese UI** — follow the system language on first launch and remember manual changes.
 
-<img src="docs/images/prompt-settings.png" alt="提示词节点和模型参数设置" width="900" />
+## Preview
 
-<img src="docs/images/mask-editor.png" alt="Image2 局部编辑蒙版界面" width="900" />
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/project-list.png" alt="Local project list" /></td>
+    <td width="50%"><img src="docs/images/prompt-settings.png" alt="Prompt node and model settings" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Local projects</sub></td>
+    <td align="center"><sub>Prompt and model controls</sub></td>
+  </tr>
+</table>
 
-## 适合场景
+<details>
+  <summary><strong>See the Image2 mask editor</strong></summary>
+  <br />
+  <img src="docs/images/mask-editor.png" alt="Image2 mask editor" width="900" />
+</details>
 
-- 多轮视觉探索：把满意的生成结果继续作为参考图，逐步收敛风格、构图和细节。
-- 海报、KV、角色设定、概念图等方案推演：用画布保留不同分支和中间结果。
-- 局部编辑工作流：在已有图片上涂出需要修改的区域，再用 Image2 生成局部变化。
-- 构图草图：先手绘人物位置、动作和画面关系，再把草图作为视觉提示交给生图模型。
-- 本地项目管理：按项目保存画布、节点关系和图片资产，便于回看和继续创作。
+## Quick start
 
-## 核心功能
+Requirements:
 
-- 无限画布工作流：基于 React Flow 搭建，可在画布上自由摆放、连线、缩放和整理节点。
-- 创作节点：输入提示词后可直接生成图片，也可以先用 Gemini 3.1 Pro 优化提示词。
-- 参考图输入：支持上传图片和 `Ctrl+V` 粘贴图片，单节点最多挂载 4 张参考图。
-- QuickDraw 构图草图：创作节点可打开固定画幅草图编辑器，支持画笔、橡皮、选择、直线、箭头和独立撤销；草图可重复编辑并自动作为参考图发送。
-- 多参数生图：支持调整画幅比例、输出尺寸、单次生成数量、节点颜色，以及模型专属高级参数。
-- 多模型生图：新创作节点默认使用 `Image2`，也可以切换到 `Banana 2`、`Banana 2 Lite` 或 `Banana Pro`；生成出的图片节点会记录当次使用的模型和专属参数。
-- 批量生成：单个提示词节点一次可生成 `1`、`2` 或 `4` 张图片，并自动连到新图片节点。
-- 图片节点操作：支持全屏查看、复制图片、复制提示词、下载、重新生成，以及“以此为参考新建节点”。
-- 提示词管理：在项目首页、画布或创作节点打开跨项目提示词库，按标题、正文和标签搜索；可收藏当前提示词并一键复用。
-- 画布辅助：支持撤销/重做、适应视口、右键菜单、新建节点、自动布局、清空画布。
-- 本地持久化：项目索引、画布快照和图片资产保存到 `data/projects/`，跨项目提示词保存在 `data/prompt-library.json`；项目在无本地 API 时会回退到 IndexedDB。
-- 应用内设置：项目列表和画布顶部都可以打开“模型设置”，配置 Image2、Gemini Key、两条独立代理链路和软件更新。
-- 安全自动加载：桌面版使用 Electron `safeStorage` 加密保存 API Key，其他连接参数保存在当前用户的应用数据目录；界面只读取密钥是否已配置，不会把已保存的 Key 回传到浏览器。npm 模式继续使用仓库 `.env`。
-
-## 运行环境
-
-- Node.js 22.17.1 或更高版本
-- 可用的 Image2/OpenAI-compatible 中转服务；如需 Banana 系列或提示词优化，再配置 Gemini API Key
-
-## 本地启动
-
-1. 安装依赖
+- Node.js 22.17.1 or newer
+- An Image2/OpenAI-compatible relay; a Gemini API Key is optional for Banana models and prompt optimization
 
 ```bash
 npm install
-```
-
-2. 配置模型连接
-
-启动应用后点击“模型设置”即可直接填写 Image2 Base URL、API Key 和模型名。保存后立即生效，后续启动会自动加载。
-
-开发环境也可以复制一份 `.env.example` 为 `.env`，使用环境变量作为配置来源：
-
-```bash
-IMAGE2_BASE_URL=你的_Image2_Base_URL
-IMAGE2_API_KEY=你的_Image2_Key
-IMAGE2_MODEL=你的_Image2_模型名
-```
-
-如需使用 Banana 系列模型或 Gemini 提示词优化，再配置：
-
-```bash
-GEMINI_API_KEY=你的_Gemini_API_Key
-```
-
-Banana / Gemini 默认直连。需要代理时可在设置里开启，也可在 `.env` 中显式配置：
-
-```bash
-GEMINI_HTTPS_PROXY=http://127.0.0.1:7890
-GEMINI_PROXY_ENABLED=true
-```
-
-只浏览项目、整理画布和查看已有截图不需要 API Key。
-
-`IMAGE2_BASE_URL` 填 API base URL，例如 `https://example.com/v1`。如果误填成 `https://example.com/v1/chat/completions`，服务端也会自动解析回 `https://example.com/v1`。
-
-`gpt-image-*` 模型会自动走 `/v1/images/generations` 或 `/v1/images/edits`；其他模型默认走 `/v1/chat/completions`。如需强制指定，可设置 `IMAGE2_ENDPOINT_TYPE=images` 或 `IMAGE2_ENDPOINT_TYPE=chat`。
-
-服务端启动后会监听 `.env`。应用内保存和手动编辑 `.env` 都会热更新；如果新配置校验失败，服务端会拒绝保存并继续使用上一份有效配置。`PORT`、`NODE_ENV`、`BANANA_DATA_DIR` 是启动期配置，变更后会提示需要重启。
-
-如果访问 Image2 中转需要代理，可独立配置：
-
-```bash
-IMAGE2_HTTPS_PROXY=http://127.0.0.1:7890
-IMAGE2_PROXY_MODE=proxy
-```
-
-`HTTPS_PROXY` / `HTTP_PROXY` 仍可作为 Image2 的兼容 fallback，但不会自动开启 Banana 代理。
-
-3. 启动开发服务器
-
-```bash
 npm run dev
 ```
 
-4. 打开浏览器访问：
+Open [http://localhost:3000](http://localhost:3000), select **App settings**, and enter the Image2 Base URL, API Key, and model name. Saved settings apply immediately.
 
-```text
-http://localhost:3000
-```
-
-`npm run dev` 会启动 `server.ts`，同时挂载 Express API 和 Vite 中间件，适合本地完整调试。
-
-服务默认只监听 `127.0.0.1`。只有明确需要局域网访问时才设置 `HOST=0.0.0.0`；当前项目接口不包含面向公网部署所需的用户认证层。
-
-如需从源码直接启动 Electron 桌面版：
+To launch the Electron desktop app from source:
 
 ```bash
 npm run electron
 ```
 
-该命令会先构建前端和 Electron 主进程，再以桌面窗口运行同一套 Express API。npm 模式使用仓库根目录的 `.env` 和 `data/`；Electron 模式使用当前 Windows 用户的应用数据目录，安装目录保持只读。
+Only browsing projects, arranging a canvas, and viewing saved images works without an API Key.
 
-## 使用方式
+## Basic workflow
 
-1. 首次使用先在项目列表点击“模型设置”，填写 Image2 连接参数。
-2. 点击底部“新建创作节点”，或在画布空白处右键创建新节点；新节点默认选择 Image2。
-3. 可以从“提示词管理”新建或搜索模板；在创作节点里可收藏当前内容、选择已有提示词并直接填入。
-4. 输入提示词；需要时可上传参考图、直接在文本框里 `Ctrl+V` 粘贴图片，或点击“绘制构图草图”。
-5. 草图画板自动使用当前生成比例。画出人物相对位置和动作后点击“应用为参考图”；以后可从同一节点继续编辑。
-6. 可先点击“优化”让 Gemini 3.1 Pro 改写文字提示词，再点击“开始生成”。生成请求会同时携带文字和草图参考图。
-7. 生成结果会作为新的图片节点出现在当前节点右侧，并自动建立连线。
-8. 悬停图片节点可执行复制、下载、全屏、重新生成、继续作为参考图等操作；重新生成会直接显示进行中、成功或失败状态。
-9. 当画布变复杂后，可以使用自动布局和适应视口快速整理结构。
+1. Create a project and open **App settings** to configure a model connection.
+2. Add a creation node from the bottom toolbar or the canvas context menu.
+3. Enter a prompt and optionally upload, paste, or sketch reference images.
+4. Choose a model, aspect ratio, resolution, count, and model-specific options.
+5. Generate images, then branch from a result or use mask editing for targeted changes.
+6. Use auto layout, fit-to-view, undo, redo, and the prompt library as the canvas grows.
 
-## 快捷键
+## Language
 
-- `Ctrl+Enter` / `Cmd+Enter`：在当前提示词框内直接生成
-- `Ctrl+Z` / `Cmd+Z`：撤销
-- `Ctrl+Shift+Z` / `Cmd+Shift+Z`：重做
-- `Ctrl+Y`：重做
-- `N`：新建创作节点
-- `F`：适应当前画布到视口
-- `Delete` / `Backspace`：删除已选中的节点
+The interface currently supports:
 
-## 参数与行为说明
+- English (`en`)
+- Simplified Chinese (`zh-CN`)
 
-### 创作节点
+Banana Canvas follows the operating-system language the first time it starts. Change it at any time with the language selector in **App settings**; the choice is stored locally. Translation resources live in [`src/i18n/locales`](src/i18n/locales).
 
-- Banana 2 与 Banana 2 Lite 支持的 14 种画面比例：`1:1`、`1:4`、`1:8`、`2:3`、`3:2`、`3:4`、`4:1`、`4:3`、`4:5`、`5:4`、`8:1`、`9:16`、`16:9`、`21:9`
-- Banana Pro 支持其中 10 种标准比例，不支持 `1:4`、`1:8`、`4:1`、`8:1`；切换模型时不兼容的旧比例会回退为 `1:1`
-- 支持的批量数量：`1`、`2`、`4`
-- 参考图上限：4 张；单张最多 16 MiB，所有参考图合计最多 40 MiB，上传或粘贴超限图片时会立即提示。
-- 构图草图占用一个参考图位置；再次应用同一草图会替换旧草图图片，不会重复增加。
-- 草图 PNG 按固定画幅导出，最长边为 2048 像素，不会按笔画边界自动裁切；QuickDraw JSON 快照随项目保存，便于继续编辑。
-- 默认生成模型：`Image2`；Banana 系列使用 Gemini API，`Image2` 使用应用内设置或 `.env` 中配置的 OpenAI-compatible 中转
-- 提示词优化模型：`gemini-3.1-pro-preview`
+## Configuration
 
-| 界面模型 | Gemini API 模型 | 输出尺寸 | 思考等级 | Google Search | 参考图解析等级 | 建议场景 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Banana 2 | `gemini-3.1-flash-image` | `512`、`1K`、`2K`、`4K` | `MINIMAL` / `HIGH` | 支持 | 支持 | 默认通用选择，多参考图和一致性任务 |
-| Banana 2 Lite | `gemini-3.1-flash-lite-image` | 固定 `1K` | `MINIMAL` / `HIGH` | 不支持 | 支持 | 低延迟、低成本和批量草稿 |
-| Banana Pro | `gemini-3-pro-image` | `1K`、`2K`、`4K` | 模型自动管理 | 支持 | 不支持 | 复杂设计、文字排版和事实可视化 |
-
-上述能力按 2026-09-02 的 Google 官方文档与 Gemini API 实测配置。项目会在模型切换、前端请求和服务端校验三处过滤不支持的参数，避免旧节点参数导致 API 400。
-
-### 图片节点
-
-- 可复制图片到剪贴板
-- 可复制对应提示词
-- 可下载为本地 PNG
-- 可基于同一提示词重新生成
-- 可直接把当前图片转成下一轮创作节点的参考图
-
-### 本地状态
-
-- 本地开发默认把项目索引、画布快照和图片资产保存到 `data/projects/`。
-- 桌面版把项目和模型连接配置保存到系统用户数据目录，不会写入安装目录；模型设置在启动时自动加载。
-- npm 模式允许显式进程环境变量覆盖仓库 `.env`；Electron 模式则以用户数据目录中的 `.env` 为准，不会被安装器或父进程中的同名变量意外覆盖。
-- npm 模式遇到非法 `.env` 会拒绝启动且不会改写文件；Electron 会迁移旧版无效字段，并把旧明文 API Key 转移到系统加密存储。
-- 可用 `BANANA_DATA_DIR` 改变本地项目存储目录；相对路径会从项目根目录解析。
-- 前端仍使用 `zustand + zundo` 管理画布状态和最多 50 步历史记录。
-- 如果 `/api/projects` 不可用，会回退到 IndexedDB，并可在本地 API 可用时迁移旧浏览器项目。
-- 未被当前画布或历史引用的图片资产会自动清理，避免无限膨胀。
-- 本地删除项目时会先移入数据目录下的 `.trash/`，便于误删后的人工恢复；项目列表索引会立即移除该项目。
-- 本地文件存储会为图片资产记录 `byteLength` 和 `sha256`，重复保存未变化资产时会复用已有文件；如果同一资产 ID 的内容确实变化，会重新写入。
-- `data/` 已被 `.gitignore` 忽略，避免误提交用户本地项目图片。
-
-### 性能与资源注意事项
-
-- 常规项目加载和空画布首屏开销较小；Canvas 代码按路由懒加载。
-- 项目自动保存会 debounce，并且不会重复写入未变化的本地图片文件。
-- 当前保存接口仍会发送完整画布快照；包含大量大图的项目在节点移动或文本修改时仍可能产生较大的 JSON 请求。后续如果要进一步优化，需要把图片资产上传和画布元数据保存拆成增量协议。
-- Image2 局部编辑的画笔移动不会反复扫描整张 mask 画布；大图撤销历史会按约 32 MB 内存预算动态减少帧数，小图最多保留 10 帧。
-- 代理和 Image2 runtime 配置支持 `.env` 热重载；旧连接池由运行时 agent 缓存管理，频繁切换代理配置时建议观察连接数和内存。
-
-### Banana 系列高级参数
-
-选择任一 Banana 模型后，提示词节点的设置面板会按所选模型显示可用参数：
-
-- `responseModalities`：固定发送仅 `IMAGE`，因为本项目只消费图片 part。
-- `thinkingConfig.thinkingLevel`：Banana 2 与 Banana 2 Lite 可发送官方枚举 `MINIMAL`、`HIGH`；默认是 `MINIMAL`，提高到 `HIGH` 会增加延迟。Banana Pro 由模型管理思考过程。
-- `mediaResolution`：Banana 2 与 Banana 2 Lite 在带参考图时可控制解析强度，支持 `MEDIA_RESOLUTION_LOW`、`MEDIA_RESOLUTION_MEDIUM`、`MEDIA_RESOLUTION_HIGH`；Banana Pro 当前会拒绝该参数，因此界面禁用且请求不会发送。
-- `tools.googleSearch`：Banana 2 与 Banana Pro 可开启 Google Search grounding，让模型使用实时网页/图片搜索信息；Banana 2 Lite 不支持。Search 通常会增加延迟和成本。
-- `safetySettings`：骚扰、仇恨、色情、危险四类默认固定发送 `OFF`，前端不提供调节。
-- Banana 系列没有 Image2 的 `output_format`、透明背景独立开关、压缩、`partial_images`、mask 参数；透明背景只能通过提示词尝试。
-- 服务端会使用 Gemini 返回的 `inlineData.mimeType` 生成 data URL，不再强制按 PNG 处理。
-
-### Interactions API 评估
-
-Google 已在 2026 年 6 月将 [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview?hl=zh-cn) 全面推出，并建议新项目采用。它对本项目最有价值的能力是：用 `previous_interaction_id` 保存连续编辑上下文、通过 `steps` 展示思考/搜索/工具执行过程，以及用 `background=true` 承载耗时较长的 Pro 任务；后续 Gemini 新模型与智能体能力也会优先在此接口发布。
-
-v0.4.0 暂不从 `generateContent` 迁移，原因如下：
-
-- 当前 `@google/genai` 为 1.x，而 Interactions 要求 2.3.0+；升级到 2.x 并迁移请求/响应结构需要单独回归现有三个模型和提示词优化链路。
-- Interactions 默认 `store=true`。付费层 Interaction 保留 55 天、免费层保留 1 天；设为 `store=false` 虽可避免 Interaction 存储，却不能使用后台任务或 `previous_interaction_id`，与本项目的本地优先语义需要明确的产品开关和隐私说明。
-- Interactions 目前不支持自定义安全设置、Batch API 和显式缓存；本项目的 `generateContent` 请求仍在使用自定义 `safetySettings`。
-- 官方支持列表明确包含 Banana 2 与 Banana Pro，但截至 2026-09-01 尚未列出 Banana 2 Lite。
-
-因此本版继续使用仍受官方完整支持的 `generateContent`。后续适合做独立适配层：默认保持现有无服务端会话模式；用户显式开启“连续云端编辑”时才使用状态续接，并为 Pro 提供可恢复的后台任务与搜索步骤/来源展示。
-
-### Image2 高级参数
-
-选择 `Image2` 模型后，提示词节点的设置面板会显示中转兼容的高级参数：
-
-- 前端只开放实际需要调的参数：`quality`、`output_format`、`output_compression`、`response_format`、`partial_images`。
-- `background` 固定发送 `opaque`，`moderation` 固定发送 `low`，`stream` 固定跟随 `.env` 的 `IMAGE2_STREAM`。
-- `output_compression` 只会在 `output_format` 为 `jpeg` 或 `webp` 时发送。
-- `gpt-image-2` 不支持 `background=transparent`；前端不提供透明背景选择，旧节点或手写请求也会在发送前丢弃。
-- `input_fidelity` 对 `gpt-image-2` 不可调，官方要求省略；模型会自动高保真处理输入图。
-- `CLIProxyAPI` 当前会忽略 `n`、`style`、`user`；前端的“生成数量”会用多次请求实现多图。
-- `response_format=url` 在 `CLIProxyAPI` 中返回的是 `data URL`，不是官方 60 分钟临时 URL。
-- `file_id` 编辑图不支持；当前项目通过上传/粘贴参考图走 multipart `image`，mask 局部编辑会把原图和蒙版统一转为同尺寸 PNG。
-
-## 环境变量
-
-| 变量名 | 用途 |
-| --- | --- |
-| `GEMINI_API_KEY` | 本地或服务端调用 Gemini API 时使用的默认 Key |
-| `GEMINI_HTTPS_PROXY` | 可选，Banana / Gemini 专用代理 URL；仅在 `GEMINI_PROXY_ENABLED=true` 时使用 |
-| `GEMINI_PROXY_ENABLED` | 可选，是否让 Banana 生图与 Gemini 提示词优化使用代理；默认 `false` |
-| `IMAGE2_BASE_URL` | Image2 中转 API base URL，使用 Image2 时必须配置，例如 `https://example.com/v1` |
-| `IMAGE2_CHAT_COMPLETIONS_URL` | 可选，chat completions 完整 URL；未设置 `IMAGE2_BASE_URL` 时作为 fallback |
-| `IMAGE2_API_KEY` | Image2 中转接口 Key，使用 Image2 时必须配置 |
-| `IMAGE2_MODEL` | 发送到 Image2 中转接口的模型名，使用 Image2 时必须配置 |
-| `IMAGE2_ENDPOINT_TYPE` | 可选，`images` 或 `chat`；默认 `gpt-image-*` 走 images，其他模型走 chat |
-| `IMAGE2_HTTPS_PROXY` | 可选，image2 专用代理；不填时复用 `HTTPS_PROXY` 或 `HTTP_PROXY` |
-| `IMAGE2_PROXY_MODE` | 可选，`proxy`、`auto` 或 `direct`；默认 `direct`，避免 image2 relay 被本机代理路径拖慢或 504 |
-| `IMAGE2_MAX_ATTEMPTS` | 可选，image2 最大尝试次数，默认 `1`；调大可能产生重复生图成本 |
-| `IMAGE2_HEDGE_ENABLED` | 可选，`true` 时在 `IMAGE2_MAX_ATTEMPTS > 1` 下启用 proxy/direct 并发竞速；默认关闭，避免额外 token 消耗 |
-| `IMAGE2_STREAM` | 可选，`true` 时 images 接口请求 SSE 流式结果；适合中转有约 60s 空闲网关超时的情况 |
-| `IMAGE2_PARTIAL_IMAGES` | 可选，流式 images 请求的局部图数量，范围 `0`-`3`；大于 `0` 更容易保持连接活跃，但可能增加 image token 成本 |
-| `IMAGE2_REQUEST_TIMEOUT_MS` | 可选，image2 单次请求超时，默认 `240000` |
-| `IMAGE2_RETRY_DELAY_MS` | 可选，image2 两次尝试之间的等待时间，默认 `1000` |
-| `IMAGE2_PROXY_CONNECT_TIMEOUT_MS` | 可选，image2 代理建连超时，默认 `60000` |
-| `IMAGE2_DIRECT_CONNECT_TIMEOUT_MS` | 可选，image2 直连建连超时，默认 `60000` |
-| `IMAGE2_DIRECT_ALLOW_H2` | 可选，是否允许 image2 直连 HTTP/2，默认 `true` |
-| `PORT` | 可选，服务端监听端口，默认 `3000`；启动期配置，修改后需重启 |
-| `NODE_ENV` | 可选，`production` 时使用静态构建产物；启动期配置，修改后需重启 |
-| `BANANA_DATA_DIR` | 可选，本地项目文件存储目录，默认 `./data`；启动期配置，修改后需重启 |
-| `HOST` | 可选，服务监听地址，默认 `127.0.0.1`；仅在明确需要局域网访问时设置 `0.0.0.0` |
-| `HTTPS_PROXY` | 可选，为 image2 服务端请求配置 HTTPS 代理 |
-| `HTTP_PROXY` | 可选，为 image2 服务端请求配置 HTTP 代理 |
-除 `PORT`、`NODE_ENV`、`BANANA_DATA_DIR`、`HOST` 外，上表中的服务端运行时变量会从 `.env` 热更新。URL、整数、布尔值和枚举值会在初始加载和每次 reload 时统一校验。
-
-## 可用脚本
-
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | 启动 Express + Vite 开发环境，包含图像生成和提示词优化接口 |
-| `npm run build` | 构建前端静态资源到 `dist/` |
-| `npm run build:electron` | 构建 Electron 主进程与隔离的 preload 桥接到 `build/electron/` |
-| `npm run electron` | 构建并从源码启动 Electron 桌面版 |
-| `npm run smoke:electron` | 构建后启动隐藏 Electron 窗口，验证设置/更新 UI、提示词库、图片复制与重新生成、模型能力切换和 QuickDraw |
-| `npm run smoke:electron:packaged` | 验证 `release/win-unpacked` 中的已打包桌面程序 |
-| `npm run dist:win` | 构建 Windows x64 NSIS 安装包到 `release/` |
-| `npm run typecheck` | 运行 TypeScript 类型检查 |
-| `npm run lint` | 运行 ESLint 静态检查 |
-| `npm test` | 运行全部 `src/**/*.test.ts` 和 `src/**/*.test.tsx` 测试 |
-| `npm run version:check` | 校验 package、lockfile、README 与 Changelog 版本一致 |
-| `npm run release:prepare -- v<version>` | 校验打包产物并生成 Release Notes 与 SHA256 清单 |
-| `npm run check` | 依次运行版本校验、类型检查、ESLint、测试、Web 构建和 Electron 主进程构建 |
-| `npm run preview` | 仅预览 Vite 构建产物，不包含 Express API |
-| `npm run clean` | 删除 `dist/` 目录 |
-| `npm run clean:release` | 删除旧的 `release/` 打包产物，避免更新元数据与旧安装包混用 |
-
-## Windows 打包
+The recommended path is **App settings**, which keeps saved desktop API Keys in Electron `safeStorage`. Development environments may instead copy `.env.example` to `.env`:
 
 ```bash
-npm run dist:win
+IMAGE2_BASE_URL=https://example.com/v1
+IMAGE2_API_KEY=your_key
+IMAGE2_MODEL=gpt-image-2
+GEMINI_API_KEY=optional_gemini_key
+GEMINI_PROMPT_OPTIMIZER_MODEL=gemini-3.8-flash
 ```
 
-安装包输出为 `release/banana-canvas-setup-<version>.exe`。Windows 打包会先在系统临时目录完成 Electron 资源编辑，再把产物复制回 `release/`，避免桌面目录实时扫描导致新生成的 EXE 被短暂锁定。应用图标来自 `assets/icon.ico`，可以运行 `python scripts/generate_icon.py` 从确定性的图标源重新生成 PNG/ICO。
+Read [Configuration](docs/CONFIGURATION.md) for provider behavior, proxies, limits, storage, and the complete environment-variable reference.
 
-当前 Windows 安装包未配置代码签名证书，因此首次安装和后续更新时 Windows SmartScreen 可能提示未知发布者。未来配置证书后，`electron-builder` 可读取 `CSC_LINK`、`CSC_KEY_PASSWORD` 等签名环境变量。
+## Local data and security
 
-## 客户端更新
+- npm development stores projects under `data/projects/` and prompts in `data/prompt-library.json`.
+- Electron stores projects and settings in the current user's application-data directory.
+- Saved desktop Keys are encrypted with the operating system's credential storage when available and are never returned to the renderer.
+- The server binds to `127.0.0.1` by default. Do not expose it publicly; the local API has no public-deployment authentication layer.
+- Automatic updates are off by default; enabling them downloads updates in the background but still asks before restarting.
+- Windows installers are currently unsigned, so SmartScreen may show an **Unknown publisher** warning.
 
-自动更新默认关闭。正式安装的 Windows 客户端可在“应用设置 → 软件更新”中手动检查线上最新版本、查看本次更新日志、下载并观察实时进度，下载完成后由用户点击“立即重启并安装”。
+## Documentation
 
-用户主动开启“自动检查并在后台下载更新”后，客户端会延迟检查 GitHub Releases，并每 4 小时复查一次稳定版本。发现新版本后在后台下载；下载完成时提示选择“立即重启并安装”或“稍后”，选择稍后会在退出应用后安装。
+| Document | Contents |
+| --- | --- |
+| [Configuration](docs/CONFIGURATION.md) | Models, app settings, proxies, limits, and environment variables |
+| [Development](docs/DEVELOPMENT.md) | Scripts, architecture, data layout, and verification |
+| [Roadmap](docs/ROADMAP.md) | Planned canvas and project evolution |
+| [Changelog](CHANGELOG.md) | User-visible changes by version |
+| [Releasing](docs/RELEASING.md) | Maintainer-only release checklist |
 
-更新源固定为 [sinkinrin/banana-canvas Releases](https://github.com/sinkinrin/banana-canvas/releases)。每个可更新版本必须同时发布 NSIS 安装包、`.blockmap` 和 `latest.yml`；`latest.yml` 内嵌当前版本 Changelog 与未签名提醒，供客户端安全展示。tag 驱动的 Release workflow 会在 Windows 上重新执行检查、打包 smoke 和元数据校验，全部通过后才创建正式 Release。
-
-v0.2.1 客户端不含更新器，需要手动安装一次 v0.3.0。从 v0.3.0 开始，后续稳定版可通过上述流程自动更新。
-
-## 主要目录
-
-```text
-.
-├─ src/
-│  ├─ components/
-│  │  ├─ Canvas.tsx                # 画布、右键菜单、快捷键、自动布局
-│  │  ├─ nodes/
-│  │  │  ├─ PromptNode.tsx         # 提示词节点
-│  │  │  ├─ ImageNode.tsx          # 图片节点
-│  │  │  ├─ Image2OptionsPanel.tsx # Image2 高级参数面板
-│  │  │  ├─ BananaOptionsPanel.tsx # Banana 系列高级参数面板
-│  │  │  ├─ GeneratingImagePlaceholder.tsx # 生成中过渡卡片
-│  │  │  ├─ PromptTextarea.tsx     # 文本框与 Ctrl/Cmd+Enter 提交
-│  │  │  ├─ useReferenceImages.ts  # 参考图解析、上传/粘贴与上限控制
-│  │  │  ├─ usePromptGeneration.ts # 提示词节点生成流程
-│  │  │  ├─ useImageNodeActions.ts # 图片节点复制、下载、重跑与参考节点动作
-│  │  │  └─ useMaskGeneration.ts   # Image2 局部编辑共享请求逻辑
-│  │  ├─ mask/                     # Image2 蒙版编辑与对比弹窗
-│  │  ├─ sketch/                   # QuickDraw 固定画幅草图编辑、导出与测试
-│  │  ├─ prompts/                  # 跨项目提示词管理弹窗
-│  │  ├─ settings/                 # 模型连接、代理与软件更新 UI
-│  │  ├─ projects/                 # 项目列表、缺失项目状态
-│  │  └─ edges/
-│  │     └─ DeletableEdge.tsx      # 可悬停删除的边
-│  ├─ pages/                       # 项目列表页与项目画布页
-│  ├─ server/
-│  │  ├─ app.ts                    # Express app factory and API route mounting
-│  │  ├─ projectsRoutes.ts         # 本地项目 CRUD/import API
-│  │  ├─ promptsRoutes.ts          # 跨项目提示词 CRUD API
-│  │  ├─ generationRoutes.ts       # 生图与提示词优化 API
-│  │  ├─ requestValidation.ts      # 生图请求校验与规范化
-│  │  ├─ proxy.ts                  # 代理、undici agent 与 fetch 包装
-│  │  ├─ runtimeConfig.ts          # .env 热重载、运行时配置和校验
-│  │  ├─ runtimeProxy.ts           # 运行时代理配置同步
-│  │  └─ providers/                # Banana 与 Image2 provider 调用
-│  ├─ services/                    # 生图、运行时设置与提示词库 API 客户端
-│  ├─ store.ts                     # 画布状态和历史记录
-│  └─ lib/                         # 模型参数、项目存储、资产归档、路由等
-├─ server.ts                       # 环境加载、Vite/static 中间件和监听入口
-├─ metadata.json                   # 应用元数据
-└─ .env.example                    # 示例环境变量
-```
-
-## 测试
-
-当前仓库包含项目路由、本地文件存储、IndexedDB 回退、画布资产归档、模型参数、节点组件、mask 编辑和前端 payload 测试。推荐执行全量测试：
+## Verification
 
 ```bash
 npm test
+npm run check
 ```
 
-`npm install` 是首次设置步骤，用于安装依赖。`npm run check` 不会执行 `npm install`，它只会按顺序运行 `npm run lint`、`npm test` 和 `npm run build`。
+`npm install` is the initial dependency setup step. `npm run check` validates the existing checkout and does not run `npm install` for you.
 
-## 当前架构概览
-
-- 前端：React 19 + Vite + Tailwind CSS 4 + React Flow + QuickDraw
-- 状态：Zustand + Zundo
-- 持久化：本地 Express 文件存储；无本地 API 时回退 IndexedDB
-- 后端：Express
-- AI SDK：`@google/genai`
-
-前端通过 `/api/projects` 读写本地项目，通过 `/api/generate-image` 和 `/api/optimize-prompt` 调用后端，再由后端统一请求 Gemini 或 Image2 中转。这样前端交互、项目存储和模型调用可以保持清晰分层。
-
-构图草图使用 MIT 许可的 [`@quickdrawjs/react`](https://github.com/quickdrawjs/quickdraw)。第三方许可文本随 Web/Electron 构建产物保存在 `THIRD_PARTY_NOTICES.txt`。
+For the full command list and desktop smoke tests, see [Development](docs/DEVELOPMENT.md).

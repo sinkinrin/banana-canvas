@@ -1,10 +1,13 @@
 import { ArrowLeft, FolderX } from 'lucide-react';
+import { useAppTranslation } from '../../i18n';
 
 export type MissingProjectStateProps = {
   onBack: () => void;
 };
 
 export function MissingProjectState({ onBack }: MissingProjectStateProps) {
+  const { t } = useAppTranslation();
+
   return (
     <main className="flex min-h-screen items-center justify-center px-6" style={{ background: '#16130F' }}>
       <section
@@ -12,9 +15,9 @@ export function MissingProjectState({ onBack }: MissingProjectStateProps) {
         style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.2)', color: '#EEE4CE' }}
       >
         <FolderX size={44} className="mx-auto" style={{ color: '#F2C14E' }} />
-        <h1 className="mt-4 text-xl font-semibold">项目不存在</h1>
+        <h1 className="mt-4 text-xl font-semibold">{t('projects.missingTitle')}</h1>
         <p className="mt-2 text-sm leading-6" style={{ color: '#96836F' }}>
-          这个项目可能已经被删除，或者当前浏览器里没有对应的本地数据。
+          {t('projects.missingDescription')}
         </p>
         <button
           type="button"
@@ -23,7 +26,7 @@ export function MissingProjectState({ onBack }: MissingProjectStateProps) {
           style={{ background: '#F2C14E', color: '#16130F' }}
         >
           <ArrowLeft size={16} />
-          返回项目列表
+          {t('projects.backToList')}
         </button>
       </section>
     </main>

@@ -1,7 +1,7 @@
 export const DEFAULT_PROJECT_DIALOG_NAME = '未命名项目';
 
-export function getProjectNameSubmissionValue(value: string) {
-  return value.trim() ? value : DEFAULT_PROJECT_DIALOG_NAME;
+export function getProjectNameSubmissionValue(value: string, fallbackName = DEFAULT_PROJECT_DIALOG_NAME) {
+  return value.trim() ? value : fallbackName;
 }
 
 export function shouldCloseDialogForKey(key: string) {

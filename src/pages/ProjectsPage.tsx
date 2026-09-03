@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { useAppTranslation } from '../i18n';
 
 import { ConfirmDialog } from '../components/projects/ConfirmDialog';
 import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
@@ -36,8 +37,8 @@ function navigateTo(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '未知错误';
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export function ProjectsPageView({
@@ -51,6 +52,8 @@ export function ProjectsPageView({
   onOpenSettings,
   onOpenPromptLibrary,
 }: ProjectsPageViewProps) {
+  const { t } = useAppTranslation();
+
   if (status === 'loading') {
     return (
       <main className="flex min-h-screen items-center justify-center" style={{ background: '#16130F' }}>
@@ -59,7 +62,7 @@ export function ProjectsPageView({
             className="h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
             style={{ borderColor: 'rgba(242,193,78,0.6)', borderTopColor: 'transparent' }}
           />
-          加载项目中...
+          {t('projects.loading')}
         </div>
       </main>
     );
@@ -73,9 +76,9 @@ export function ProjectsPageView({
           style={{ background: '#1D1A14', borderColor: 'rgba(217,123,58,0.3)', color: '#EEE4CE' }}
         >
           <AlertTriangle size={40} className="mx-auto" style={{ color: '#D97B3A' }} />
-          <h1 className="mt-4 text-xl font-semibold">项目加载失败</h1>
+          <h1 className="mt-4 text-xl font-semibold">{t('projects.loadFailed')}</h1>
           <p className="mt-2 text-sm leading-6" style={{ color: '#96836F' }}>
-            {errorMessage || '无法读取本地项目数据。'}
+            {errorMessage || t('projects.readFailed')}
           </p>
           <button
             type="button"
@@ -83,7 +86,7 @@ export function ProjectsPageView({
             className="mt-6 rounded-lg px-4 py-2 text-sm font-medium"
             style={{ background: '#F2C14E', color: '#16130F' }}
           >
-            新建项目
+            {t('projects.new')}
           </button>
         </section>
       </main>
@@ -104,6 +107,7 @@ export function ProjectsPageView({
 }
 
 export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }) {
+  const { t } = useAppTranslation();
   const [status, setStatus] = useState<ProjectsPageStatus>('loading');
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -126,7 +130,7 @@ export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }
         setStatus('ready');
       } catch (error) {
         if (disposed) return;
-        setErrorMessage(getErrorMessage(error));
+        setErrorMessage(getErrorMessage(error, t('common.unknownError')));
         setStatus('error');
       }
     }
@@ -136,7 +140,7 @@ export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [t]);
 
   const dialogCallbacks = createProjectDialogCallbacks({
     projectRepository,
@@ -148,7 +152,7 @@ export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }
       setProjects(sortProjectsByUpdatedAt(projects.filter((item) => item.id !== projectId)));
     },
     onError: (error) => {
-      setErrorMessage(getErrorMessage(error));
+      setErrorMessage(getErrorMessage(error, t('common.unknownError')));
       setStatus('error');
     },
   });
@@ -184,30 +188,32 @@ export function ProjectsPage({ onOpenSettings }: { onOpenSettings?: () => void }
       />
       {dialog?.type === 'create' && (
         <ProjectNameDialog
-          title="新建项目"
-          initialValue="未命名项目"
-          confirmLabel="创建"
-          cancelLabel="取消"
+          title={t('projects.new')}
+          initialValue={t('projects.unnamed')}
+          fallbackValue={t('projects.unnamed')}
+          confirmLabel={t('common.create')}
+          cancelLabel={t('common.cancel')}
           onConfirm={dialogCallbacks.confirmCreate}
           onCancel={() => setDialog(null)}
         />
       )}
       {dialog?.type === 'rename' && (
         <ProjectNameDialog
-          title="重命名项目"
+          title={t('projects.rename')}
           initialValue={dialog.project.name}
-          confirmLabel="保存"
-          cancelLabel="取消"
+          fallbackValue={t('projects.unnamed')}
+          confirmLabel={t('common.save')}
+          cancelLabel={t('common.cancel')}
           onConfirm={(name) => dialogCallbacks.confirmRename(dialog.project.id, name)}
           onCancel={() => setDialog(null)}
         />
       )}
       {dialog?.type === 'delete' && (
         <ConfirmDialog
-          title="删除项目"
-          body={`删除项目“${dialog.project.name}”？此操作不会进入回收站。`}
-          confirmLabel="删除"
-          cancelLabel="取消"
+          title={t('projects.delete')}
+          body={t('projects.deleteConfirmation', { name: dialog.project.name })}
+          confirmLabel={t('common.delete')}
+          cancelLabel={t('common.cancel')}
           onConfirm={() => dialogCallbacks.confirmDelete(dialog.project.id)}
           onCancel={() => setDialog(null)}
         />

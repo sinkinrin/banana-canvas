@@ -32,6 +32,7 @@ import {
 } from './lib/canvasState';
 import { normalizeProjectSnapshot, type ProjectSnapshot } from './lib/projectSession';
 import { DEFAULT_IMAGE_MODEL } from './lib/imageModels';
+import i18n from './i18n';
 
 type BananaStoreGlobals = typeof globalThis & {
   __bananaTemporalAssetsUnsub?: () => void;
@@ -147,7 +148,7 @@ export const useStore = create<AppState>()(
             type: 'promptNode',
             position: { x: 250, y: 250 },
             data: {
-              prompt: '一只可爱的香蕉在太空中遨游，赛博朋克风格',
+              prompt: i18n.t('promptNode.defaultPrompt'),
               imageModel: DEFAULT_IMAGE_MODEL,
             },
           },
@@ -217,7 +218,7 @@ export const useStore = create<AppState>()(
         saveNodeSketch: (id, payload) => {
           const state = get();
           const currentNode = state.nodes.find((node) => node.id === id);
-          if (!currentNode) return { ok: false, error: '创作节点不存在。' };
+          if (!currentNode) return { ok: false, error: i18n.t('sketch.nodeMissing') };
 
           const sketchAsset = createImageAsset(payload.image);
           const nextReferenceImageIds = buildSketchReferenceImageIds({
@@ -226,7 +227,7 @@ export const useStore = create<AppState>()(
             nextSketchAssetId: sketchAsset.id,
           });
           if (!nextReferenceImageIds) {
-            return { ok: false, error: '参考图已达到 4 张上限，请先移除一张再应用草图。' };
+            return { ok: false, error: i18n.t('sketch.referenceLimit') };
           }
 
           const updatedAt = new Date().toISOString();

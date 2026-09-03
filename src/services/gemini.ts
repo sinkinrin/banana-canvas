@@ -10,6 +10,7 @@ import {
   type Image2Options,
   type ImageModelId,
 } from '../lib/imageModels';
+import i18n, { getCurrentLanguage } from '../i18n';
 
 export interface GenerateImageParams {
   prompt: string;
@@ -79,6 +80,7 @@ export async function generateImage(params: GenerateImageParams): Promise<string
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept-Language': getCurrentLanguage(),
       },
       signal,
       body: JSON.stringify(createGenerateImagePayload(params)),
@@ -86,11 +88,17 @@ export async function generateImage(params: GenerateImageParams): Promise<string
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      let errorMessage = '图像生成失败';
+      let errorMessage = i18n.t('errors.generationFailed');
       try {
         const text = await response.text();
-        const json = JSON.parse(text);
-        errorMessage = json.error || errorMessage;
+        const json = JSON.parse(text) as { error?: string; requestId?: string };
+        if (response.status === 401) {
+          errorMessage = i18n.t('errors.apiKeyRequired');
+        } else if (json.requestId) {
+          errorMessage = i18n.t('errors.generationFailedWithRequestId', { requestId: json.requestId });
+        } else if (response.status < 500 && json.error) {
+          errorMessage = json.error;
+        }
       } catch {
         // non-JSON body, use default message
       }
@@ -126,6 +134,7 @@ export async function optimizePrompt(prompt: string, externalSignal?: AbortSigna
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept-Language': getCurrentLanguage(),
       },
       signal,
       body: JSON.stringify({ prompt }),
@@ -133,11 +142,15 @@ export async function optimizePrompt(prompt: string, externalSignal?: AbortSigna
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      let errorMessage = '提示词优化失败';
+      let errorMessage = i18n.t('errors.optimizeFailed');
       try {
         const text = await response.text();
-        const json = JSON.parse(text);
-        errorMessage = json.error || errorMessage;
+        const json = JSON.parse(text) as { error?: string };
+        if (response.status === 401) {
+          errorMessage = i18n.t('errors.apiKeyRequired');
+        } else if (response.status < 500 && json.error) {
+          errorMessage = json.error;
+        }
       } catch {
         // non-JSON body, use default message
       }

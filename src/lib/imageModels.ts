@@ -8,25 +8,25 @@ export const IMAGE_MODELS = [
   {
     id: 'banana',
     label: 'Banana 2',
-    description: '通用稳定版 · 0.5K–4K',
+    descriptionKey: 'models.banana.description',
     provider: 'gemini',
   },
   {
     id: 'banana-lite',
     label: 'Banana 2 Lite',
-    description: '极速低成本 · 仅 1K',
+    descriptionKey: 'models.bananaLite.description',
     provider: 'gemini',
   },
   {
     id: 'banana-pro',
     label: 'Banana Pro',
-    description: '专业复杂任务 · 1K–4K',
+    descriptionKey: 'models.bananaPro.description',
     provider: 'gemini',
   },
   {
     id: 'image2',
     label: 'Image2',
-    description: 'OpenAI-compatible relay model',
+    descriptionKey: 'models.image2.description',
     provider: 'openai-chat',
   },
 ] as const;
@@ -439,27 +439,27 @@ export function extractBananaImageUrl(response: unknown): string | null {
   return null;
 }
 
-export function getBananaParameterTips(imageModel: unknown = 'banana') {
+export function getBananaParameterTipKeys(imageModel: unknown = 'banana') {
   const normalizedModel = normalizeBananaImageModel(imageModel);
   const variantTips: Record<BananaImageModelId, string[]> = {
     banana: [
-      'Banana 2 是通用首选，支持 512、1K、2K、4K、全部 14 种画幅、Google Search，以及 MINIMAL / HIGH 思考等级。',
+      'bananaOptions.tips.banana',
     ],
     'banana-lite': [
-      'Banana 2 Lite 固定为 1K，支持全部 14 种画幅与 MINIMAL / HIGH 思考等级，但不支持 Google Search grounding；适合低延迟、低成本和批量任务。',
-      '官方没有针对多参考图或连续多轮编辑优化 Lite，复杂一致性任务建议改用 Banana 2 或 Pro。',
+      'bananaOptions.tips.lite',
+      'bananaOptions.tips.liteConsistency',
     ],
     'banana-pro': [
-      'Banana Pro 支持 1K、2K、4K 与 Google Search，适合复杂设计、品牌一致性和事实可视化；思考过程由模型自动管理，且当前 API 不接受 mediaResolution。',
+      'bananaOptions.tips.pro',
     ],
   };
 
   return [
     ...variantTips[normalizedModel],
-    '输出类型固定仅返回图片，避免 Gemini 返回文本 part 但本项目最终不消费。',
-    '参考图解析和 Google Search grounding 可能增加延迟或成本；仅在任务确实需要时开启。',
-    '安全过滤固定关闭：骚扰、仇恨、色情、危险四类 safetySettings 默认发送 OFF，不在前端开放调节。',
-    'Banana 系列没有 Image2 的 output_format、transparent background、压缩、partial_images、mask 参数；透明背景只能写进提示词尝试。',
+    'bananaOptions.tips.imageOnly',
+    'bananaOptions.tips.cost',
+    'bananaOptions.tips.safety',
+    'bananaOptions.tips.unsupportedOptions',
   ];
 }
 
@@ -500,14 +500,14 @@ export function normalizeImage2Options(value: unknown): Image2Options {
   return options;
 }
 
-export function getImage2RelayParameterTips() {
+export function getImage2RelayParameterTipKeys() {
   return [
-    '前端只开放 quality、output_format、output_compression、response_format、partial_images；背景固定 opaque，审核强度固定 low，stream 跟随 .env。',
-    'gpt-image-2 不支持 transparent background；本项目不提供透明背景选择。',
-    'input_fidelity 对 gpt-image-2 不可调，官方要求省略；该模型会自动用高保真处理输入图。',
-    'n、style、user 当前会被 CLIProxyAPI 忽略；多图请使用本项目的生成数量，它会发起多次请求。',
-    'response_format=url 在 CLIProxyAPI 中返回 data URL，不是官方 60 分钟临时 URL。',
-    '编辑图的 file_id 不支持；本项目用上传/粘贴参考图走 multipart image，并提供参考图和生成图的 mask 局部编辑 UI。',
+    'image2Options.tips.exposed',
+    'image2Options.tips.transparent',
+    'image2Options.tips.fidelity',
+    'image2Options.tips.ignored',
+    'image2Options.tips.url',
+    'image2Options.tips.fileId',
   ];
 }
 

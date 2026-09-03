@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import i18n, { useAppTranslation } from '../../i18n';
 import { Brush, Eraser, Loader2, RotateCcw, Undo2, X } from 'lucide-react';
 
 import type { InlineImageData } from '../../lib/canvasState';
@@ -42,7 +43,7 @@ export function shouldScanMaskAfterDraw(tool: MaskTool, phase: DrawPhase) {
 function dataUrlToImageInput(dataUrl: string): { data: string; mimeType: 'image/png' } {
   const match = dataUrl.match(/^data:(image\/png);base64,(.+)$/);
   if (!match) {
-    throw new Error('无法导出 PNG 蒙版。');
+    throw new Error(i18n.t('mask.exportFailed'));
   }
   return { mimeType: 'image/png', data: match[2] };
 }
@@ -59,6 +60,7 @@ export function MaskEditorModal({
   onClose,
   onGenerate,
 }: MaskEditorModalProps) {
+  const { t } = useAppTranslation();
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const undoStackRef = useRef<ImageData[]>([]);
@@ -184,13 +186,13 @@ export function MaskEditorModal({
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !context || canvas.width === 0 || canvas.height === 0) {
-      throw new Error('蒙版画布尚未准备好。');
+      throw new Error(t('mask.canvasNotReady'));
     }
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = canvas.width;
     maskCanvas.height = canvas.height;
     const maskContext = maskCanvas.getContext('2d');
-    if (!maskContext) throw new Error('无法创建蒙版导出画布。');
+    if (!maskContext) throw new Error(t('mask.exportCanvasFailed'));
 
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     imageData.data.set(createOpenAiEditMaskPixels(imageData.data));
@@ -201,14 +203,14 @@ export function MaskEditorModal({
   const exportSourceImage = () => {
     const image = imageRef.current;
     if (!image || !image.naturalWidth || !image.naturalHeight) {
-      throw new Error('原图尚未加载完成。');
+      throw new Error(t('mask.sourceNotReady'));
     }
 
     const sourceCanvas = document.createElement('canvas');
     sourceCanvas.width = image.naturalWidth;
     sourceCanvas.height = image.naturalHeight;
     const sourceContext = sourceCanvas.getContext('2d');
-    if (!sourceContext) throw new Error('无法创建原图导出画布。');
+    if (!sourceContext) throw new Error(t('mask.sourceCanvasFailed'));
     sourceContext.drawImage(image, 0, 0, sourceCanvas.width, sourceCanvas.height);
     return dataUrlToInlinePng(sourceCanvas.toDataURL('image/png'));
   };
@@ -224,7 +226,7 @@ export function MaskEditorModal({
         sourceImage: exportSourceImage(),
       });
     } catch (error) {
-      setError(error instanceof Error ? error.message : '局部编辑生成失败');
+      setError(error instanceof Error ? error.message : t('promptNode.errors.maskGeneration'));
     } finally {
       setIsGenerating(false);
     }
@@ -266,10 +268,10 @@ export function MaskEditorModal({
           <div>
             <h2 className="text-lg font-bold" style={{ color: '#EEE4CE' }}>{title}</h2>
             <p className="mt-1 text-xs" style={{ color: '#96836F' }}>
-              涂抹区域会作为透明区域发送给 Image2 进行替换；未涂抹区域会以不透明 mask 尽量保持原图。
+              {t('mask.description')}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-xl p-2 text-red-300 hover:bg-red-900/30" title="关闭">
+          <button type="button" onClick={onClose} className="rounded-xl p-2 text-red-300 hover:bg-red-900/30" title={t('common.close')}>
             <X size={20} />
           </button>
         </div>
@@ -280,7 +282,7 @@ export function MaskEditorModal({
               <img
                 ref={imageRef}
                 src={sourceImage.url}
-                alt="蒙版编辑原图"
+                alt={t('mask.sourceAlt')}
                 className="max-h-[70vh] max-w-full select-none rounded-xl object-contain"
                 draggable={false}
               />
@@ -292,7 +294,7 @@ export function MaskEditorModal({
                 onPointerMove={handlePointerMove}
                 onPointerUp={stopDrawing}
                 onPointerCancel={stopDrawing}
-                aria-label="蒙版画布"
+                aria-label={t('mask.canvasAria')}
               />
             </div>
           </div>
@@ -306,7 +308,7 @@ export function MaskEditorModal({
                 style={tool === 'brush' ? { background: '#F2C14E', color: '#16130F' } : { background: '#1D1A14', color: '#EEE4CE' }}
               >
                 <Brush size={16} />
-                画笔
+                {t('mask.brush')}
               </button>
               <button
                 type="button"
@@ -315,12 +317,12 @@ export function MaskEditorModal({
                 style={tool === 'eraser' ? { background: '#F2C14E', color: '#16130F' } : { background: '#1D1A14', color: '#EEE4CE' }}
               >
                 <Eraser size={16} />
-                橡皮
+                {t('mask.eraser')}
               </button>
             </div>
 
             <label className="block space-y-2 text-xs font-medium uppercase tracking-wider" style={{ color: '#96836F' }}>
-              笔刷大小 {brushSize}px
+              {t('mask.brushSize', { size: brushSize })}
               <input
                 type="range"
                 min={8}
@@ -340,7 +342,7 @@ export function MaskEditorModal({
                 style={{ background: '#1D1A14', color: '#EEE4CE' }}
               >
                 <Undo2 size={16} />
-                撤销
+                {t('common.undo')}
               </button>
               <button
                 type="button"
@@ -350,16 +352,16 @@ export function MaskEditorModal({
                 style={{ background: '#1D1A14', color: '#EEE4CE' }}
               >
                 <RotateCcw size={16} />
-                清空
+                {t('common.clear')}
               </button>
             </div>
 
             <label className="block space-y-2 text-xs font-medium uppercase tracking-wider" style={{ color: '#96836F' }}>
-              局部编辑提示词
+              {t('mask.promptLabel')}
               <textarea
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
-                placeholder="例如：把涂抹区域改成红色针织帽"
+                placeholder={t('mask.promptPlaceholder')}
                 className="nowheel min-h-28 w-full resize-none rounded-xl p-3 text-sm outline-none"
                 style={{ background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE' }}
               />
@@ -367,7 +369,7 @@ export function MaskEditorModal({
 
             {!hasMask && (
               <p className="text-xs leading-5" style={{ color: '#5C4E3E' }}>
-                先在图上涂抹需要修改的区域，才能生成局部修改。
+                {t('mask.paintFirst')}
               </p>
             )}
             {error && (
@@ -384,7 +386,7 @@ export function MaskEditorModal({
               style={{ background: '#F2C14E', color: '#16130F' }}
             >
               {isGenerating && <Loader2 size={16} className="animate-spin" />}
-              生成局部修改
+              {t('mask.generate')}
             </button>
           </aside>
         </div>

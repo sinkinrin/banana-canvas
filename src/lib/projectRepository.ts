@@ -1,5 +1,6 @@
 import { collectReferencedAssetIdsFromHistory } from './canvasState';
 import { createEmptyProjectSnapshot, type ProjectSnapshot } from './projectSession';
+import i18n, { getCurrentLanguage } from '../i18n';
 import { createProjectMeta, renameProject, type ProjectMeta } from './projects';
 import {
   getProjectSnapshotKey,
@@ -40,10 +41,15 @@ class LocalApiResponseError extends Error {
 
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    let message = `请求失败 (${response.status})`;
+    let message = i18n.t('projects.requestFailed', { status: response.status });
     try {
       const body = await response.json() as { error?: unknown };
-      if (typeof body.error === 'string') message = body.error;
+      if (
+        typeof body.error === 'string' &&
+        (response.status < 500 || getCurrentLanguage() === 'zh-CN')
+      ) {
+        message = body.error;
+      }
     } catch {
       // Keep the status-based fallback.
     }

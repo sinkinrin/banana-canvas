@@ -1,5 +1,6 @@
 import { Image as ImageIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useAppTranslation } from '../../i18n';
 
 type GeneratingImagePlaceholderProps = {
   modelLabel: string;
@@ -9,13 +10,13 @@ type GeneratingImagePlaceholderProps = {
   error?: string;
 };
 
-function formatGenerationTime(createdAt?: string) {
+function formatGenerationTime(createdAt: string | undefined, locale: string) {
   if (!createdAt) return '';
 
   const date = new Date(createdAt);
   if (Number.isNaN(date.getTime())) return '';
 
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(locale, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -59,10 +60,11 @@ export function GeneratingImagePlaceholder({
   createdAt,
   error,
 }: GeneratingImagePlaceholderProps) {
+  const { t, i18n } = useAppTranslation();
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const timeLabel = formatGenerationTime(createdAt);
+  const timeLabel = formatGenerationTime(createdAt, i18n.resolvedLanguage ?? i18n.language);
   const elapsedLabel = formatElapsedTime(createdAt, nowMs);
-  const statusLabel = error ? '生成失败' : '生成中';
+  const statusLabel = error ? t('generating.failed') : t('generating.active');
 
   useEffect(() => {
     if (error || !createdAt) return undefined;
@@ -88,7 +90,7 @@ export function GeneratingImagePlaceholder({
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs" style={{ color: '#96836F' }}>
             {timeLabel && <span>{timeLabel}</span>}
-            {elapsedLabel && <span className="rounded-full px-2 py-0.5" style={{ background: 'rgba(242,193,78,0.08)', color: '#F2C14E' }}>已耗时 {elapsedLabel}</span>}
+            {elapsedLabel && <span className="rounded-full px-2 py-0.5" style={{ background: 'rgba(242,193,78,0.08)', color: '#F2C14E' }}>{t('generating.elapsed', { time: elapsedLabel })}</span>}
           </div>
         </div>
       </div>
@@ -107,7 +109,7 @@ export function GeneratingImagePlaceholder({
         </div>
         {!error && (
           <div className="absolute bottom-6 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium" style={{ background: 'rgba(29,26,20,0.82)', color: '#F2C14E', border: '1px solid rgba(242,193,78,0.16)' }}>
-            <span>正在绘制</span>
+            <span>{t('generating.drawing')}</span>
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#F2C14E]" />
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#F2C14E] [animation-delay:120ms]" />
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#F2C14E] [animation-delay:240ms]" />
@@ -131,7 +133,7 @@ export function GeneratingImagePlaceholder({
             <span className="h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: 'rgba(242,193,78,0.35)' }} />
             <span className="h-3.5 w-3.5 animate-bounce rounded-full bg-[#F2C14E] [animation-duration:0.9s]" />
             <span className="h-2.5 w-2.5 animate-pulse rounded-full [animation-delay:0.2s]" style={{ background: 'rgba(242,193,78,0.35)' }} />
-            <span className="sr-only">生成中</span>
+            <span className="sr-only">{t('generating.active')}</span>
           </>
         )}
       </div>

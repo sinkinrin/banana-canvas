@@ -39,7 +39,12 @@ export type Image2GenerateInput = {
 export type GenerationProviders = {
   generateBananaImage: (input: BananaGenerateInput) => Promise<string>;
   generateImage2Image: (input: Image2GenerateInput) => Promise<string>;
-  optimizePrompt?: (input: { prompt: string; apiKey: string; signal?: AbortSignal }) => Promise<string>;
+  optimizePrompt?: (input: {
+    prompt: string;
+    apiKey: string;
+    model: string;
+    signal?: AbortSignal;
+  }) => Promise<string>;
 };
 
 function createRequestId() {
@@ -49,15 +54,17 @@ function createRequestId() {
 async function defaultOptimizePrompt({
   prompt,
   apiKey,
+  model,
   signal,
 }: {
   prompt: string;
   apiKey: string;
+  model: string;
   signal?: AbortSignal;
 }) {
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
-    model: 'gemini-3.1-pro-preview',
+    model,
     contents: `你是一位 AI 图像生成的专家提示词工程师。
 请优化以下提示词，以创建高度详细、视觉效果惊人的图像。
 仅返回优化后的提示词文本，使用原始语言（如果是中文则返回中文，英文则返回英文），不要包含任何对话性文字、引号或 Markdown 格式。
@@ -174,7 +181,8 @@ export function mountGenerationRoutes(
         res.status(400).json({ error: 'prompt must contain 1 to 20000 characters' });
         return;
       }
-      const apiKey = runtimeConfig.get().geminiApiKey;
+      const config = runtimeConfig.get();
+      const apiKey = config.geminiApiKey;
       if (!apiKey) {
         res.status(401).json({ error: '需要 API Key' });
         return;
@@ -183,6 +191,7 @@ export function mountGenerationRoutes(
       const optimizedPrompt = await (providers.optimizePrompt ?? defaultOptimizePrompt)({
         prompt,
         apiKey,
+        model: config.geminiPromptOptimizerModel,
         signal: requestAbort.signal,
       });
       if (canWriteResponse(res, requestAbort.signal)) res.json({ optimizedPrompt });

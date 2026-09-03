@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net';
 
 import { mountGenerationRoutes, type GenerationProviders } from './generationRoutes';
 import { createRuntimeConfigManager } from './runtimeConfig';
+import { DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL } from '../lib/promptOptimizer';
 
 async function requestJson(app: express.Express, path: string, body: unknown) {
   const server = app.listen(0);
@@ -152,8 +153,9 @@ test('optimize-prompt returns stable response shape through injected optimizer w
       imageProviderCalled = true;
       return 'data:image/png;base64,image2';
     },
-    optimizePrompt: async ({ prompt }) => {
+    optimizePrompt: async ({ prompt, model }) => {
       assert.equal(prompt, 'short prompt');
+      assert.equal(model, DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL);
       return 'expanded prompt';
     },
   });
@@ -163,6 +165,33 @@ test('optimize-prompt returns stable response shape through injected optimizer w
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, { optimizedPrompt: 'expanded prompt' });
   assert.equal(imageProviderCalled, false);
+});
+
+test('optimize-prompt reads a custom model from hot-reloaded runtime config', async () => {
+  const seenModels: string[] = [];
+  const { app, runtimeConfig } = createAppWithRuntimeConfig({
+    generateBananaImage: async () => 'data:image/png;base64,banana',
+    generateImage2Image: async () => 'data:image/png;base64,image2',
+    optimizePrompt: async ({ model }) => {
+      seenModels.push(model);
+      return model;
+    },
+  }, { GEMINI_API_KEY: 'test-key' });
+
+  const first = await requestJson(app, '/api/optimize-prompt', { prompt: 'short prompt' });
+  assert.equal(first.status, 200);
+  assert.equal(first.body.optimizedPrompt, DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL);
+
+  const reload = runtimeConfig.reload({
+    GEMINI_API_KEY: 'test-key',
+    GEMINI_PROMPT_OPTIMIZER_MODEL: 'custom-optimizer-model',
+  });
+  assert.equal(reload.ok, true);
+
+  const second = await requestJson(app, '/api/optimize-prompt', { prompt: 'short prompt' });
+  assert.equal(second.status, 200);
+  assert.equal(second.body.optimizedPrompt, 'custom-optimizer-model');
+  assert.deepEqual(seenModels, [DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL, 'custom-optimizer-model']);
 });
 
 test('generation routes read Gemini API key from hot-reloaded runtime config', async () => {

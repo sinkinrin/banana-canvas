@@ -4,9 +4,11 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useAppTranslation } from './i18n';
 
 import { RuntimeSettingsDialog } from './components/settings/RuntimeSettingsDialog';
 import { parseAppRoute, type AppRoute } from './lib/routes';
+import { notifyDesktopLanguage } from './lib/desktopUpdates';
 import { ProjectCanvasPage } from './pages/ProjectCanvasPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 
@@ -30,6 +32,7 @@ export function AppRouter({
 }
 
 export default function App() {
+  const { t, i18n } = useAppTranslation();
   const [route, setRoute] = useState<AppRoute>(() => getCurrentRoute());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -39,6 +42,15 @@ export default function App() {
     window.addEventListener('popstate', handleRouteChange);
     return () => window.removeEventListener('popstate', handleRouteChange);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = i18n.resolvedLanguage ?? i18n.language;
+    document.title = t('app.name');
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute('content', t('app.tagline'));
+    void notifyDesktopLanguage(i18n.resolvedLanguage ?? i18n.language);
+  }, [i18n.language, i18n.resolvedLanguage, t]);
 
   return (
     <>

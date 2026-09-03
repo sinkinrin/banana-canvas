@@ -12,11 +12,11 @@ import {
   createImage2Config,
   extractBananaImageUrl,
   extractImage2ImageUrlFromSse,
-  getBananaParameterTips,
+  getBananaParameterTipKeys,
   getBananaAspectRatioValues,
   getBananaImageSizeValues,
   getBananaModelCapabilities,
-  getImage2RelayParameterTips,
+  getImage2RelayParameterTipKeys,
   getImage2AttemptGroups,
   extractImage2ImageUrl,
   getImage2AttemptChannels,
@@ -345,15 +345,14 @@ test('extractBananaImageUrl corrects misleading inline image MIME metadata from 
   );
 });
 
-test('getBananaParameterTips documents variant-specific parameter differences', () => {
-  const tips = getBananaParameterTips('banana');
+test('getBananaParameterTipKeys exposes shared and variant-specific help', () => {
+  const tips = getBananaParameterTipKeys('banana');
 
-  assert.ok(tips.some((tip) => tip.includes('固定仅返回图片')));
-  assert.ok(tips.some((tip) => tip.includes('安全过滤固定关闭')));
-  assert.ok(tips.some((tip) => tip.includes('transparent')));
-  assert.ok(tips.some((tip) => tip.includes('Image2')));
-  assert.ok(getBananaParameterTips('banana-lite').some((tip) => tip.includes('固定为 1K')));
-  assert.ok(getBananaParameterTips('banana-pro').some((tip) => tip.includes('品牌一致性')));
+  assert.ok(tips.includes('bananaOptions.tips.imageOnly'));
+  assert.ok(tips.includes('bananaOptions.tips.safety'));
+  assert.ok(tips.includes('bananaOptions.tips.unsupportedOptions'));
+  assert.ok(getBananaParameterTipKeys('banana-lite').includes('bananaOptions.tips.liteConsistency'));
+  assert.ok(getBananaParameterTipKeys('banana-pro').includes('bananaOptions.tips.pro'));
 });
 
 test('buildImage2ChatCompletionRequest sends prompt and references as multimodal chat content', () => {
@@ -526,15 +525,15 @@ test('buildImage2ImagesRequestBody maps image2 options to supported Images API f
   );
 });
 
-test('getImage2RelayParameterTips documents relay-specific parameter differences', () => {
-  const tips = getImage2RelayParameterTips();
-
-  assert.ok(tips.some((tip) => tip.includes('n')));
-  assert.ok(tips.some((tip) => tip.includes('data URL')));
-  assert.ok(tips.some((tip) => tip.includes('file_id')));
-  assert.ok(tips.some((tip) => tip.includes('背景固定 opaque')));
-  assert.ok(tips.some((tip) => tip.includes('stream 跟随 .env')));
-  assert.ok(tips.some((tip) => tip.includes('input_fidelity')));
+test('getImage2RelayParameterTipKeys exposes relay-specific help', () => {
+  assert.deepEqual(getImage2RelayParameterTipKeys(), [
+    'image2Options.tips.exposed',
+    'image2Options.tips.transparent',
+    'image2Options.tips.fidelity',
+    'image2Options.tips.ignored',
+    'image2Options.tips.url',
+    'image2Options.tips.fileId',
+  ]);
 });
 
 test('extractImage2ImageUrlFromSse prefers the final image over partial images', () => {
