@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  MAX_IMAGE_BYTES,
   validateGenerateImageRequest,
   type GenerateImageRequestBody,
 } from './requestValidation';
+import { MEBIBYTE_BYTES } from '../lib/imageInputLimits';
 
 const png = Buffer.from('valid png bytes').toString('base64');
 const jpg = Buffer.from('valid jpg bytes').toString('base64');
@@ -47,6 +49,26 @@ test('rejects malformed reference image entries', () => {
 
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /referenceImages\[0\]/);
+});
+
+test('accepts an 11 MiB reference and reports oversized images as size errors', () => {
+  const acceptedData = Buffer.alloc(11 * MEBIBYTE_BYTES, 1).toString('base64');
+  const accepted = validateGenerateImageRequest({
+    imageModel: 'image2',
+    referenceImages: [{ data: acceptedData, mimeType: 'image/png' }],
+  });
+  assert.equal(accepted.ok, true);
+
+  const oversizedData = Buffer.alloc(MAX_IMAGE_BYTES + MEBIBYTE_BYTES, 1).toString('base64');
+  const oversized = validateGenerateImageRequest({
+    imageModel: 'image2',
+    referenceImages: [{ data: oversizedData, mimeType: 'image/png' }],
+  });
+  assert.equal(oversized.ok, false);
+  if (!oversized.ok) {
+    assert.equal(oversized.error, '第 1 张参考图大小为 17 MiB，超过单张 16 MiB 限制');
+    assert.doesNotMatch(oversized.error, /base64/i);
+  }
 });
 
 test('rejects maskImage for Banana requests', () => {

@@ -32,6 +32,13 @@ import {
   getPromptAspectRatioOptions,
 } from './promptAspectRatios';
 import { PromptLibraryDialog } from '../prompts/PromptLibraryDialog';
+import {
+  formatMebibytes,
+  MAX_REFERENCE_IMAGE_BYTES,
+  MAX_TOTAL_INPUT_IMAGE_BYTES,
+} from '../../lib/imageInputLimits';
+
+const referenceImageLimitHint = `单张最多 ${formatMebibytes(MAX_REFERENCE_IMAGE_BYTES)}，合计最多 ${formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES)}`;
 
 const aspectRatioLabels: Record<BananaAspectRatio, string> = {
   '1:1': '1:1 (正方形)',
@@ -444,6 +451,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               accept="image/png, image/jpeg, image/webp, image/heic, image/heif"
               onChange={handleImageUpload}
             />
+            <p className="mt-1 text-center text-[10px]" style={{ color: '#5C4E3E' }}>
+              {referenceImageLimitHint}
+            </p>
           </div>
 
           {showSettings && (

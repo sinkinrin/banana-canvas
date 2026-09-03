@@ -15,6 +15,12 @@ import {
   type ImageModelId,
   type ReferenceImageInput,
 } from '../lib/imageModels';
+import {
+  decodedBase64ByteLength,
+  formatMebibytes,
+  MAX_REFERENCE_IMAGE_BYTES,
+  MAX_TOTAL_INPUT_IMAGE_BYTES,
+} from '../lib/imageInputLimits';
 
 export type GenerateImageRequestBody = {
   prompt?: unknown;
@@ -55,21 +61,14 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/gif',
 ]);
 export const MAX_PROMPT_CHARACTERS = 20_000;
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-export const MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = MAX_REFERENCE_IMAGE_BYTES;
+export const MAX_TOTAL_IMAGE_BYTES = MAX_TOTAL_INPUT_IMAGE_BYTES;
 
-function decodedBase64Length(value: string) {
-  if (!value.trim()) return false;
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
-  if (value.length % 4 === 1) return false;
-  if (Math.floor(value.length * 3 / 4) > MAX_IMAGE_BYTES + 2) return false;
-
-  try {
-    const length = Buffer.from(value, 'base64').length;
-    return length > 0 ? length : false;
-  } catch {
-    return false;
-  }
+function getImageDisplayLabel(label: string) {
+  const referenceMatch = label.match(/^referenceImages\[(\d+)]$/);
+  if (referenceMatch) return `第 ${Number(referenceMatch[1]) + 1} 张参考图`;
+  if (label === 'maskImage') return '蒙版图片';
+  return label;
 }
 
 function validateImage(value: unknown, label: string): ValidationResult<{
@@ -82,12 +81,15 @@ function validateImage(value: unknown, label: string): ValidationResult<{
   if (!ALLOWED_IMAGE_MIME_TYPES.has(value.mimeType.toLowerCase())) {
     return { ok: false, error: `${label}.mimeType must be png, jpeg, webp, or gif` };
   }
-  const byteLength = decodedBase64Length(value.data);
-  if (byteLength === false) {
+  const byteLength = decodedBase64ByteLength(value.data);
+  if (byteLength === null) {
     return { ok: false, error: `${label}.data must be non-empty base64` };
   }
   if (byteLength > MAX_IMAGE_BYTES) {
-    return { ok: false, error: `${label} must be at most ${MAX_IMAGE_BYTES} decoded bytes` };
+    return {
+      ok: false,
+      error: `${getImageDisplayLabel(label)}大小为 ${formatMebibytes(byteLength)}，超过单张 ${formatMebibytes(MAX_IMAGE_BYTES)} 限制`,
+    };
   }
 
   return {
@@ -127,7 +129,10 @@ function collectEffectiveReferences(body: GenerateImageRequestBody): ValidationR
   }
 
   if (byteLength > MAX_TOTAL_IMAGE_BYTES) {
-    return { ok: false, error: `referenceImages must total at most ${MAX_TOTAL_IMAGE_BYTES} decoded bytes` };
+    return {
+      ok: false,
+      error: `参考图合计大小为 ${formatMebibytes(byteLength)}，超过 ${formatMebibytes(MAX_TOTAL_IMAGE_BYTES)} 总限制`,
+    };
   }
 
   return { ok: true, value: { images: references, byteLength } };
@@ -161,7 +166,10 @@ export function validateGenerateImageRequest(body: unknown): ValidationResult<Va
       return { ok: false, error: 'maskImage must be an image/png payload' };
     }
     if (references.value.byteLength + maskResult.value.byteLength > MAX_TOTAL_IMAGE_BYTES) {
-      return { ok: false, error: `images must total at most ${MAX_TOTAL_IMAGE_BYTES} decoded bytes` };
+      return {
+        ok: false,
+        error: `参考图与蒙版合计大小超过 ${formatMebibytes(MAX_TOTAL_IMAGE_BYTES)} 总限制`,
+      };
     }
     maskImage = maskResult.value.image;
   }

@@ -1,6 +1,12 @@
 import { useRef, useState } from 'react';
 import { resolveReferenceImages, type InlineImageData } from '../../lib/canvasState';
 import type { AppNode } from '../../store';
+import {
+  decodedBase64ByteLength,
+  formatMebibytes,
+  MAX_REFERENCE_IMAGE_BYTES,
+  MAX_TOTAL_INPUT_IMAGE_BYTES,
+} from '../../lib/imageInputLimits';
 
 export type ReferenceImagePatch = Pick<AppNode['data'], 'referenceImage' | 'referenceImages' | 'referenceImageIds'>;
 
@@ -53,6 +59,31 @@ export function selectImageFiles(
   return Array.from(files)
     .filter((file) => file.type.startsWith('image/'))
     .slice(0, remainingSlots);
+}
+
+export function getReferenceImageFileSizeError(file: Pick<File, 'name' | 'size'>) {
+  if (!Number.isFinite(file.size) || file.size <= MAX_REFERENCE_IMAGE_BYTES) return null;
+  return `图片“${file.name}”大小为 ${formatMebibytes(file.size)}，超过单张 ${formatMebibytes(MAX_REFERENCE_IMAGE_BYTES)} 限制。请压缩或缩小后重新添加。`;
+}
+
+export function getReferenceImageTotalSizeError(
+  file: Pick<File, 'name' | 'size'>,
+  currentBytes: number
+) {
+  if (
+    !Number.isFinite(file.size) ||
+    currentBytes + file.size <= MAX_TOTAL_INPUT_IMAGE_BYTES
+  ) {
+    return null;
+  }
+  return `加入图片“${file.name}”后，参考图合计将达到 ${formatMebibytes(currentBytes + file.size)}，超过 ${formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES)} 总限制。`;
+}
+
+function getReferenceImagesByteLength(images: InlineImageData[]) {
+  return images.reduce(
+    (total, image) => total + (decodedBase64ByteLength(image.data) ?? 0),
+    0
+  );
 }
 
 export function extractPasteImageFiles(clipboardData: {
@@ -183,14 +214,27 @@ export function createReferenceImageController({
         : existingInlineReferenceImages.length,
     });
     let nextReferenceImages = existingInlineReferenceImages;
+    let totalImageBytes = getReferenceImagesByteLength(referenceImages);
 
     for (const file of selectedFiles) {
+      const fileSizeError = getReferenceImageFileSizeError(file);
+      if (fileSizeError) {
+        onReadError(fileSizeError);
+        continue;
+      }
+      const totalSizeError = getReferenceImageTotalSizeError(file, totalImageBytes);
+      if (totalSizeError) {
+        onReadError(totalSizeError);
+        continue;
+      }
+
       try {
         const nextImage = await readImageFile(file);
         const availableSlots = usesReferenceImageIds
           ? Math.max(0, 4 - referenceImageIds.length)
           : 4;
         nextReferenceImages = [...nextReferenceImages, nextImage].slice(0, availableSlots);
+        totalImageBytes += decodedBase64ByteLength(nextImage.data) ?? file.size;
 
         updateNodeData(nodeId, {
           referenceImageIds: usesReferenceImageIds ? referenceImageIds : undefined,

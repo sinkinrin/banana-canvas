@@ -7,9 +7,12 @@ import {
   canAddReferenceImage,
   createReferenceImageController,
   extractPasteImageFiles,
+  getReferenceImageFileSizeError,
+  getReferenceImageTotalSizeError,
   parseImageDataUrl,
   selectImageFiles,
 } from './useReferenceImages';
+import { MAX_REFERENCE_IMAGE_BYTES, MEBIBYTE_BYTES } from '../../lib/imageInputLimits';
 
 const image = { data: 'base64', mimeType: 'image/png', url: 'data:image/png;base64,base64' };
 const secondImage = { data: 'second', mimeType: 'image/png', url: 'data:image/png;base64,second' };
@@ -28,6 +31,26 @@ test('selectImageFiles keeps only image files and respects remaining slots', () 
 
   assert.deepEqual(selectImageFiles([png, text, jpg], { currentCount: 3, maxCount: 4 }), [png]);
   assert.deepEqual(selectImageFiles([png, jpg], { currentCount: 4, maxCount: 4 }), []);
+});
+
+test('reference image file size validation accepts 11 MiB and explains oversized files', () => {
+  assert.equal(
+    getReferenceImageFileSizeError({ name: 'product.png', size: 11 * MEBIBYTE_BYTES }),
+    null
+  );
+  assert.equal(
+    getReferenceImageFileSizeError({ name: 'large.png', size: MAX_REFERENCE_IMAGE_BYTES + MEBIBYTE_BYTES }),
+    '图片“large.png”大小为 17 MiB，超过单张 16 MiB 限制。请压缩或缩小后重新添加。'
+  );
+});
+
+test('reference image total size validation preserves the 40 MiB aggregate limit', () => {
+  const file = { name: 'product.png', size: 11 * MEBIBYTE_BYTES };
+  assert.equal(getReferenceImageTotalSizeError(file, 29 * MEBIBYTE_BYTES), null);
+  assert.equal(
+    getReferenceImageTotalSizeError(file, 30 * MEBIBYTE_BYTES),
+    '加入图片“product.png”后，参考图合计将达到 41 MiB，超过 40 MiB 总限制。'
+  );
 });
 
 test('extractPasteImageFiles reads image files from clipboard items without DOM dependencies', () => {
@@ -200,6 +223,35 @@ test('reference image controller reports injected read failures without storing 
       referenceImage: undefined,
     },
   }]);
+});
+
+test('reference image controller rejects an oversized file before reading it', async () => {
+  const errors: string[] = [];
+  let readCount = 0;
+  const oversized = {
+    type: 'image/png',
+    name: 'oversized.png',
+    size: MAX_REFERENCE_IMAGE_BYTES + MEBIBYTE_BYTES,
+  } as File;
+  const controller = createReferenceImageController({
+    nodeId: 'prompt-1',
+    data: { referenceImages: [] } as any,
+    assets: {},
+    assetsHydrated: true,
+    updateNodeData: () => assert.fail('oversized image must not update node data'),
+    onReadError: (message) => errors.push(message),
+    readImageFile: async () => {
+      readCount += 1;
+      return image;
+    },
+  });
+
+  await controller.handleImageUpload({ target: { files: [oversized], value: 'selected' } });
+
+  assert.equal(readCount, 0);
+  assert.deepEqual(errors, [
+    '图片“oversized.png”大小为 17 MiB，超过单张 16 MiB 限制。请压缩或缩小后重新添加。',
+  ]);
 });
 
 test('asset-backed reference add preserves referenceImageIds precedence and stores new inline image', () => {

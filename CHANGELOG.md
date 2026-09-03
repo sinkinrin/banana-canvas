@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-03
+
+### 改进
+
+- 参考图单张上限由 10 MiB 提高到 16 MiB，图片合计上限由 32 MiB 提高到 40 MiB，并将本地 JSON 请求体上限配套提高到 64 MiB。
+- Windows 桌面端移除默认 Electron 菜单栏，让应用界面保持简洁一致。
+
+### 修复
+
+- 上传或粘贴参考图时会在读取前检查体积并显示文件名、实际大小和允许上限；服务端也会准确区分图片过大与 Base64 数据无效，不再显示误导性错误。
+
+### 已知限制
+
+- Windows 安装包暂未进行代码签名，安装和自动更新时可能出现 SmartScreen 未知发布者提示。
+
 ## [0.5.0] - 2026-09-02
 
 ### 新增
@@ -97,7 +112,8 @@
 - 改进 Image2 请求、代理、取消、校验与生成结果处理。
 - 增强本地项目资产持久化与可恢复删除。
 
-[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/sinkinrin/banana-canvas/compare/v0.3.0...v0.3.1

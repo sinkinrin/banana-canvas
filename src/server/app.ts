@@ -6,6 +6,7 @@ import { mountPromptRoutes } from './promptsRoutes';
 import { createLocalPromptStore } from '../lib/localPromptStore';
 import type { RuntimeConfigManager } from './runtimeConfig';
 import { mountRuntimeSettingsRoutes, type RuntimeSettingsStore } from './runtimeSettings';
+import { MAX_JSON_REQUEST_BODY_BYTES } from '../lib/imageInputLimits';
 
 export function createApp({
   dataDir,
@@ -43,7 +44,7 @@ export function createApp({
     if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
     next();
   });
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({ limit: MAX_JSON_REQUEST_BODY_BYTES }));
   app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     const bodyError = error as { type?: unknown; status?: unknown };
     if (bodyError.type === 'entity.too.large' || bodyError.status === 413) {

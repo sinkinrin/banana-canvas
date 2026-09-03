@@ -1,7 +1,7 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "本地优先的 AI 图像创作画布，默认使用 Image2 并支持应用内连接配置。",
   "author": "Banana Canvas Contributors",
   "repository": {
