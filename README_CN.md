@@ -8,7 +8,7 @@
 > [!TIP]
 > 🌐 **English: [Read the default README](README.md)**
 
-当前版本：`0.6.0`
+当前版本：`0.6.1`
 
 版本变更见 [CHANGELOG.md](CHANGELOG.md)，维护者发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 

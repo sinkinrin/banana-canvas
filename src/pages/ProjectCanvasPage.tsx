@@ -1,10 +1,11 @@
-import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft, Pencil, Save, Settings } from 'lucide-react';
-import { useAppTranslation } from '../i18n';
+import i18n, { useAppTranslation } from '../i18n';
 
 import { MissingProjectState } from '../components/projects/MissingProjectState';
 import { ProjectNameDialog } from '../components/projects/ProjectNameDialog';
-import { areHistoryStatesEqual } from '../lib/canvasState';
+import { createProjectAutosave, hasProjectSnapshotChanged as snapshotChanged } from '../lib/projectAutosave';
+import { projectSaveRegistry } from '../lib/projectSaveLifecycle';
 import { createEmptyProjectSnapshot, type ProjectSnapshot } from '../lib/projectSession';
 import type { ProjectMeta } from '../lib/projects';
 import { createProjectRepository } from '../lib/projectRepository';
@@ -46,29 +47,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export function hasProjectSnapshotChanged(previous: ProjectSnapshot | null, current: ProjectSnapshot) {
-  if (!previous) return true;
-  if (
-    !areHistoryStatesEqual(
-      { nodes: previous.nodes, edges: previous.edges },
-      { nodes: current.nodes, edges: current.edges }
-    )
-  ) {
-    return true;
-  }
-
-  const previousAssetIds = Object.keys(previous.assets);
-  const currentAssetIds = Object.keys(current.assets);
-  if (previousAssetIds.length !== currentAssetIds.length) return true;
-
-  return previousAssetIds.some((assetId) => {
-    const previousAsset = previous.assets[assetId];
-    const currentAsset = current.assets[assetId];
-    if (!currentAsset) return true;
-    if (previousAsset.id !== currentAsset.id) return true;
-    if (previousAsset.mimeType !== currentAsset.mimeType) return true;
-    if (previousAsset.data.length !== currentAsset.data.length) return true;
-    return previousAsset.data !== currentAsset.data;
-  });
+  return !previous || snapshotChanged(previous, current);
 }
 
 export function ProjectCanvasPageView({
@@ -141,103 +120,51 @@ export function ProjectCanvasPage({
   const [project, setProject] = useState<ProjectMeta | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const saveRevisionRef = useRef(0);
-  const lastSavedSnapshotRef = useRef<ProjectSnapshot | null>(null);
-
   useEffect(() => {
     let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    let detachSave: (() => void) | undefined;
 
     async function loadProject() {
       try {
         setStatus('loading');
         setSaveStatus('loading');
-
+        // A returning project must see the previous session's completed writes.
+        await projectSaveRegistry.flush();
+        if (disposed) return;
         const loaded = await projectRepository.loadProject(projectId);
+        if (disposed) return;
         if (!loaded) {
-          if (!disposed) setStatus('missing');
+          setStatus('missing');
           return;
         }
 
         useStore.getState().hydrateProject(loaded.snapshot ?? createEmptyProjectSnapshot());
-        lastSavedSnapshotRef.current = useStore.getState().exportProject();
-
-        if (disposed) return;
+        const saver = createProjectAutosave({
+          initialSnapshot: useStore.getState().exportProject(),
+          save: (snapshot) => projectRepository.saveProjectSnapshot(projectId, snapshot),
+          onStatusChange: (next) => { if (!disposed) setSaveStatus(next); },
+        });
+        detachSave = projectSaveRegistry.register(saver);
+        unsubscribe = useStore.subscribe(() => saver.update(useStore.getState().exportProject()));
         setProject(loaded.project);
         setSaveStatus('saved');
         setStatus('ready');
       } catch (error) {
         if (disposed) return;
-        setErrorMessage(getErrorMessage(error, t('common.unknownError')));
+        setErrorMessage(getErrorMessage(error, i18n.t('common.unknownError')));
         setSaveStatus('error');
         setStatus('error');
       }
     }
 
     void loadProject();
-
     return () => {
       disposed = true;
+      unsubscribe?.();
+      detachSave?.();
     };
-  }, [projectId, t]);
-
-  useEffect(() => {
-    if (status !== 'ready' || !project) return undefined;
-
-    let disposed = false;
-    const enqueueSave = (snapshot: ProjectSnapshot) => {
-      const revision = ++saveRevisionRef.current;
-      const saveTask = saveQueueRef.current
-        .catch(() => undefined)
-        .then(() => projectRepository.saveProjectSnapshot(project.id, snapshot));
-
-      saveQueueRef.current = saveTask
-        .then(() => {
-          if (!disposed && revision === saveRevisionRef.current) {
-            lastSavedSnapshotRef.current = snapshot;
-            setSaveStatus('saved');
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to save project snapshot:', error);
-          if (!disposed && revision === saveRevisionRef.current) setSaveStatus('error');
-        });
-
-      return saveQueueRef.current;
-    };
-    const saveNow = () => {
-      const snapshot = useStore.getState().exportProject();
-      if (!hasProjectSnapshotChanged(lastSavedSnapshotRef.current, snapshot)) {
-        if (!disposed) setSaveStatus('saved');
-        return Promise.resolve();
-      }
-
-      setSaveStatus('saving');
-      return enqueueSave(snapshot);
-    };
-
-    const unsubscribe = useStore.subscribe(() => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-
-      saveTimeoutRef.current = setTimeout(() => {
-        saveTimeoutRef.current = null;
-        void saveNow();
-      }, 500);
-    });
-
-    return () => {
-      disposed = true;
-      unsubscribe();
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-        void saveNow().catch((error) => {
-          console.error('Failed to flush pending project save:', error);
-        });
-      }
-    };
-  }, [project, status]);
+  }, [projectId]);
 
   const handleRename = () => {
     if (!project) return;

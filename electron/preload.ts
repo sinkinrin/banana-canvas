@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopUpdateState } from '../src/lib/desktopUpdates';
 import {
+  PROJECT_SAVES_READY_CHANNEL,
+  PROJECT_SAVES_FLUSH_CHANNEL,
+  PROJECT_SAVES_RESULT_CHANNEL,
   UPDATE_CHECK_CHANNEL,
   UPDATE_DOWNLOAD_CHANNEL,
   UPDATE_GET_STATE_CHANNEL,
@@ -15,6 +18,17 @@ const updateSubscriptions = new Map<string, (_event: Electron.IpcRendererEvent, 
 let nextUpdateSubscriptionId = 0;
 
 contextBridge.exposeInMainWorld('bananaDesktop', Object.freeze({
+  onFlushProjectSaves: (handler: () => Promise<void>) => {
+    const listener = (_event: Electron.IpcRendererEvent, requestId: number) => {
+      void Promise.resolve().then(handler).then(
+        () => ipcRenderer.send(PROJECT_SAVES_RESULT_CHANNEL, requestId, true),
+        () => ipcRenderer.send(PROJECT_SAVES_RESULT_CHANNEL, requestId, false),
+      );
+    };
+    ipcRenderer.on(PROJECT_SAVES_FLUSH_CHANNEL, listener);
+    ipcRenderer.send(PROJECT_SAVES_READY_CHANNEL);
+    return () => ipcRenderer.removeListener(PROJECT_SAVES_FLUSH_CHANNEL, listener);
+  },
   setLanguage: async (language: string) => {
     await ipcRenderer.invoke(SET_APP_LANGUAGE_CHANNEL, language);
   },

@@ -4,6 +4,9 @@ import {I18nextProvider} from 'react-i18next';
 import App from './App.tsx';
 import i18n from './i18n';
 import './index.css';
+import { installProjectSaveLifecycle } from './lib/projectSaveLifecycle';
+
+installProjectSaveLifecycle();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

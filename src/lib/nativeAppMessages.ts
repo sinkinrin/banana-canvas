@@ -15,6 +15,8 @@ export function getNativeAppMessages(language: string | null | undefined) {
       installNow: '立即重启并安装',
       later: '稍后',
       startupFailed: '香蕉画图启动失败',
+      saveFailedTitle: '画布保存失败',
+      saveBeforeCloseFailed: '修改尚未保存，窗口将保持打开。请检查存储状态后重试。',
       checkBeforeDownload: '请先检查更新，确认有可用的新版本。',
       updateNotDownloaded: '更新尚未下载完成。',
     };
@@ -29,6 +31,8 @@ export function getNativeAppMessages(language: string | null | undefined) {
     installNow: 'Restart & install',
     later: 'Later',
     startupFailed: 'Banana Canvas failed to start',
+    saveFailedTitle: 'Could not save the canvas',
+    saveBeforeCloseFailed: 'Your changes have not been saved. The window will stay open. Check storage and try again.',
     checkBeforeDownload: 'Check for updates first and confirm that a new version is available.',
     updateNotDownloaded: 'The update has not finished downloading.',
   };

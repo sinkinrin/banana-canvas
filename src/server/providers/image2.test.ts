@@ -504,3 +504,73 @@ test('generateImage2Image rejects generated image downloads above the byte limit
     globalThis.fetch = originalFetch;
   }
 });
+
+test('generated image URL validation blocks both textual forms of IPv4-mapped IPv6', async () => {
+  for (const address of ['::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:10.0.0.1', '::ffff:c0a8:101', '::ffff:a9fe:a9fe']) {
+    await assert.rejects(assertSafeGeneratedImageUrl(`http://[${address}]/private.png`), /私有或保留网络/);
+  }
+  await assertSafeGeneratedImageUrl('https://[::ffff:8.8.8.8]/image.png');
+});
+
+async function withSlowImage2Server(
+  phase: 'provider' | 'download',
+  run: (config: import('../runtimeConfig').RuntimeConfigManager, headersSent: Promise<void>) => Promise<void>,
+  timeoutMs = 150,
+) {
+  const { createServer } = await import('node:http');
+  const { createRuntimeConfigManager } = await import('../runtimeConfig');
+  let notifyHeaders!: () => void;
+  const headersSent = new Promise<void>((resolve) => { notifyHeaders = resolve; });
+  const server = createServer((req, res) => {
+    req.resume();
+    if (phase === 'download' && req.url !== '/image.png') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ data: [{ url: `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}/image.png` }] }));
+      return;
+    }
+    res.setHeader('Content-Type', phase === 'provider' ? 'application/json' : 'image/png');
+    res.write(phase === 'provider' ? '{"data":[' : 'image');
+    notifyHeaders();
+    const timer = setTimeout(() => res.end(phase === 'provider' ? '{"b64_json":"aGVsbG8="}]}' : 'bytes'), 2000);
+    res.once('close', () => clearTimeout(timer));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const config = createRuntimeConfigManager({
+      IMAGE2_BASE_URL: `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}/v1`,
+      IMAGE2_API_KEY: 'test-fixture', IMAGE2_MODEL: 'gpt-image-2', IMAGE2_PROXY_MODE: 'direct',
+      IMAGE2_REQUEST_TIMEOUT_MS: String(timeoutMs), IMAGE2_MAX_ATTEMPTS: '1',
+    });
+    await run(config, headersSent);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+for (const phase of ['provider', 'download'] as const) {
+  test(`Image2 timeout covers the ${phase} body after headers arrive`, async () => {
+    const { generateImage2Image } = await import('./image2');
+    await withSlowImage2Server(phase, async (runtimeConfig) => {
+      await assert.rejects(generateImage2Image({
+        requestId: 'body-timeout', prompt: 'fixture', images: [], image2Options: {}, runtimeConfig,
+      }), /timed out|TimeoutError/);
+    });
+  });
+
+  test(`Image2 cancellation aborts the ${phase} body after headers arrive`, async () => {
+    const { generateImage2Image } = await import('./image2');
+    await withSlowImage2Server(phase, async (runtimeConfig, headersSent) => {
+      const controller = new AbortController();
+      const generation = generateImage2Image({
+        requestId: 'body-cancel', prompt: 'fixture', images: [], image2Options: {}, runtimeConfig,
+        signal: controller.signal,
+      });
+      const rejected = assert.rejects(generation, { name: 'AbortError' });
+      await headersSent;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      controller.abort();
+      await rejected;
+    }, 5000);
+  });
+}

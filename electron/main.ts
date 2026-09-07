@@ -12,6 +12,8 @@ import {
   type MessageBoxOptions,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { createProjectSaveBridge } from './projectSaveBridge';
+import { runProjectLifecycleSmoke } from './projectLifecycleSmoke';
 import { startLocalServer, type LocalServerHandle } from '../src/server/startLocalServer';
 import type { RuntimeConfigLogger } from '../src/server/runtimeConfig';
 import { isAllowedExternalUrl, isInternalAppUrl } from '../src/lib/electronNavigation';
@@ -48,6 +50,8 @@ let serverStartPromise: Promise<LocalServerHandle> | null = null;
 let updateManager: ReturnType<typeof createDesktopUpdateManager> | null = null;
 let updatePreferencesStore: ReturnType<typeof createUpdatePreferencesStore> | null = null;
 let isQuitting = false;
+let projectSaveBridge: ReturnType<typeof createProjectSaveBridge> | null = null;
+let quitPromise: Promise<void> | null = null;
 let desktopLanguage: NativeAppLanguage = 'en';
 
 const MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH = 128 * 1024 * 1024;
@@ -179,21 +183,27 @@ const logger: RuntimeConfigLogger = ({ level, message }) => {
 };
 
 async function prepareForUpdateInstall() {
-  if (isQuitting) return;
+  await projectSaveBridge?.flush();
   isQuitting = true;
   updateManager?.stop();
+}
 
-  if (!serverHandle) return;
-  try {
-    await serverHandle.close();
-  } catch (error) {
-    logger({
-      level: 'warn',
-      message: `[update] 关闭本地服务失败，将继续安装：${error instanceof Error ? error.message : String(error)}`,
-    });
-  } finally {
-    serverHandle = null;
-  }
+function quitAfterSaving() {
+  if (quitPromise) return quitPromise;
+  quitPromise = (async () => {
+    try {
+      await projectSaveBridge?.flush();
+      isQuitting = true;
+      app.quit();
+    } catch {
+      isQuitting = false;
+      const messages = getNativeAppMessages(desktopLanguage);
+      dialog.showErrorBox(messages.saveFailedTitle, messages.saveBeforeCloseFailed);
+    } finally {
+      quitPromise = null;
+    }
+  })();
+  return quitPromise;
 }
 
 async function promptToRestartForUpdate(info: DesktopUpdateInfo) {
@@ -979,6 +989,10 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   await runLanguageSwitchSmokeTest(window);
 
   await runSketchSmokeTest(localUrl, window);
+  await runProjectLifecycleSmoke({
+    window, localUrl, flush: async () => { await projectSaveBridge?.flush(); },
+    waitForPredicate: waitForSmokePredicate,
+  });
 
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, and QuickDraw probes passed');
 }
@@ -1046,12 +1060,37 @@ async function createMainWindow() {
     },
   });
   mainWindow.removeMenu();
+  projectSaveBridge = createProjectSaveBridge(ipcMain, mainWindow.webContents);
+  mainWindow.on('close', (event) => {
+    if (isQuitting || isSmokeTest()) return;
+    event.preventDefault();
+    void quitAfterSaving();
+  });
+  mainWindow.webContents.on('will-prevent-unload', () => {
+    // A new edit between the save acknowledgement and closing must still block exit.
+    isQuitting = false;
+  });
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const reload = input.type === 'keyDown' && (
+      input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r')
+    );
+    if (!reload) return;
+    event.preventDefault();
+    const window = mainWindow;
+    void projectSaveBridge?.flush().then(() => {
+      if (window && !window.isDestroyed()) window.webContents.reload();
+    }).catch(() => {
+      const messages = getNativeAppMessages(desktopLanguage);
+      dialog.showErrorBox(messages.saveFailedTitle, messages.saveBeforeCloseFailed);
+    });
+  });
 
   configureExternalNavigation(mainWindow, localServer.url);
   mainWindow.once('ready-to-show', () => {
     if (!isSmokeTest()) mainWindow?.show();
   });
   mainWindow.on('closed', () => {
+    projectSaveBridge = null;
     mainWindow = null;
   });
 
@@ -1109,13 +1148,18 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
-  updateManager?.stop();
-  if (!serverHandle || isQuitting) return;
-
+  if (isQuitting || isSmokeTest()) return;
   event.preventDefault();
-  isQuitting = true;
-  serverHandle.close().finally(() => {
-    serverHandle = null;
-    app.quit();
-  });
+  void quitAfterSaving();
+});
+
+app.on('will-quit', (event) => {
+  updateManager?.stop();
+  if (!serverHandle) return;
+  event.preventDefault();
+  const server = serverHandle;
+  serverHandle = null;
+  void server.close().catch((error) => {
+    console.error('[banana:shutdown] could not close local server:', error);
+  }).finally(() => app.quit());
 });

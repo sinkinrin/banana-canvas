@@ -97,9 +97,7 @@ function toAbortError(reason: unknown) {
 }
 
 function isBlockedRemoteAddress(address: string, family: 4 | 6) {
-  if (family === 6 && address.toLowerCase().startsWith('::ffff:')) {
-    return blockedRemoteAddresses.check(address.slice(7), 'ipv4');
-  }
+  // BlockList also matches IPv4 rules against IPv4-mapped IPv6 addresses.
   return blockedRemoteAddresses.check(address, family === 4 ? 'ipv4' : 'ipv6');
 }
 
@@ -353,14 +351,7 @@ export async function fetchImage2WithNetworkFallback({
   throw lastError instanceof Error ? lastError : new Error('Image2 request failed');
 }
 
-async function previewResponse(response: Response) {
-  try {
-    const bytes = await readBodyWithLimit(response.clone(), 4_096);
-    return previewResponseBody(new TextDecoder().decode(bytes));
-  } catch {
-    return '';
-  }
-}
+type Image2ProviderResponse = { response: Response; responseText: string };
 
 type Image2AttemptResult =
   | {
@@ -368,6 +359,7 @@ type Image2AttemptResult =
       attempt: number;
       channel: Image2Attempt['label'];
       response: Response;
+      responseText: string;
       retryable: boolean;
       failureSummary?: string;
     }
@@ -432,12 +424,17 @@ async function runImage2Attempt({
     );
 
     const retryable = isImage2RetriableHttpStatus(response.status);
-    const bodyPreview = retryable ? await previewResponse(response) : '';
+    // Keep the attempt's timeout and cancellation active until the body is complete.
+    const responseText = new TextDecoder().decode(
+      await readBodyWithLimit(response, MAX_IMAGE2_RESPONSE_BYTES)
+    );
+    const bodyPreview = retryable ? previewResponseBody(responseText) : '';
     return {
       type: 'response',
       attempt: attemptNumber,
       channel: attempt.label,
       response,
+      responseText,
       retryable,
       failureSummary: retryable
         ? `${attemptNumber}:${attempt.label} HTTP ${response.status}${bodyPreview ? ` ${bodyPreview}` : ''}`
@@ -500,11 +497,11 @@ async function fetchImage2ProviderResponse(
   let nextAttemptIndex = 0;
   let activeAttempts = 0;
   let settled = false;
-  let lastRetryableResponse: Response | null = null;
+  let lastRetryableResponse: Image2ProviderResponse | null = null;
   const activeControllers = new Set<AbortController>();
   const retryTimers = new Set<NodeJS.Timeout>();
 
-  return await new Promise<Response>((resolve, reject) => {
+  return await new Promise<Image2ProviderResponse>((resolve, reject) => {
     const abortActiveAttempts = (reason: unknown = IMAGE2_HEDGED_CANCEL_REASON) => {
       for (const controller of activeControllers) {
         if (!controller.signal.aborted) {
@@ -520,7 +517,7 @@ async function fetchImage2ProviderResponse(
       retryTimers.clear();
     };
 
-    const finishWithResponse = (response: Response) => {
+    const finishWithResponse = (response: Image2ProviderResponse) => {
       if (settled) return;
       settled = true;
       cleanup();
@@ -594,11 +591,11 @@ async function fetchImage2ProviderResponse(
 
           if (result.type === 'response') {
             if (result.response.ok || !result.retryable) {
-              finishWithResponse(result.response);
+              finishWithResponse(result);
               return;
             }
 
-            lastRetryableResponse = result.response;
+            lastRetryableResponse = result;
             if (result.failureSummary) failures.push(result.failureSummary);
             console.warn(
               `[image2:${requestId}] attempt=${result.attempt}/${attempts.length} channel=${result.channel} retryable HTTP ${result.response.status}; remaining=${attempts.length - nextAttemptIndex}`
@@ -686,17 +683,28 @@ async function normalizeGeneratedImageUrl(
   if (imageUrl.startsWith('data:image/')) return imageUrl;
   if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) return imageUrl;
 
-  const response = await fetchGeneratedImageUrl(imageUrl, env, allowedOrigin, signal);
+  const controller = new AbortController();
+  const timeoutMs = readPositiveIntEnv(env, 'IMAGE2_REQUEST_TIMEOUT_MS', DEFAULT_IMAGE2_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(new DOMException(
+    'Generated image download timed out', 'TimeoutError'
+  )), timeoutMs);
+  timeout.unref?.();
+  const downloadSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+  try {
+    const response = await fetchGeneratedImageUrl(imageUrl, env, allowedOrigin, downloadSignal);
 
-  if (!response.ok) throw new Error(`生成图片下载失败 (${response.status})。`);
+    if (!response.ok) throw new Error(`生成图片下载失败 (${response.status})。`);
 
-  const contentType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
-  if (!contentType || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(contentType)) {
-    throw new Error('生成图片下载返回了不支持的内容类型。');
+    const contentType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+    if (!contentType || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(contentType)) {
+      throw new Error('生成图片下载返回了不支持的内容类型。');
+    }
+
+    const buffer = Buffer.from(await readBodyWithLimit(response, MAX_GENERATED_IMAGE_BYTES));
+    return `data:${contentType};base64,${buffer.toString('base64')}`;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  const buffer = Buffer.from(await readBodyWithLimit(response, MAX_GENERATED_IMAGE_BYTES));
-  return `data:${contentType};base64,${buffer.toString('base64')}`;
 }
 
 function appendImage2OptionsToFormData({
@@ -851,11 +859,10 @@ export async function generateImage2Image({
     };
   };
 
-  const response = await fetchImage2ProviderResponse(requestId, endpoint, createRequestInit, env, signal);
-
-  const responseText = new TextDecoder().decode(
-    await readBodyWithLimit(response, MAX_IMAGE2_RESPONSE_BYTES)
+  const { response, responseText } = await fetchImage2ProviderResponse(
+    requestId, endpoint, createRequestInit, env, signal
   );
+  signal?.throwIfAborted();
   const responseJson = tryParseJson(responseText);
   console.info(`[image2:${requestId}] relay status=${response.status} ok=${response.ok}`);
 

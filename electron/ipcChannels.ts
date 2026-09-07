@@ -6,3 +6,6 @@ export const UPDATE_DOWNLOAD_CHANNEL = 'banana:update:download';
 export const UPDATE_INSTALL_CHANNEL = 'banana:update:install';
 export const UPDATE_SET_AUTOMATIC_CHANNEL = 'banana:update:set-automatic';
 export const UPDATE_STATE_CHANGED_CHANNEL = 'banana:update:state-changed';
+export const PROJECT_SAVES_READY_CHANNEL = 'banana:projects:saves-ready';
+export const PROJECT_SAVES_FLUSH_CHANNEL = 'banana:projects:flush';
+export const PROJECT_SAVES_RESULT_CHANNEL = 'banana:projects:flush-result';
