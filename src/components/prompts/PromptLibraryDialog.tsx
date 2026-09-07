@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppTranslation } from '../../i18n';
 import {
@@ -54,6 +54,7 @@ export function PromptLibraryDialog({
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [query, setQuery] = useState('');
   const [editor, setEditor] = useState<PromptEditorState>();
+  const contentRef = useRef<HTMLTextAreaElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -82,6 +83,13 @@ export function PromptLibraryDialog({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
+
+  useLayoutEffect(() => {
+    const textarea = contentRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [editor?.content]);
 
   const filteredPrompts = useMemo(
     () => filterPromptTemplates(prompts, query),
@@ -300,73 +308,77 @@ export function PromptLibraryDialog({
             )}
           </div>
         </div>
-
-        {editor && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
-            <form
-              data-prompt-library-editor="true"
-              className="w-full max-w-2xl rounded-2xl border p-5 shadow-2xl"
-              style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.24)' }}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleSave();
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{editor.id ? t('promptLibrary.editTitle') : t('promptLibrary.newTitle')}</h3>
-                <button type="button" onClick={() => setEditor(undefined)} className="rounded-lg p-2" style={{ color: '#96836F' }}><X size={16} /></button>
-              </div>
-              <div className="mt-4 space-y-4">
-                {errorMessage && (
-                  <div className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: 'rgba(217,123,58,0.3)', color: '#D97B3A', background: 'rgba(217,123,58,0.08)' }}>
-                    {errorMessage}
-                  </div>
-                )}
-                <label className="block space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.titleLabel')}</span>
-                  <input
-                    value={editor.title}
-                    maxLength={120}
-                    onChange={(event) => setEditor({ ...editor, title: event.target.value })}
-                    className={inputClassName}
-                    style={inputStyle}
-                    placeholder={t('promptLibrary.titlePlaceholder')}
-                  />
-                </label>
-                <label className="block space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.contentLabel')}</span>
-                  <textarea
-                    autoFocus
-                    value={editor.content}
-                    maxLength={20_000}
-                    onChange={(event) => setEditor({ ...editor, content: event.target.value })}
-                    className={`${inputClassName} min-h-48 resize-y`}
-                    style={inputStyle}
-                    placeholder={t('promptLibrary.contentPlaceholder')}
-                  />
-                </label>
-                <label className="block space-y-1.5">
-                  <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.tagsLabel')}</span>
-                  <input
-                    value={editor.tagsText}
-                    onChange={(event) => setEditor({ ...editor, tagsText: event.target.value })}
-                    className={inputClassName}
-                    style={inputStyle}
-                    placeholder={t('promptLibrary.tagsPlaceholder')}
-                  />
-                </label>
-              </div>
-              <footer className="mt-5 flex justify-end gap-2">
-                <button type="button" onClick={() => setEditor(undefined)} className="rounded-lg px-4 py-2 text-sm" style={{ background: '#141210', color: '#B8A58D' }}>{t('common.cancel')}</button>
-                <button type="submit" disabled={saving || !editor.content.trim()} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ background: '#F2C14E', color: '#16130F' }}>
-                  {saving && <Loader2 size={14} className="animate-spin" />}
-                  {t('promptLibrary.save')}
-                </button>
-              </footer>
-            </form>
-          </div>
-        )}
       </section>
+
+      {editor && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <form
+            data-prompt-library-editor="true"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="prompt-library-editor-title"
+            className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl border p-5 shadow-2xl"
+            style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.24)', color: '#EEE4CE' }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSave();
+            }}
+          >
+            <div className="flex shrink-0 items-center justify-between">
+              <h3 id="prompt-library-editor-title" className="font-semibold">{editor.id ? t('promptLibrary.editTitle') : t('promptLibrary.newTitle')}</h3>
+              <button type="button" aria-label={t('common.close')} onClick={() => setEditor(undefined)} className="rounded-lg p-2" style={{ color: '#96836F' }}><X size={16} /></button>
+            </div>
+            <div className="mt-4 min-h-0 space-y-4 overflow-y-auto">
+              {errorMessage && (
+                <div className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: 'rgba(217,123,58,0.3)', color: '#D97B3A', background: 'rgba(217,123,58,0.08)' }}>
+                  {errorMessage}
+                </div>
+              )}
+              <label className="block space-y-1.5">
+                <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.titleLabel')}</span>
+                <input
+                  value={editor.title}
+                  maxLength={120}
+                  onChange={(event) => setEditor({ ...editor, title: event.target.value })}
+                  className={inputClassName}
+                  style={inputStyle}
+                  placeholder={t('promptLibrary.titlePlaceholder')}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.contentLabel')}</span>
+                <textarea
+                  ref={contentRef}
+                  autoFocus
+                  value={editor.content}
+                  maxLength={20_000}
+                  onChange={(event) => setEditor({ ...editor, content: event.target.value })}
+                  className={`${inputClassName} min-h-48 max-h-[50vh] resize-y`}
+                  style={inputStyle}
+                  placeholder={t('promptLibrary.contentPlaceholder')}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs" style={{ color: '#B8A58D' }}>{t('promptLibrary.tagsLabel')}</span>
+                <input
+                  value={editor.tagsText}
+                  onChange={(event) => setEditor({ ...editor, tagsText: event.target.value })}
+                  className={inputClassName}
+                  style={inputStyle}
+                  placeholder={t('promptLibrary.tagsPlaceholder')}
+                />
+              </label>
+            </div>
+            <footer className="mt-5 flex shrink-0 justify-end gap-2">
+              <button type="button" onClick={() => setEditor(undefined)} className="rounded-lg px-4 py-2 text-sm" style={{ background: '#141210', color: '#B8A58D' }}>{t('common.cancel')}</button>
+              <button type="submit" disabled={saving || !editor.content.trim()} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ background: '#F2C14E', color: '#16130F' }}>
+                {saving && <Loader2 size={14} className="animate-spin" />}
+                {t('promptLibrary.save')}
+              </button>
+            </footer>
+          </form>
+        </div>
+      )}
     </div>
   );
 

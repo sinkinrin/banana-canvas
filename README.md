@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.6.1`
+Current version: `0.6.2`
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
