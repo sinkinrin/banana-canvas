@@ -6,6 +6,17 @@ export async function runCutoutSmoke({ window, localUrl, flush, waitForPredicate
   window: BrowserWindow; localUrl: string; flush: () => Promise<void>;
   waitForPredicate: (window: BrowserWindow, predicate: string, message: string) => Promise<void>;
 }) {
+  async function waitForResultImage(message: string, timeoutMs = 60_000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const ready = await window.webContents.executeJavaScript(`Boolean(document.querySelector('[data-image-node-id]:has([data-cutout-result]) img'))`);
+      if (ready) return;
+      const failure = await window.webContents.executeJavaScript(`document.querySelector('[data-image-node-id]:has([data-cutout-result]) [role="alert"]')?.textContent || ''`);
+      if (failure) throw new Error(`${message}: ${failure}`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    throw new Error(message);
+  }
   const fixture = process.env.BANANA_CUTOUT_SMOKE_IMAGE;
   if (!fixture) throw new Error('Missing cutout smoke fixture');
   const source = `data:image/jpeg;base64,${(await fs.readFile(fixture)).toString('base64')}`;
@@ -34,7 +45,7 @@ export async function runCutoutSmoke({ window, localUrl, flush, waitForPredicate
     })()`);
     await waitForPredicate(window, `Boolean(document.querySelector('[data-image-action="cutout"]'))`, 'Cutout menu did not open');
     await window.webContents.executeJavaScript(`document.querySelector('[data-image-action="cutout"]').click()`);
-    await waitForPredicate(window, `Boolean(document.querySelector('[data-image-node-id]:has([data-cutout-result]) img'))`, 'Real INT8 cutout did not produce an image');
+    await waitForResultImage('Real INT8 cutout did not produce an image');
     const result = await window.webContents.executeJavaScript(`(async () => {
       const img = document.querySelector('[data-image-node-id]:has([data-cutout-result]) img');
       await img.decode();
