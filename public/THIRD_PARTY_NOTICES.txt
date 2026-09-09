@@ -1,3 +1,18 @@
+Banana Canvas bundles an IS-Net general-use model with INT8 convolution weights.
+Original work: Xuebin Qin and the DIS authors, https://github.com/xuebinqin/DIS
+Source ONNX export: https://github.com/danielgatis/rembg
+The original project identifies its code and evaluation as Apache-2.0.
+Apache-2.0 license text is included in licenses/Apache-2.0.txt.
+Conversion by Banana Canvas: per-channel INT8 weights; FP32 activations.
+
+Banana Canvas also includes ONNX Runtime, https://github.com/microsoft/onnxruntime,
+Copyright (c) Microsoft Corporation, distributed under the MIT License below.
+Runtime third-party notices: licenses/ONNX-Runtime-ThirdPartyNotices.txt.
+
+The optional BiRefNet Lite model is distributed under the MIT License below.
+Copyright (c) 2024 ZhengPeng, https://github.com/ZhengPeng7/BiRefNet
+ONNX conversion: https://huggingface.co/onnx-community/BiRefNet_lite-ONNX
+
 Banana Canvas includes Quickdraw (https://github.com/quickdrawjs/quickdraw),
 distributed under the MIT License.
 

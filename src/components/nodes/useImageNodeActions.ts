@@ -11,7 +11,7 @@ import { isBananaImageModel, normalizeImageModel } from '../../lib/imageModels';
 import { buildImageDownloadFileName } from '../../lib/imageDownloads';
 
 export function canRerunImageNode(data: Partial<AppNode['data']>) {
-  return Boolean(data.prompt) && data.generationMode !== 'mask-edit';
+  return Boolean(data.prompt) && data.generationMode !== 'mask-edit' && data.generationMode !== 'cutout';
 }
 
 export function getRerunReferenceImages(

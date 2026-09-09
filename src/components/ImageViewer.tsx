@@ -5,14 +5,16 @@ import { X, ZoomIn, ZoomOut, Download, Copy, Check, CircleAlert } from 'lucide-r
 import { motion } from 'motion/react';
 import { copyImageToClipboard } from '../lib/clipboard';
 import { buildImageDownloadFileName } from '../lib/imageDownloads';
+import { CHECKERBOARD_STYLE } from '../lib/cutoutModels';
 
 interface ImageViewerProps {
   imageUrl: string;
+  transparent?: boolean;
   prompt?: string;
   onClose: () => void;
 }
 
-export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
+export function ImageViewer({ imageUrl, prompt, transparent = false, onClose }: ImageViewerProps) {
   const { t } = useAppTranslation();
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -20,6 +22,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [background, setBackground] = useState<'checker' | 'light' | 'dark'>('checker');
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -99,7 +102,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
     >
         {/* Toolbar */}
         <div
-          className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 rounded-2xl shadow-2xl z-10"
+          className="absolute top-6 left-1/2 -translate-x-1/2 flex max-w-[95vw] flex-wrap items-center justify-center gap-2 p-2 rounded-2xl shadow-2xl z-10"
           style={{background: 'rgba(22,19,15,0.9)', border: '1px solid rgba(242,193,78,0.2)', backdropFilter: 'blur(20px)'}}
           onMouseDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
@@ -124,6 +127,10 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
             <ZoomIn size={20} />
           </button>
           <div className="w-px h-6 mx-1" style={{background: 'rgba(242,193,78,0.15)'}} />
+          {transparent && <div className="flex gap-1" aria-label={t('cutout.background')}>
+            {(['checker', 'light', 'dark'] as const).map((value) => <button key={value} type="button" onClick={() => setBackground(value)} aria-pressed={background === value} title={t(`cutout.backgrounds.${value}`)} aria-label={t(`cutout.backgrounds.${value}`)}
+              className={`h-6 w-6 rounded border-2 ${background === value ? 'border-[#F2C14E]' : 'border-white/20'}`} style={value === 'checker' ? CHECKERBOARD_STYLE : { background: value === 'light' ? '#f4f5f7' : '#202733' }} />)}
+          </div>}
           <button
             type="button"
             onClick={handleCopy}
@@ -170,6 +177,7 @@ export function ImageViewer({ imageUrl, prompt, onClose }: ImageViewerProps) {
           >
             <img
               src={imageUrl}
+              style={transparent ? background === 'checker' ? CHECKERBOARD_STYLE : { backgroundColor: background === 'light' ? '#f4f5f7' : '#202733' } : undefined}
               alt={prompt || t('imageNode.generatedAlt')}
               className="max-w-[90vw] max-h-[80vh] object-contain shadow-2xl rounded-lg select-none"
               draggable={false}

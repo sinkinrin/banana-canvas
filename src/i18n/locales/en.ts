@@ -1,4 +1,29 @@
 export const en = {
+  cutout: {
+    title: 'Remove background', tools: 'Image tools', processing: 'Removing background…',
+    interrupted: 'This task was interrupted. Please run background removal again from the original image.',
+    settingsTitle: 'Local background removal',
+    settingsDescription: 'IS-Net INT8 is included with the app and works offline. Download another model below to use it on this device. Images stay on your computer.',
+    settingsHint: 'Selections apply immediately to the next image. Downloading does not switch models automatically. Removing the selected download returns to the bundled model.',
+    bundled: 'Included', active: 'In use', use: 'Use model', remove: 'Delete downloaded model',
+    downloading: 'Downloading {{percent}}%', background: 'Preview background',
+    backgrounds: { checker: 'Checkerboard', light: 'Light background', dark: 'Dark background' },
+    models: {
+      'isnet-int8': 'Compact INT8 weights · default',
+      'isnet-fp32': 'Original precision · larger download',
+      'birefnet-lite-fp32': 'Alternative model · compare fine edges',
+    },
+    errors: {
+      CANCELLED: 'Cancelled.', BUSY: 'Another image is being processed. Please try again when it finishes.',
+      DOWNLOAD_BUSY: 'A model is downloading. Please wait or cancel it first.',
+      MODEL_MISSING: 'Model file is missing. Download it again, or reinstall the app for the bundled model.',
+      MODEL_CORRUPT: 'Model verification failed. Please download it again.',
+      INFERENCE_TIMEOUT: 'Background removal timed out. Try the default model or a smaller image.',
+      IMAGE_TOO_LARGE: 'Please resize this image to 32 megapixels or less before removing its background.',
+      DESKTOP_ONLY: 'Local background removal is available in the desktop app.',
+      FAILED: 'Could not complete the operation. Please try again.',
+    },
+  },
   common: {
     cancel: 'Cancel',
     close: 'Close',

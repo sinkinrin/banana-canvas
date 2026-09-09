@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-09
+
+### 新增
+
+- 新增本地智能抠图：桌面版内置 IS-Net INT8，图片和参考图都可从“图片工具”菜单处理。
+- 抠图结果作为独立图片节点生成，保留原图、原尺寸和透明 PNG；支持下载、复制、继续作为参考图和项目重载。
+- 设置新增“智能抠图”页，可下载、校验、切换和删除 IS-Net FP32、BiRefNet Lite FP32；内置模型始终可离线使用。
+- 新增透明棋盘格、浅色和深色背景预览，以及抠图取消、超时和失败提示。
+
+### 改进
+
+- 抠图推理放在 Electron 独立后台进程，避免阻塞画布；下载模型使用临时文件、长度校验和 SHA256 校验后原子安装。
+- 补充模型来源、许可、量化转换说明和真实 Electron 离线/打包 smoke 验证。
+
+### 已知限制
+
+- Windows 安装包暂未进行代码签名，安装和自动更新时可能出现 SmartScreen 未知发布者提示。
+- 默认 INT8 是权重量化版，激活和运算保持 FP32；CPU 速度和边缘质量仍取决于图片与设备。
+
 ## [0.6.2] - 2026-09-07
 
 ### 修复
@@ -151,7 +170,8 @@
 - 改进 Image2 请求、代理、取消、校验与生成结果处理。
 - 增强本地项目资产持久化与可恢复删除。
 
-[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/sinkinrin/banana-canvas/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.6.2...v0.7.0
 [0.6.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/sinkinrin/banana-canvas/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sinkinrin/banana-canvas/compare/v0.4.0...v0.5.0

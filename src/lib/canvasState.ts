@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { Snapshot as QuickdrawSnapshot } from '@quickdrawjs/react';
+import type { CutoutModelId } from './cutoutModels';
 import { v4 as uuidv4 } from 'uuid';
 import {
   normalizeBananaOptions,
@@ -53,7 +54,8 @@ export type CanvasNodeData = {
   sourceImage?: InlineImageData | null;
   imageUrl?: string;
   sourcePrompt?: string;
-  generationMode?: 'standard' | 'mask-edit';
+  generationMode?: 'standard' | 'mask-edit' | 'cutout';
+  cutoutModelId?: CutoutModelId;
   isLoading?: boolean;
   error?: string;
   color?: string;
@@ -230,6 +232,7 @@ function sanitizeNodeDataForSnapshot(data: CanvasNodeData): CanvasNodeData {
     imageUrl: data.imageUrl && !isDataUrl(data.imageUrl) ? data.imageUrl : undefined,
     sourcePrompt: data.sourcePrompt,
     generationMode: data.generationMode,
+    cutoutModelId: data.cutoutModelId,
     color: data.color,
     createdAt: data.createdAt,
     generationTitle: data.generationTitle,

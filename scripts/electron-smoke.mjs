@@ -19,6 +19,7 @@ const child = spawn(packagedExecutable ?? electronPath, electronArgs, {
     ...process.env,
     BANANA_SMOKE_TEST: '1',
     BANANA_SMOKE_USER_DATA_DIR: smokeUserDataDir,
+    BANANA_CUTOUT_SMOKE_IMAGE: path.join(rootDir, 'scripts', 'fixtures', 'cutout-portrait.jpg'),
   },
   stdio: 'inherit',
   windowsHide: true,
@@ -27,7 +28,7 @@ const child = spawn(packagedExecutable ?? electronPath, electronArgs, {
 const timeout = setTimeout(() => {
   console.error('[banana:smoke] timed out');
   child.kill();
-}, 60_000);
+}, process.env.BANANA_CUTOUT_OPTIONAL_SMOKE === '1' ? 240_000 : 60_000);
 timeout.unref?.();
 
 child.once('error', (error) => {

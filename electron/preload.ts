@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopUpdateState } from '../src/lib/desktopUpdates';
+import type { CutoutModelId, CutoutRequest, CutoutState } from '../src/lib/cutoutModels';
 import {
   PROJECT_SAVES_READY_CHANNEL,
   PROJECT_SAVES_FLUSH_CHANNEL,
@@ -18,6 +19,20 @@ const updateSubscriptions = new Map<string, (_event: Electron.IpcRendererEvent, 
 let nextUpdateSubscriptionId = 0;
 
 contextBridge.exposeInMainWorld('bananaDesktop', Object.freeze({
+  cutout: Object.freeze({
+    getState: () => ipcRenderer.invoke('banana:cutout:state'),
+    select: (id: CutoutModelId) => ipcRenderer.invoke('banana:cutout:select', id),
+    download: (id: CutoutModelId) => ipcRenderer.invoke('banana:cutout:download', id),
+    cancelDownload: () => ipcRenderer.invoke('banana:cutout:cancel-download'),
+    remove: (id: CutoutModelId) => ipcRenderer.invoke('banana:cutout:remove', id),
+    run: (request: CutoutRequest) => ipcRenderer.invoke('banana:cutout:run', request),
+    cancel: (requestId: string) => ipcRenderer.invoke('banana:cutout:cancel', requestId),
+    subscribe: (listener: (state: CutoutState) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: CutoutState) => listener(state);
+      ipcRenderer.on('banana:cutout:changed', handler);
+      return () => ipcRenderer.removeListener('banana:cutout:changed', handler);
+    },
+  }),
   onFlushProjectSaves: (handler: () => Promise<void>) => {
     const listener = (_event: Electron.IpcRendererEvent, requestId: number) => {
       void Promise.resolve().then(handler).then(

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, KeyRound, Loader2, RefreshCw, Server, Settings, X } from 'lucide-react';
+import { CheckCircle2, KeyRound, Loader2, RefreshCw, Scissors, Server, Settings, X } from 'lucide-react';
 import { useAppTranslation } from '../../i18n';
 
 import {
@@ -11,6 +11,7 @@ import {
 import { loadRuntimeSettings, saveRuntimeSettings } from '../../services/runtimeSettings';
 import { SoftwareUpdatePanel } from './SoftwareUpdatePanel';
 import { LanguageSelector } from './LanguageSelector';
+import { CutoutSettingsPanel } from './CutoutSettingsPanel';
 
 const fieldClassName = 'w-full rounded-lg border px-3 py-2 text-sm outline-none';
 const fieldStyle = {
@@ -63,7 +64,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [activeTab, setActiveTab] = useState<'models' | 'updates'>('models');
+  const [activeTab, setActiveTab] = useState<'models' | 'cutout' | 'updates'>('models');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -150,7 +151,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
         </header>
 
         <nav
-          className="sticky top-[73px] z-10 flex gap-1 border-b px-6 py-2"
+          className="sticky top-[73px] z-10 flex flex-wrap gap-1 border-b px-6 py-2"
           style={{ background: 'rgba(29,26,20,0.98)', borderColor: 'rgba(242,193,78,0.12)' }}
           aria-label={t('settings.categories')}
           role="tablist"
@@ -168,6 +169,11 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
           >
             <Server size={15} />
             {t('settings.connectionTab')}
+          </button>
+          <button type="button" data-settings-tab="cutout" role="tab" aria-selected={activeTab === 'cutout'}
+            onClick={() => setActiveTab('cutout')} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium"
+            style={activeTab === 'cutout' ? { background: 'rgba(242,193,78,0.14)', color: '#F2C14E' } : { color: '#96836F' }}>
+            <Scissors size={15} />{t('cutout.title')}
           </button>
           <button
             type="button"
@@ -187,6 +193,8 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
 
         {activeTab === 'updates' ? (
           <SoftwareUpdatePanel />
+        ) : activeTab === 'cutout' ? (
+          <CutoutSettingsPanel />
         ) : !form || !settings ? (
           <div className="flex min-h-64 items-center justify-center gap-3" style={{ color: '#96836F' }}>
             {errorMessage ? errorMessage : <><Loader2 size={18} className="animate-spin" />{t('settings.loading')}</>}

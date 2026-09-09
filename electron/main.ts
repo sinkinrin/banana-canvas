@@ -13,6 +13,8 @@ import {
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { createProjectSaveBridge } from './projectSaveBridge';
+import { registerCutoutIpc } from './cutoutIpc';
+import { runCutoutSmoke } from './cutoutSmoke';
 import { runProjectLifecycleSmoke } from './projectLifecycleSmoke';
 import { startLocalServer, type LocalServerHandle } from '../src/server/startLocalServer';
 import type { RuntimeConfigLogger } from '../src/server/runtimeConfig';
@@ -56,6 +58,8 @@ let desktopLanguage: NativeAppLanguage = 'en';
 
 const MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH = 128 * 1024 * 1024;
 const SUPPORTED_CLIPBOARD_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i;
+
+registerCutoutIpc(() => mainWindow, getAppRoot);
 
 function assertApplicationWindowSender(event: Electron.IpcMainInvokeEvent, action: string) {
   if (!mainWindow || event.sender !== mainWindow.webContents) {
@@ -994,7 +998,8 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
     waitForPredicate: waitForSmokePredicate,
   });
 
-  console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, and QuickDraw probes passed');
+  await runCutoutSmoke({ window, localUrl, flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+  console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, QuickDraw and cutout probes passed');
 }
 
 async function ensureLocalServer() {

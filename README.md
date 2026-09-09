@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.6.2`
+Current version: `0.7.0`
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
@@ -21,6 +21,7 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 - **Reference-driven iteration** — upload or paste up to four references, then reuse any result in the next step.
 - **Composition sketches** — draw subject positions, actions, arrows, and framing before generating.
 - **Mask editing** — paint the area to change and compare the Image2 result with the original.
+- **Offline background removal** — the desktop app includes IS-Net INT8; download and select optional models in settings. See [Background removal](docs/CUTOUT.md).
 - **Reusable prompt library** — save, search, tag, and apply prompts across projects.
 - **Local-first projects** — persist canvases, relationships, and image assets on your own machine.
 - **English and Simplified Chinese UI** — follow the system language on first launch and remember manual changes.
@@ -64,7 +65,7 @@ To launch the Electron desktop app from source:
 npm run electron
 ```
 
-Only browsing projects, arranging a canvas, and viewing saved images works without an API Key.
+Browsing projects, arranging a canvas, viewing saved images, and local desktop background removal work without an API Key.
 
 ## Basic workflow
 

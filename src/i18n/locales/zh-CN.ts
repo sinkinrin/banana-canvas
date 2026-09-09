@@ -1,6 +1,31 @@
 import { en, type LocaleResource } from './en';
 
 export const zhCN: LocaleResource<typeof en> = {
+  cutout: {
+    title: '智能抠图', tools: '图片工具', processing: '正在抠图…',
+    interrupted: '任务已中断，请从原图重新抠图。',
+    settingsTitle: '本地智能抠图',
+    settingsDescription: 'IS-Net INT8 已随应用内置，安装后即可离线使用。也可以下载其他模型，在本机切换使用。图片不会上传。',
+    settingsHint: '选择立即生效，用于下一次抠图。下载完成后需点击“使用此模型”进行切换。删除正在使用的下载模型时，将自动恢复内置模型。',
+    bundled: '已内置', active: '正在使用', use: '使用此模型', remove: '删除已下载模型',
+    downloading: '正在下载 {{percent}}%', background: '预览背景',
+    backgrounds: { checker: '透明棋盘格', light: '浅色背景', dark: '深色背景' },
+    models: {
+      'isnet-int8': 'INT8 权重轻量版 · 默认',
+      'isnet-fp32': '原始精度 · 下载体积较大',
+      'birefnet-lite-fp32': '另一种模型 · 可对比边缘细节',
+    },
+    errors: {
+      CANCELLED: '已取消。', BUSY: '另一张图片正在抠图，请完成后再试。',
+      DOWNLOAD_BUSY: '已有模型正在下载，请等待完成或先取消。',
+      MODEL_MISSING: '模型文件缺失。可选模型请重新下载，内置模型请重新安装应用。',
+      MODEL_CORRUPT: '模型完整性校验失败，请重新下载。',
+      INFERENCE_TIMEOUT: '抠图超时，请尝试默认模型或缩小图片。',
+      IMAGE_TOO_LARGE: '请先将图片缩小至 3200 万像素以内再抠图。',
+      DESKTOP_ONLY: '本地智能抠图可在桌面客户端中使用。',
+      FAILED: '操作未能完成，请重试。',
+    },
+  },
   common: {
     cancel: '取消',
     close: '关闭',

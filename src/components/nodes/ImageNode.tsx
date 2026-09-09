@@ -1,10 +1,13 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, Edit3, GitCompare, CircleAlert } from 'lucide-react';
+import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, GitCompare, CircleAlert, Scissors, Loader2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAppTranslation } from '../../i18n';
 import { AnimatePresence } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 import { ImageViewer } from '../ImageViewer';
+import { ImageToolsMenu } from './ImageToolsMenu';
+import { cancelCutout, useCutout } from './useCutout';
+import { CHECKERBOARD_STYLE, CUTOUT_MODELS } from '../../lib/cutoutModels';
 import { useStore, type AppNode } from '../../store';
 import {
   resolveImageUrl,
@@ -37,6 +40,8 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [showViewer, setShowViewer] = useState(false);
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
+  const cutout = useCutout(id);
+  const isCutout = data.generationMode === 'cutout';
   const [copyImageFailed, setCopyImageFailed] = useState(false);
   const [copyPromptFailed, setCopyPromptFailed] = useState(false);
   const [rerunError, setRerunError] = useState<string>();
@@ -275,7 +280,19 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     }
   };
 
-  if (!imageUrl && (data.isLoading || data.error)) {
+  if (!imageUrl && (isCutout || data.isLoading || data.error)) {
+    if (isCutout) return (
+      <div data-cutout-result={id} className="nodrag nopan w-[350px] rounded-2xl border border-[#F2C14E]/20 bg-[#1D1A14] p-5 text-[#EEE4CE]">
+        <div className="mb-4 flex items-center gap-2 font-semibold"><Scissors size={18} className="text-[#F2C14E]" />{t('cutout.title')}</div>
+        <div className="flex min-h-52 items-center justify-center rounded-xl bg-[#141210] p-4 text-center text-sm" role="status">
+          {!data.isLoading ? <span className="text-red-300">{data.error || t('cutout.interrupted')}</span> : <span className="flex items-center gap-2"><Loader2 size={18} className="animate-spin" />{t('cutout.processing')}</span>}
+        </div>
+        <div className="mt-4 flex justify-end gap-3 text-xs">
+          {data.isLoading && <button type="button" onClick={() => cancelCutout(id)}>{t('common.cancel')}</button>}
+          <button type="button" onClick={() => { cancelCutout(id); deleteNode(id); }}>{t('common.delete')}</button>
+        </div>
+      </div>
+    );
     return (
       <div className="relative group">
         <Handle type="target" position={Position.Left} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#9B70D0', borderColor: '#ffffff'}} />
@@ -314,7 +331,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     >
       <Handle type="target" position={Position.Left} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#9B70D0', borderColor: '#1D1A14'}} />
 
-      <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{background: '#141210', borderRadius: '10px', overflow: 'hidden'}}>
+      <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{ background: '#141210', ...(isCutout ? CHECKERBOARD_STYLE : {}), borderRadius: '10px', overflow: 'hidden' }}>
         {imageUrl ? (
           <>
             <img
@@ -381,17 +398,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 >
                   <Wand2 size={18} />
                 </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowMaskEditor(true);
-                  }}
-                  className="p-2.5 text-white hover:bg-[rgba(242,193,78,0.12)] rounded-xl transition-all"
-                  title={t('imageNode.maskEdit')}
-                >
-                  <Edit3 size={18} />
-                </button>
+                <ImageToolsMenu onCutout={() => void cutout.start(imageUrl, data.imageAssetId)} onMaskEdit={() => setShowMaskEditor(true)} cutoutDisabled={!cutout.supported || cutout.busy} />
                 {sourceImageUrl && (
                   <button
                     type="button"
@@ -436,6 +443,8 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         )}
       </div>
 
+      {isCutout && <div data-cutout-result={id} className="flex items-center gap-2 px-2 py-2 text-xs text-[#B8A58D]"><Scissors size={13} className="text-[#F2C14E]" />{t('cutout.title')}<span className="ml-auto text-[10px] text-[#96836F]">{CUTOUT_MODELS.find((model) => model.id === data.cutoutModelId)?.name}</span></div>}
+      {cutout.error && <p role="alert" className="max-w-[512px] px-2 py-2 text-xs text-red-300">{cutout.error}</p>}
       {data.prompt && (
         <div className="mt-3 px-2 pb-1 max-w-[512px] flex items-start justify-between gap-2">
           <div className="flex-1">
@@ -466,6 +475,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         {showViewer && imageUrl && (
           <ImageViewer
             imageUrl={imageUrl}
+            transparent={isCutout}
             prompt={data.prompt}
             onClose={() => setShowViewer(false)}
           />

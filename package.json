@@ -1,7 +1,7 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "A local-first AI image creation canvas with Image2 and in-app connection settings.",
   "author": "Banana Canvas Contributors",
   "repository": {
@@ -18,7 +18,7 @@
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "vite build",
-    "build:electron": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --target=node20 --format=cjs --outdir=build/electron --out-extension:.js=.cjs --external:electron --external:vite",
+    "build:electron": "esbuild electron/main.ts electron/preload.ts electron/cutoutWorker.ts --bundle --platform=node --target=node20 --format=cjs --outdir=build/electron --out-extension:.js=.cjs --external:electron --external:vite --external:onnxruntime-node",
     "electron": "npm run build && npm run build:electron && electron .",
     "smoke:electron": "npm run build && npm run build:electron && node scripts/electron-smoke.mjs",
     "smoke:electron:packaged": "node scripts/electron-smoke.mjs \"release/win-unpacked/香蕉画图.exe\"",
@@ -45,6 +45,7 @@
     "idb-keyval": "^6.3.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.42.2",
+    "onnxruntime-node": "1.29.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.13",
@@ -100,7 +101,33 @@
       "dist/**/*",
       ".env.example",
       "package.json",
-      "!node_modules{,/**/*}"
+      "!node_modules{,/**/*}",
+      {
+        "from": "node_modules/onnxruntime-node",
+        "to": "node_modules/onnxruntime-node",
+        "filter": [
+          "dist/**/*",
+          "bin/napi-v6/win32/x64/**/*",
+          "package.json"
+        ]
+      },
+      {
+        "from": "node_modules/onnxruntime-common",
+        "to": "node_modules/onnxruntime-common",
+        "filter": [
+          "dist/**/*",
+          "package.json"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "assets/models/isnet-int8.onnx",
+        "to": "cutout/isnet-int8.onnx"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/bin/**/*"
     ],
     "npmRebuild": false,
     "asar": true,

@@ -2,7 +2,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
 import { useAppTranslation } from '../../i18n';
-import { BookOpen, Edit3, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
 import { optimizePrompt } from '../../services/gemini';
@@ -33,6 +33,8 @@ import {
   getPromptAspectRatioOptions,
 } from './promptAspectRatios';
 import { PromptLibraryDialog } from '../prompts/PromptLibraryDialog';
+import { ImageToolsMenu } from './ImageToolsMenu';
+import { useCutout } from './useCutout';
 import {
   formatMebibytes,
   MAX_REFERENCE_IMAGE_BYTES,
@@ -64,6 +66,7 @@ const imageSizeLabelKeys: Record<BananaImageSize, string> = {
 };
 
 export function PromptNode({ id, data }: NodeProps<AppNode>) {
+  const cutout = useCutout(id);
   const { t } = useAppTranslation();
   const updateNodeData = useStore((state) => state.updateNodeData);
   const saveNodeSketch = useStore((state) => state.saveNodeSketch);
@@ -340,6 +343,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </button>
           </div>
 
+          {cutout.error && <p role="alert" className="mb-2 text-xs text-red-300">{cutout.error}</p>}
           {/* Reference Images Section */}
           <div className="nodrag nopan nowheel" onPointerDown={(event) => event.stopPropagation()}>
             <button
@@ -371,18 +375,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   {referenceImages.map((img, index) => (
                     <div key={index} className="relative w-full aspect-square rounded-lg overflow-hidden" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)'}}>
                       <img src={img.url} alt={t('promptNode.referenceAlt', { index: index + 1 })} className="w-full h-full object-cover opacity-80" />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMaskEditorSource({ image: img, index });
-                        }}
-                        className="absolute top-1 left-1 z-20 rounded-full p-1 text-[#16130F] shadow transition-colors hover:bg-[#FFD36B]"
-                        style={{ background: '#F2C14E' }}
-                        title={t('promptNode.maskEditReference')}
-                      >
-                        <Edit3 size={10} />
-                      </button>
+                      <ImageToolsMenu compact onCutout={() => void cutout.start(img.url, referenceImageIds[index])} onMaskEdit={() => setMaskEditorSource({ image: img, index })} cutoutDisabled={!cutout.supported || cutout.busy} />
                       <button
                         type="button"
                         onClick={(e) => {
