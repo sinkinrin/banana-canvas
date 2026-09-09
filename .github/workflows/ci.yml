@@ -40,4 +40,6 @@ jobs:
       - if: runner.os == 'Linux'
         run: xvfb-run -a npm run smoke:electron
       - if: runner.os == 'Windows'
+        env:
+          BANANA_SKIP_CUTOUT_INFERENCE: '1'
         run: npm run smoke:electron

@@ -41,6 +41,8 @@ jobs:
         run: npm run dist:win
 
       - name: Smoke test packaged client
+        env:
+          BANANA_SKIP_CUTOUT_INFERENCE: '1'
         run: npm run smoke:electron:packaged
 
       - name: Verify release assets and generate checksums

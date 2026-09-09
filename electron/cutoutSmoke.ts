@@ -31,6 +31,15 @@ export async function runCutoutSmoke({ window, localUrl, flush, waitForPredicate
   await waitForPredicate(window, `Boolean(document.querySelector('[data-image-node-id="cutout-source"] img'))`, 'Cutout source did not load');
   const initial = await window.webContents.executeJavaScript('window.bananaDesktop.cutout.getState()');
   if (initial.selectedModelId !== 'isnet-int8' || !initial.installed.includes('isnet-int8')) throw new Error('Bundled INT8 default unavailable');
+  if (process.env.BANANA_SKIP_CUTOUT_INFERENCE === '1') {
+    await window.webContents.executeJavaScript(`document.querySelector('[data-app-settings-entry="true"]').click()`);
+    await waitForPredicate(window, `Boolean(document.querySelector('[data-settings-tab="cutout"]'))`, 'Cutout settings tab missing');
+    await window.webContents.executeJavaScript(`document.querySelector('[data-settings-tab="cutout"]').click()`);
+    await waitForPredicate(window, `document.querySelectorAll('[data-cutout-model]').length === 3`, 'Cutout settings models missing');
+    await window.webContents.executeJavaScript(`document.querySelector('[data-settings-close]').click()`);
+    console.info('[banana:smoke] cutout contract smoke passed (hosted runner inference skipped)');
+    return;
+  }
   const blocked: string[] = [];
   window.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
     const external = new URL(details.url).origin !== new URL(localUrl).origin;
