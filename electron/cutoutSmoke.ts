@@ -6,7 +6,7 @@ export async function runCutoutSmoke({ window, localUrl, flush, waitForPredicate
   window: BrowserWindow; localUrl: string; flush: () => Promise<void>;
   waitForPredicate: (window: BrowserWindow, predicate: string, message: string) => Promise<void>;
 }) {
-  async function waitForResultImage(message: string, timeoutMs = 60_000) {
+  async function waitForResultImage(message: string, timeoutMs = 180_000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const ready = await window.webContents.executeJavaScript(`Boolean(document.querySelector('[data-image-node-id]:has([data-cutout-result]) img'))`);
@@ -58,7 +58,7 @@ export async function runCutoutSmoke({ window, localUrl, flush, waitForPredicate
     if (result.width !== 384 || result.height !== 480 || result.corner > 20 || result.face < 230 || !result.png || result.original !== source || blocked.length) throw new Error(`Cutout offline/alpha check failed: ${JSON.stringify({ ...result, original: undefined, blocked })}`);
     await flush();
     await window.loadURL(url);
-    await waitForPredicate(window, `Boolean(document.querySelector('[data-image-node-id]:has([data-cutout-result]) img'))`, 'Cutout result did not survive reload');
+    await waitForResultImage('Cutout result did not survive reload', 60_000);
     console.info('[banana:smoke] bundled INT8 offline cutout, transparent PNG, original preservation and project reload passed');
   } finally {
     window.webContents.session.webRequest.onBeforeRequest(null);

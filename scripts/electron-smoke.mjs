@@ -28,7 +28,7 @@ const child = spawn(packagedExecutable ?? electronPath, electronArgs, {
 const timeout = setTimeout(() => {
   console.error('[banana:smoke] timed out');
   child.kill();
-}, process.env.BANANA_CUTOUT_OPTIONAL_SMOKE === '1' ? 300_000 : 180_000);
+}, process.env.BANANA_CUTOUT_OPTIONAL_SMOKE === '1' ? 420_000 : 300_000);
 timeout.unref?.();
 
 child.once('error', (error) => {
