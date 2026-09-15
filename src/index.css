@@ -18,6 +18,49 @@
   --border-hover: rgba(242, 193, 78, 0.45);
 }
 
+/* Frameless desktop chrome. Browser layout stays unchanged. Keep a native
+   resize frame/shadow; the titlebar itself has no border or contrasting strip. */
+.desktop-app {
+  --desktop-titlebar-height: 32px;
+  background: var(--canvas-bg);
+  color-scheme: dark;
+}
+.desktop-app body { padding-top: var(--desktop-titlebar-height); }
+.desktop-app .h-screen { height: calc(100dvh - var(--desktop-titlebar-height)); }
+.desktop-app .min-h-screen { min-height: calc(100dvh - var(--desktop-titlebar-height)); }
+/* Full-screen dialogs (including portals) must leave the window controls usable. */
+.desktop-app .fixed.inset-0 { top: var(--desktop-titlebar-height); }
+.desktop-titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 32px;
+  z-index: 20000;
+  display: flex;
+  background: var(--canvas-bg);
+  color: var(--text-secondary);
+  user-select: none;
+}
+.desktop-titlebar-drag {
+  -webkit-app-region: drag;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-size: 11px;
+}
+.desktop-window-controls { -webkit-app-region: no-drag; display: flex; }
+.desktop-window-controls button {
+  width: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+.desktop-window-controls button:hover { background: var(--card-hover); }
+.desktop-window-controls button[data-window-action="close"]:hover { background: #c42b1c; color: white; }
+.desktop-window-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
 /* ReactFlow canvas */
 .react-flow__renderer,
 .react-flow__background,

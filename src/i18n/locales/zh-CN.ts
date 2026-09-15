@@ -1,6 +1,7 @@
 import { en, type LocaleResource } from './en';
 
 export const zhCN: LocaleResource<typeof en> = {
+  window: { minimize: '最小化窗口', maximize: '最大化窗口', restore: '还原窗口', close: '关闭窗口' },
   comparison: {
     title: '多模型对比', description: '使用同一提示词和参考图，每个模型生成一张。共用下方的画幅和分辨率；高级参数仅在模型支持时生效。',
     count: '已选 {{count}} 个模型，将发起 {{count}} 次生成请求，各自可能产生费用。',

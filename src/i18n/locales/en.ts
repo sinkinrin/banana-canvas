@@ -1,4 +1,5 @@
 export const en = {
+  window: { minimize: 'Minimize window', maximize: 'Maximize window', restore: 'Restore window', close: 'Close window' },
   comparison: {
     title: 'Compare models', description: 'Use the same prompt and reference images across models, with one image per model. Shared aspect ratio and resolution are selected below; advanced options apply only where supported.',
     count: '{{count}} models selected · {{count}} generation requests. Each request may incur a charge.',

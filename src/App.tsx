@@ -11,6 +11,8 @@ import { parseAppRoute, type AppRoute } from './lib/routes';
 import { notifyDesktopLanguage } from './lib/desktopUpdates';
 import { ProjectCanvasPage } from './pages/ProjectCanvasPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { DesktopTitleBar } from './components/DesktopTitleBar';
+import { getDesktopWindowBridge } from './lib/desktopWindow';
 
 function getCurrentRoute() {
   if (typeof window === 'undefined') return { name: 'projects' } as const;
@@ -35,6 +37,12 @@ export default function App() {
   const { t, i18n } = useAppTranslation();
   const [route, setRoute] = useState<AppRoute>(() => getCurrentRoute());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [desktopWindow] = useState(() => getDesktopWindowBridge());
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('desktop-app', Boolean(desktopWindow));
+    return () => document.documentElement.classList.remove('desktop-app');
+  }, [desktopWindow]);
 
   useEffect(() => {
     const handleRouteChange = () => setRoute(getCurrentRoute());
@@ -54,6 +62,7 @@ export default function App() {
 
   return (
     <>
+      <DesktopTitleBar bridge={desktopWindow} />
       <AppRouter route={route} onOpenSettings={() => setIsSettingsOpen(true)} />
       {isSettingsOpen && <RuntimeSettingsDialog onClose={() => setIsSettingsOpen(false)} />}
     </>

@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.9.0`
+Current version: `0.9.1`
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
@@ -16,6 +16,7 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 
 ## Highlights
 
+- **Frameless desktop window** — a matching draggable title area with minimize, maximize/restore, and close controls; closing waits for project saves and fully exits the app.
 - **Visual generation workflow** — build and rearrange prompt-to-image flows with React Flow.
 - **Multi-model comparisons** — generate one image per selected model from the same prompt and references, inspect results with synchronized zoom/pan, and save your preferred result.
 - **Result information** — inspect actual dimensions/format, generation time, requested API model, and server-reported model/quality. Missing metadata is shown as unrecorded.

@@ -36,6 +36,8 @@ import {
 } from './updateManager';
 import { createUpdatePreferencesStore } from './updatePreferences';
 import { runComparisonSmoke } from './comparisonSmoke';
+import { registerWindowControls, observeWindowState } from './windowControls';
+import { runWindowCloseSmoke } from './windowCloseSmoke';
 import {
   UPDATE_CHECK_CHANNEL,
   UPDATE_DOWNLOAD_CHANNEL,
@@ -62,6 +64,7 @@ const MAX_CLIPBOARD_IMAGE_DATA_URL_LENGTH = 128 * 1024 * 1024;
 const SUPPORTED_CLIPBOARD_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i;
 
 registerCutoutIpc(() => mainWindow, getAppRoot);
+registerWindowControls(ipcMain, () => mainWindow);
 
 function assertApplicationWindowSender(event: Electron.IpcMainInvokeEvent, action: string) {
   if (!mainWindow || event.sender !== mainWindow.webContents) {
@@ -1120,6 +1123,8 @@ async function createMainWindow() {
     minWidth: 960,
     minHeight: 640,
     show: false,
+    frame: false,
+    backgroundColor: '#16130F',
     title: messages.appName,
     webPreferences: {
       contextIsolation: true,
@@ -1129,9 +1134,10 @@ async function createMainWindow() {
     },
   });
   mainWindow.removeMenu();
+  observeWindowState(mainWindow);
   projectSaveBridge = createProjectSaveBridge(ipcMain, mainWindow.webContents);
   mainWindow.on('close', (event) => {
-    if (isQuitting || isSmokeTest()) return;
+    if (isQuitting) return;
     event.preventDefault();
     void quitAfterSaving();
   });
@@ -1166,12 +1172,8 @@ async function createMainWindow() {
   await mainWindow.loadURL(isSmokeTest() ? `${localServer.url}?lng=zh-CN` : localServer.url);
 
   if (isSmokeTest()) {
-    await runSmokeTest(localServer.url, mainWindow);
-    mainWindow.destroy();
-    mainWindow = null;
-    await localServer.close();
-    serverHandle = null;
-    app.quit();
+    if (process.env.BANANA_SMOKE_RESTART !== '1') await runSmokeTest(localServer.url, mainWindow);
+    await runWindowCloseSmoke({ window: mainWindow, localUrl: localServer.url, waitForPredicate: waitForSmokePredicate });
   }
 }
 
@@ -1217,7 +1219,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
-  if (isQuitting || isSmokeTest()) return;
+  if (isQuitting) return;
   event.preventDefault();
   void quitAfterSaving();
 });
@@ -1230,5 +1232,9 @@ app.on('will-quit', (event) => {
   serverHandle = null;
   void server.close().catch((error) => {
     console.error('[banana:shutdown] could not close local server:', error);
-  }).finally(() => app.quit());
+  }).finally(() => {
+    // Let Electron finish unwinding the cancelled will-quit event before retrying.
+    // A microtask here can call quit while its native quitting flag is still set.
+    setImmediate(() => app.quit());
+  });
 });

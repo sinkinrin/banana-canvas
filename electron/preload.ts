@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopUpdateState } from '../src/lib/desktopUpdates';
+import type { DesktopWindowBridge, DesktopWindowState } from '../src/lib/desktopWindow';
 import type { CutoutModelId, CutoutRequest, CutoutState } from '../src/lib/cutoutModels';
 import {
   PROJECT_SAVES_READY_CHANNEL,
@@ -14,12 +15,25 @@ import {
   UPDATE_STATE_CHANGED_CHANNEL,
   SET_APP_LANGUAGE_CHANNEL,
   WRITE_IMAGE_TO_CLIPBOARD_CHANNEL,
+  WINDOW_STATE_CHANNEL, WINDOW_MINIMIZE_CHANNEL, WINDOW_MAXIMIZE_CHANNEL,
+  WINDOW_CLOSE_CHANNEL, WINDOW_STATE_CHANGED_CHANNEL,
 } from './ipcChannels';
 
 const updateSubscriptions = new Map<string, (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => void>();
 let nextUpdateSubscriptionId = 0;
 
 contextBridge.exposeInMainWorld('bananaDesktop', Object.freeze({
+  window: Object.freeze({
+    getState: () => ipcRenderer.invoke(WINDOW_STATE_CHANNEL),
+    minimize: () => ipcRenderer.invoke(WINDOW_MINIMIZE_CHANNEL),
+    toggleMaximize: () => ipcRenderer.invoke(WINDOW_MAXIMIZE_CHANNEL),
+    close: () => ipcRenderer.invoke(WINDOW_CLOSE_CHANNEL),
+    subscribe: (listener: (state: DesktopWindowState) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: DesktopWindowState) => listener(state);
+      ipcRenderer.on(WINDOW_STATE_CHANGED_CHANNEL, handler);
+      return () => { ipcRenderer.removeListener(WINDOW_STATE_CHANGED_CHANNEL, handler); };
+    },
+  } satisfies DesktopWindowBridge),
   cutout: Object.freeze({
     getState: () => ipcRenderer.invoke('banana:cutout:state'),
     select: (id: CutoutModelId) => ipcRenderer.invoke('banana:cutout:select', id),
