@@ -1,4 +1,23 @@
 export const en = {
+  comparison: {
+    title: 'Compare models', description: 'Use the same prompt and reference images across models, with one image per model. Shared aspect ratio and resolution are selected below; advanced options apply only where supported.',
+    count: '{{count}} models selected · {{count}} generation requests. Each request may incur a charge.',
+    start: 'Generate comparison', view: 'View comparison', zoom: 'Synchronized zoom', reset: 'Reset view',
+    resultsHint: 'Drag any image to pan all results. Mark your preferred result; images and settings remain on the canvas when you close this window.',
+    winner: '★ Best result', markBest: 'Mark as best', interrupted: 'No result (interrupted or unavailable)', empty: 'No results in this comparison.',
+  },
+  generationInfo: {
+    title: 'Result information', actualSize: 'Actual dimensions', format: 'Actual format', elapsed: 'Generation time',
+    apiModel: 'Requested API model', reportedModel: 'Reported model', requestedSize: 'Requested size', quality: 'Quality: requested → reported',
+    unknown: 'Not recorded', hint: 'Dimensions and format come from the image. Other reported fields come from the server and do not independently verify the underlying model. Older images may lack generation records.',
+  },
+  modelCatalog: {
+    title: 'Server models', load: 'View models', refresh: 'Refresh', search: 'Search model ID or provider', count: '{{count}} models', empty: 'No matching models.',
+    hint: 'Uses the saved Image2 server connection (GET /v1/models). Save connection changes first. Listed models are not necessarily image-generation models.',
+    httpError: 'The server returned HTTP {{status}}. Check the saved Key, permissions, and model-list endpoint.',
+    MODEL_CONNECTION_MISSING: 'Save the server URL and API Key first.', MODEL_LIST_UNAVAILABLE: 'Could not retrieve the model list. Check the connection or try again.',
+    INVALID_MODEL_LIST: 'The server did not return a standard model list.', MODEL_LIST_TOO_LARGE: 'The server model list is too large.',
+  },
   cutout: {
     title: 'Remove background', tools: 'Image tools', processing: 'Removing background…',
     interrupted: 'This task was interrupted. Please run background removal again from the original image.',
@@ -177,8 +196,10 @@ export const en = {
     localOnly: 'Runtime settings can only be changed from this computer.',
   },
   updates: {
+    startupCheckTitle: 'Check for updates on startup',
+    startupCheckDescription: 'On by default. Check once after each launch and notify you when a new version is available. No popup if up to date or offline. Your choice is saved.',
     title: 'Version & updates',
-    description: 'Check releases manually, read release notes, and monitor download progress. Automatic updates are off by default.',
+    description: 'Check on startup and notify you of new versions by default. You can also check manually, read release notes, and download. Automatic updates are off by default.',
     checking: 'Checking for the latest version...',
     available: 'Version v{{version}} is available',
     downloading: 'Downloading v{{version}}',

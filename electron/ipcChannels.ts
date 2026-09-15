@@ -5,6 +5,7 @@ export const UPDATE_CHECK_CHANNEL = 'banana:update:check';
 export const UPDATE_DOWNLOAD_CHANNEL = 'banana:update:download';
 export const UPDATE_INSTALL_CHANNEL = 'banana:update:install';
 export const UPDATE_SET_AUTOMATIC_CHANNEL = 'banana:update:set-automatic';
+export const UPDATE_SET_STARTUP_CHECK_CHANNEL = 'banana:update:set-startup-check';
 export const UPDATE_STATE_CHANGED_CHANNEL = 'banana:update:state-changed';
 export const PROJECT_SAVES_READY_CHANNEL = 'banana:projects:saves-ready';
 export const PROJECT_SAVES_FLUSH_CHANNEL = 'banana:projects:flush';

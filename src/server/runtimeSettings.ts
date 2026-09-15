@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { listServerModels, ModelListError } from './serverModels';
 import path from 'node:path';
 
 import type express from 'express';
@@ -53,6 +54,7 @@ export class RuntimeSettingsValidationError extends Error {
 export type RuntimeSettingsStore = {
   get: () => RuntimeSettingsSnapshot;
   update: (input: unknown) => RuntimeSettingsSnapshot;
+  listModels?: (signal?: AbortSignal) => Promise<import('./serverModels').ServerModel[]>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -320,6 +322,7 @@ export function createRuntimeSettingsStore({
 
   return {
     get: () => toSnapshot(manager),
+    listModels: (signal) => listServerModels(manager.get(), signal),
     update: (input) => {
       const updates = parseRuntimeSettingsUpdate(input as RuntimeSettingsUpdate);
       const previousExists = fs.existsSync(resolvedEnvFilePath);
@@ -392,6 +395,23 @@ export function mountRuntimeSettingsRoutes(
 
   app.get('/api/runtime-settings', (_req, res) => {
     res.json(store.get());
+  });
+
+  app.get('/api/runtime-settings/models', async (req, res) => {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    req.once('aborted', abort);
+    res.once('close', abort);
+    try {
+      if (!store.listModels) throw new ModelListError('MODEL_LIST_UNAVAILABLE');
+      const models = await store.listModels(controller.signal);
+      if (!controller.signal.aborted) res.json({ models });
+    } catch (error) {
+      if (!controller.signal.aborted) res.status(502).json({
+        code: error instanceof ModelListError ? error.code : 'MODEL_LIST_UNAVAILABLE',
+        upstreamStatus: error instanceof ModelListError ? error.upstreamStatus : undefined,
+      });
+    } finally { req.off('aborted', abort); res.off('close', abort); }
   });
 
   app.put('/api/runtime-settings', (req, res) => {

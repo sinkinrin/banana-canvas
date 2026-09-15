@@ -108,7 +108,8 @@ test('English and Chinese READMEs stay concise, linked, and release-aware', asyn
   assert.match(readme, /does not run `npm install`/);
   assert.ok(readme.includes('Current version: `' + packageJson.version + '`'));
   assert.match(readme, /> \[!IMPORTANT\]\s*> 🇨🇳 \*\*简体中文：\[阅读中文 README\]\(README_CN\.md\)\*\*/);
-  assert.match(readme, /Automatic updates are off by default/);
+  assert.match(readme, /Startup update checks are on by default/);
+  assert.match(readme, /Background downloads remain off by default/);
   assert.ok(readmeCn.includes('当前版本：`' + packageJson.version + '`'));
   assert.match(readmeCn, /\[Read the default README\]\(README\.md\)/);
   assert.ok(readme.split(/\r?\n/).length < 180);

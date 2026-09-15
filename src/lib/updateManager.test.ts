@@ -64,7 +64,7 @@ function nextTurn() {
   return new Promise<void>((resolve) => setImmediate(resolve));
 }
 
-test('desktop updates start in explicit manual mode by default', () => {
+test('startup checks default on while downloads and installation remain opt-in', () => {
   const updater = new FakeUpdater();
   const manager = createManager(updater);
 
@@ -73,8 +73,113 @@ test('desktop updates start in explicit manual mode by default', () => {
   assert.equal(updater.autoInstallOnAppQuit, false);
   assert.equal(updater.allowPrerelease, false);
   assert.equal(manager.getState().automaticUpdatesEnabled, false);
+  assert.equal(manager.getState().checkOnStartupEnabled, true);
   assert.equal(updater.checkCount, 0);
   manager.stop();
+});
+
+test('startup checks once and notifies once without downloading; manual checks do not repeat the popup', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const updater = new FakeUpdater();
+  const notifications: string[] = [];
+  updater.checkForUpdates = async () => {
+    updater.checkCount += 1;
+    updater.emit('update-available', { version: '0.9.0' });
+    updater.emit('update-available', { version: '0.9.0' });
+  };
+  const manager = createManager(updater, { initialDelayMs: 10, notifyUpdateAvailable: async (info) => { notifications.push(info.version); } });
+  try {
+    manager.start();
+    manager.start();
+    t.mock.timers.tick(10);
+    await nextTurn();
+    assert.equal(updater.checkCount, 1);
+    assert.deepEqual(notifications, ['0.9.0']);
+    assert.equal(updater.downloadCount, 0);
+    assert.equal(updater.autoInstallOnAppQuit, false);
+    t.mock.timers.tick(120_000);
+    await nextTurn();
+    assert.equal(updater.checkCount, 1);
+    await manager.checkNow();
+    assert.deepEqual(notifications, ['0.9.0']);
+  } finally { manager.stop(); }
+});
+
+test('disabling startup checks or stopping cancels the scheduled check', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const updater = new FakeUpdater();
+  const manager = createManager(updater, { initialDelayMs: 10, checkOnStartupEnabled: false });
+  manager.start();
+  t.mock.timers.tick(20);
+  await nextTurn();
+  assert.equal(updater.checkCount, 0);
+  manager.setCheckOnStartupEnabled(true);
+  manager.setCheckOnStartupEnabled(false);
+  t.mock.timers.tick(20);
+  await nextTurn();
+  assert.equal(updater.checkCount, 0);
+  manager.setCheckOnStartupEnabled(true);
+  manager.stop();
+  t.mock.timers.tick(20);
+  await nextTurn();
+  assert.equal(updater.checkCount, 0);
+});
+
+test('turning off the preference during a startup request suppresses its popup', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const updater = new FakeUpdater();
+  let release!: () => void;
+  updater.checkGate = new Promise<void>((resolve) => { release = resolve; });
+  let notifications = 0;
+  const manager = createManager(updater, { initialDelayMs: 10, notifyUpdateAvailable: async () => { notifications++; } });
+  try {
+    manager.start();
+    t.mock.timers.tick(10);
+    assert.equal(updater.checkCount, 1);
+    manager.setCheckOnStartupEnabled(false);
+    updater.emit('update-available', { version: '0.9.0' });
+    release();
+    await nextTurn();
+    assert.equal(notifications, 0);
+    assert.equal(updater.downloadCount, 0);
+  } finally { release(); manager.stop(); }
+});
+
+test('startup checks do not notify when up to date or offline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  for (const offline of [false, true]) {
+    const updater = new FakeUpdater();
+    let notifications = 0;
+    updater.checkForUpdates = async () => {
+      updater.checkCount++;
+      if (offline) throw new Error('offline');
+      updater.emit('update-not-available', { version: '0.4.0' });
+    };
+    const manager = createManager(updater, { initialDelayMs: 10, notifyUpdateAvailable: async () => { notifications++; } });
+    try {
+      manager.start();
+      t.mock.timers.tick(10);
+      await nextTurn();
+      assert.equal(notifications, 0);
+      assert.equal(updater.checkCount, 1);
+      assert.equal(manager.getState().phase, offline ? 'error' : 'up-to-date');
+    } finally { manager.stop(); }
+  }
+});
+
+test('a scheduled startup check does not interrupt an active download', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const updater = new FakeUpdater();
+  const manager = createManager(updater, { initialDelayMs: 10 });
+  try {
+    manager.start();
+    updater.emit('update-available', { version: '0.9.0' });
+    await manager.downloadUpdate();
+    t.mock.timers.tick(10);
+    await nextTurn();
+    assert.equal(updater.checkCount, 0);
+    assert.equal(manager.getState().phase, 'downloading');
+  } finally { manager.stop(); }
 });
 
 test('manual checks expose latest version and release notes without downloading', async () => {

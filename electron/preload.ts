@@ -10,6 +10,7 @@ import {
   UPDATE_GET_STATE_CHANNEL,
   UPDATE_INSTALL_CHANNEL,
   UPDATE_SET_AUTOMATIC_CHANNEL,
+  UPDATE_SET_STARTUP_CHECK_CHANNEL,
   UPDATE_STATE_CHANGED_CHANNEL,
   SET_APP_LANGUAGE_CHANNEL,
   WRITE_IMAGE_TO_CLIPBOARD_CHANNEL,
@@ -57,6 +58,8 @@ contextBridge.exposeInMainWorld('bananaDesktop', Object.freeze({
     installUpdate: async () => await ipcRenderer.invoke(UPDATE_INSTALL_CHANNEL),
     setAutomaticUpdatesEnabled: async (enabled: boolean) =>
       await ipcRenderer.invoke(UPDATE_SET_AUTOMATIC_CHANNEL, enabled),
+    setCheckOnStartupEnabled: async (enabled: boolean) =>
+      await ipcRenderer.invoke(UPDATE_SET_STARTUP_CHECK_CHANNEL, enabled),
     subscribe: (listener: (state: DesktopUpdateState) => void) => {
       const subscriptionId = String(++nextUpdateSubscriptionId);
       const ipcListener = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => listener(state);

@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { Snapshot as QuickdrawSnapshot } from '@quickdrawjs/react';
 import type { CutoutModelId } from './cutoutModels';
+import { normalizeGenerationInfo, type GenerationInfo } from './generationInfo';
 import { v4 as uuidv4 } from 'uuid';
 import {
   normalizeBananaOptions,
@@ -39,6 +40,9 @@ export type CanvasSketchSavePayload = {
 };
 
 export type CanvasNodeData = {
+  generationInfo?: GenerationInfo;
+  comparisonGroupId?: string;
+  comparisonWinner?: boolean;
   prompt?: string;
   imageModel?: ImageModelId;
   aspectRatio?: BananaAspectRatio;
@@ -220,6 +224,9 @@ function sanitizeNodeDataForSnapshot(data: CanvasNodeData): CanvasNodeData {
 
   return {
     prompt: data.prompt,
+    generationInfo: normalizeGenerationInfo(data.generationInfo),
+    comparisonGroupId: typeof data.comparisonGroupId === 'string' ? data.comparisonGroupId.slice(0, 100) : undefined,
+    comparisonWinner: data.comparisonWinner === true ? true : undefined,
     imageModel: data.imageModel ? normalizeImageModel(data.imageModel) : undefined,
     aspectRatio: data.aspectRatio,
     imageSize: data.imageSize,

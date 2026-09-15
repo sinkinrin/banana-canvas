@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import type { GenerationInfo } from '../../lib/generationInfo';
 import {
   buildBananaGenerateContentRequest,
   extractBananaImageUrl,
@@ -45,6 +46,7 @@ export async function generateBananaImage({
   images,
   bananaOptions,
   signal,
+  onMetadata,
 }: {
   imageModel: ImageModelId;
   prompt: string;
@@ -54,6 +56,7 @@ export async function generateBananaImage({
   images: ReferenceImageInput[];
   bananaOptions: BananaOptions;
   signal?: AbortSignal;
+  onMetadata?: (info: GenerationInfo) => void;
 }) {
   const ai = new GoogleGenAI({ apiKey });
   const request = buildBananaProviderRequest({
@@ -71,6 +74,9 @@ export async function generateBananaImage({
 
   const response = await ai.models.generateContent(request as any);
   const imageUrl = extractBananaProviderImageUrl(response);
+  onMetadata?.({ apiModel: request.model, reportedModel: response.modelVersion,
+    requestedSize: String(imageSize ?? 'auto'),
+    inputTokens: response.usageMetadata?.promptTokenCount, outputTokens: response.usageMetadata?.candidatesTokenCount });
   if (imageUrl) return imageUrl;
 
   throw new Error('响应中未找到图像数据。');

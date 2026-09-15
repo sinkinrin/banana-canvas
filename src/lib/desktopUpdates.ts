@@ -18,6 +18,7 @@ export type DesktopUpdateState = {
   supported: boolean;
   currentVersion: string;
   automaticUpdatesEnabled: boolean;
+  checkOnStartupEnabled: boolean;
   phase: DesktopUpdatePhase;
   latestVersion?: string;
   releaseName?: string;
@@ -33,6 +34,7 @@ export type DesktopUpdateBridge = {
   downloadUpdate: () => Promise<DesktopUpdateState>;
   installUpdate: () => Promise<DesktopUpdateState>;
   setAutomaticUpdatesEnabled: (enabled: boolean) => Promise<DesktopUpdateState>;
+  setCheckOnStartupEnabled: (enabled: boolean) => Promise<DesktopUpdateState>;
   subscribe: (listener: (state: DesktopUpdateState) => void) => string;
   unsubscribe: (subscriptionId: string) => void;
 };
@@ -57,6 +59,7 @@ export function createUnavailableUpdateState(currentVersion: string): DesktopUpd
     supported: false,
     currentVersion,
     automaticUpdatesEnabled: false,
+    checkOnStartupEnabled: true,
     phase: 'idle',
     releaseNotes: '',
   };

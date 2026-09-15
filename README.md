@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.8.0`
+Current version: `0.9.0`
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
@@ -17,6 +17,9 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 ## Highlights
 
 - **Visual generation workflow** — build and rearrange prompt-to-image flows with React Flow.
+- **Multi-model comparisons** — generate one image per selected model from the same prompt and references, inspect results with synchronized zoom/pan, and save your preferred result.
+- **Result information** — inspect actual dimensions/format, generation time, requested API model, and server-reported model/quality. Missing metadata is shown as unrecorded.
+- **Server model catalog** — query, refresh, and search the saved relay's standard model list in App settings.
 - **Multiple image models** — use Image2 by default, or choose Image 2.5 Flare, Image 2.5 Sunburst, Banana 2, Banana 2 Lite, and Banana Pro.
 - **Image 2.5 transparent assets** — generate transparent assets (PNG verified on the relay); Flare targets fast everyday creation and Sunburst prioritizes editing precision.
 - **Reference-driven iteration** — upload or paste up to four references, then reuse any result in the next step.
@@ -79,6 +82,8 @@ Browsing projects, arranging a canvas, viewing saved images, and local desktop b
 5. Generate images, then branch from a result or use mask editing for targeted changes.
 6. Use auto layout, fit-to-view, undo, redo, and the prompt library as the canvas grows.
 
+Choose **Compare models** on a creation node to select at least two models and shared aspect ratio/resolution. Each model generates one image and may incur its own charge. Results stay side by side on the canvas; **View comparison** reopens the group after saving or restarting. A failed request does not discard the other results. See [Comparison and result details](docs/COMPARISON.md).
+
 ## Language
 
 The interface currently supports:
@@ -108,7 +113,7 @@ Read [Configuration](docs/CONFIGURATION.md) for provider behavior, proxies, limi
 - Electron stores projects and settings in the current user's application-data directory.
 - Saved desktop Keys are encrypted with the operating system's credential storage when available and are never returned to the renderer.
 - The server binds to `127.0.0.1` by default. Do not expose it publicly; the local API has no public-deployment authentication layer.
-- Automatic updates are off by default; enabling them downloads updates in the background but still asks before restarting.
+- Startup update checks are on by default and notify you of new releases; disable them in **App settings → Software updates**. Background downloads remain off by default and require a separate opt-in.
 - Windows installers are currently unsigned, so SmartScreen may show an **Unknown publisher** warning.
 
 ## Documentation

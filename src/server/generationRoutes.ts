@@ -13,8 +13,10 @@ import type {
   ReferenceImageInput,
 } from '../lib/imageModels';
 import { getRuntimeConfig, type RuntimeConfigManager } from './runtimeConfig';
+import { normalizeGenerationInfo, type GenerationInfo } from '../lib/generationInfo';
 
 export type BananaGenerateInput = {
+  onMetadata?: (info: GenerationInfo) => void;
   imageModel: ImageModelId;
   prompt: string;
   apiKey: string;
@@ -26,6 +28,7 @@ export type BananaGenerateInput = {
 };
 
 export type Image2GenerateInput = {
+  onMetadata?: (info: GenerationInfo) => void;
   requestId: string;
   imageModel?: ImageModelId;
   prompt: string;
@@ -137,6 +140,9 @@ export function mountGenerationRoutes(
       console.info(
         `[generate-image:${requestId}] model=${body.imageModel} provider=${body.provider} refs=${body.referenceImages.length} promptChars=${body.prompt.length}`
       );
+      const startedAt = Date.now();
+      let generationInfo: GenerationInfo = {};
+      const onMetadata = (info: GenerationInfo) => { generationInfo = normalizeGenerationInfo(info) ?? {}; };
       const imageUrl = body.provider === 'gemini'
         ? await providers.generateBananaImage({
             imageModel: body.imageModel,
@@ -147,6 +153,7 @@ export function mountGenerationRoutes(
             images: body.referenceImages,
             bananaOptions: body.bananaOptions,
             signal: requestAbort.signal,
+            onMetadata,
           })
         : await providers.generateImage2Image({
             requestId,
@@ -158,10 +165,13 @@ export function mountGenerationRoutes(
             image2Options: body.image2Options,
             maskImage: body.maskImage,
             signal: requestAbort.signal,
+            onMetadata,
           });
 
       if (canWriteResponse(res, requestAbort.signal)) {
-        res.json({ imageUrl, imageModel: body.imageModel });
+        res.json({ imageUrl, imageModel: body.imageModel,
+          ...(req.body?.includeGenerationInfo === true ? { generationInfo: { ...generationInfo, elapsedMs: Date.now() - startedAt } } : {}),
+        });
       }
     } catch (error) {
       if (!requestAbort.signal.aborted) {

@@ -140,6 +140,25 @@ export function SoftwareUpdatePanel() {
           </div>
         </div>
 
+        <label className="mt-4 flex items-start gap-3 rounded-lg border p-4" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
+          <input
+            type="checkbox"
+            name="checkOnStartupEnabled"
+            className="mt-0.5 accent-[#F2C14E]"
+            checked={state.checkOnStartupEnabled}
+            disabled={!state.supported || actionPending}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              if (!bridge) return;
+              void runAction(() => bridge.setCheckOnStartupEnabled(enabled));
+            }}
+          />
+          <span>
+            <span className="block text-sm font-medium">{t('updates.startupCheckTitle')}</span>
+            <span className="mt-1 block text-xs leading-5" style={{ color: '#96836F' }}>{t('updates.startupCheckDescription')}</span>
+          </span>
+        </label>
+
         {state.supported ? (
           <label className="mt-4 flex items-start gap-3 rounded-lg border p-4" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
             <input

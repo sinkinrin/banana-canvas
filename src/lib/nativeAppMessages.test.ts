@@ -14,4 +14,6 @@ test('native update and startup messages are localized', () => {
   assert.match(getNativeAppMessages('zh-CN').updateDownloaded('1.2.3'), /版本 1\.2\.3/);
   assert.match(getNativeAppMessages('en').unsignedDetail, /not code-signed/);
   assert.match(getNativeAppMessages('zh-CN').unsignedDetail, /未进行代码签名/);
+  assert.match(getNativeAppMessages('zh-CN').updateAvailable('0.9.0'), /v0\.9\.0/);
+  assert.match(getNativeAppMessages('en').updateAvailableDetail, /App settings/);
 });

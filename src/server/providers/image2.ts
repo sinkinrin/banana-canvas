@@ -34,6 +34,7 @@ import {
   type ReferenceImageInput,
 } from '../../lib/imageModels';
 import { getRuntimeConfig, type RuntimeConfigManager } from '../runtimeConfig';
+import { readReportedImageInfo, type GenerationInfo } from '../../lib/generationInfo';
 
 const directFetch = globalThis.fetch.bind(globalThis);
 
@@ -752,6 +753,7 @@ export async function generateImage2Image({
   image2Options,
   runtimeConfig,
   signal,
+  onMetadata,
 }: {
   requestId: string;
   imageModel?: ImageModelId;
@@ -763,6 +765,7 @@ export async function generateImage2Image({
   image2Options: Image2Options;
   runtimeConfig?: RuntimeConfigManager;
   signal?: AbortSignal;
+  onMetadata?: (info: GenerationInfo) => void;
 }) {
   const env = runtimeConfig?.get().env ?? getRuntimeConfig().env;
   const image2Config = createImage2Config(env, imageModel);
@@ -893,5 +896,14 @@ export async function generateImage2Image({
     signal
   );
   console.info(`[image2:${requestId}] image extracted type=${normalizedImageUrl.startsWith('data:image/') ? 'data-url' : 'url'}`);
+  const finalEvent = streamImages
+    ? parseImage2SseEvents(responseText).reverse().find((event) => typeof event.type === 'string' && event.type.endsWith('.completed'))
+    : undefined;
+  onMetadata?.({
+    apiModel: image2Config.model,
+    requestedQuality: normalizedImage2Options.quality ?? 'auto',
+    requestedSize: toImage2Size(aspectRatio, imageSize),
+    ...readReportedImageInfo(responseJson ?? finalEvent),
+  });
   return normalizedImageUrl;
 }

@@ -18,7 +18,7 @@ test('Image 2.5 client-to-provider routing preserves variants, transparency, ref
     assert.equal(req.headers.authorization, 'Bearer fixture-key');
     // The live relay can return final JSON even with an SSE content type.
     res.setHeader('content-type', 'text/event-stream');
-    res.end(JSON.stringify({ data: [{ b64_json: 'iVBORw0KGgo=' }] }));
+    res.end(JSON.stringify({ quality: 'medium', size: '1254x1254', usage: { input_tokens: 25, output_tokens: 90 }, data: [{ b64_json: 'iVBORw0KGgo=' }] }));
   });
   relay.listen(0, '127.0.0.1');
   await once(relay, 'listening');
@@ -45,10 +45,21 @@ test('Image 2.5 client-to-provider routing preserves variants, transparency, ref
           ...(edit ? { referenceImages: [{ data: 'c3Rhcg==', mimeType: 'image/png' }], maskImage: { data: 'bWFzaw==', mimeType: 'image/png' as const } } : {}),
         });
         const result = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/generate-image`, {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...payload, includeGenerationInfo: true }),
         });
         assert.equal(result.status, 200);
-        assert.deepEqual(await result.json(), { imageModel, imageUrl: 'data:image/png;base64,iVBORw0KGgo=' });
+        const data = await result.json();
+        assert.equal(data.imageModel, imageModel);
+        assert.equal(data.imageUrl, 'data:image/png;base64,iVBORw0KGgo=');
+        assert.equal(data.generationInfo.apiModel, `gpt-image-2.5-${variant}`);
+        assert.equal(data.generationInfo.reportedModel, undefined);
+        assert.equal(data.generationInfo.requestedQuality, 'high');
+        assert.equal(data.generationInfo.reportedQuality, 'medium');
+        assert.equal(data.generationInfo.requestedSize, '1024x1024');
+        assert.equal(data.generationInfo.reportedSize, '1254x1254');
+        assert.equal(data.generationInfo.outputTokens, 90);
+        assert.ok(data.generationInfo.elapsedMs >= 0);
+        assert.ok(!JSON.stringify(data).includes('fixture-key'));
         const call = calls.at(-1)!;
         assert.equal(call.url, `/v1/images/${edit ? 'edits' : 'generations'}`);
         if (edit) {

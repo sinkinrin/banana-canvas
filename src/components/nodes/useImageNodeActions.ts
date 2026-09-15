@@ -5,7 +5,7 @@ import {
   resolveReferenceImages,
   type CanvasImageAsset,
 } from '../../lib/canvasState';
-import { generateImage, type GenerateImageParams } from '../../services/gemini';
+import { generateImageWithInfo as generateImage, type GenerateImageParams } from '../../services/gemini';
 import type { AppNode } from '../../store';
 import { isBananaImageModel, isImage2Model, normalizeImageModel } from '../../lib/imageModels';
 import { buildImageDownloadFileName } from '../../lib/imageDownloads';

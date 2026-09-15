@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createGenerateImagePayload, getGenerateImageTimeoutMs } from './gemini';
+import { createGenerateImagePayload, getGenerateImageTimeoutMs, generateImageWithInfo } from './gemini';
 
 test('createGenerateImagePayload includes the selected image model without browser secrets', () => {
   assert.deepEqual(
@@ -132,6 +132,33 @@ test('createGenerateImagePayload normalizes missing model selection to image2', 
       imageModel: 'image2',
     }
   );
+});
+
+test('metadata generation keeps timeout active through the response body and clears it after completion', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const original = globalThis.fetch;
+  let signal: AbortSignal | undefined;
+  let release!: () => void;
+  let bodyReady = new Promise<void>(resolve => { release = resolve; });
+  globalThis.fetch = async (_url, init) => {
+    signal = init?.signal ?? undefined;
+    assert.equal(JSON.parse(String(init?.body)).includeGenerationInfo, true);
+    return { ok: true, json: async () => { await bodyReady; return { imageUrl: 'data:image/png;base64,abc', generationInfo: { elapsedMs: 25, reportedQuality: 'low' } }; } } as Response;
+  };
+  try {
+    const pending = generateImageWithInfo({ prompt: 'fixture', imageModel: 'image2.5-flare' });
+    release();
+    const result = await pending;
+    assert.equal(result.generationInfo?.reportedQuality, 'low');
+    t.mock.timers.tick(300_001);
+    assert.equal(signal?.aborted, false);
+    bodyReady = new Promise<void>(resolve => { release = resolve; });
+    const timedOut = generateImageWithInfo({ prompt: 'fixture', imageModel: 'image2.5-flare' });
+    await Promise.resolve();
+    t.mock.timers.tick(300_001);
+    release();
+    await assert.rejects(timedOut, { name: 'AbortError' });
+  } finally { globalThis.fetch = original; release(); }
 });
 
 test('getGenerateImageTimeoutMs gives image2 a longer timeout than banana', () => {

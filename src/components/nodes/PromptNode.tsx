@@ -23,6 +23,7 @@ import {
 } from '../../lib/imageModels';
 import { BananaOptionsPanel } from './BananaOptionsPanel';
 import { Image2OptionsPanel } from './Image2OptionsPanel';
+import { ModelComparisonSetup, ModelComparisonResults, type ComparisonSelection } from './ModelComparisonDialog';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { useReferenceImages } from './useReferenceImages';
 import { buildPromptMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
@@ -83,6 +84,8 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
   const [prompt, setPrompt] = useState(data.prompt || '');
   const [showSettings, setShowSettings] = useState(false);
+  const [showComparisonSetup, setShowComparisonSetup] = useState(false);
+  const [comparisonGroupId, setComparisonGroupId] = useState<string>();
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
   const [isSketchEditorOpen, setIsSketchEditorOpen] = useState(false);
@@ -136,7 +139,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     }
   };
 
-  const { generatedCount, runGeneration, abortGeneration } = usePromptGeneration({
+  const { generatedCount, taskCount, runGeneration, abortGeneration } = usePromptGeneration({
     nodeId: id,
     nodePosition,
     updateNodeData,
@@ -191,7 +194,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     }));
 
     try {
-      const url = await generateMaskImage(buildPromptMaskGenerationPayload({
+      const { imageUrl: url, generationInfo } = await generateMaskImage(buildPromptMaskGenerationPayload({
         imageModel,
         maskPrompt,
         maskImage,
@@ -205,6 +208,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
+        generationInfo,
         prompt: maskPrompt,
         imageModel: getImage2MaskModel(imageModel),
         aspectRatio: maskEditAspectRatio,
@@ -261,6 +265,15 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     const result = saveNodeSketch(id, payload);
     if (!result.ok) throw new Error(result.error);
     setIsSketchEditorOpen(false);
+  };
+
+  const handleCompare = (selection: ComparisonSelection) => {
+    const groupId = crypto.randomUUID();
+    setShowComparisonSetup(false);
+    setComparisonGroupId(groupId);
+    void runGeneration({ prompt, imageModel, imageModelLabel, ...selection,
+      comparisonModels: selection.models, comparisonGroupId: groupId,
+      bananaOptions, image2Options, batchCount: 1, referenceImageIds, referenceImages, hasPendingReferenceHydration });
   };
 
   return (
@@ -606,6 +619,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </div>
           )}
 
+          <button type="button" data-compare-models="true" disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration} onClick={() => setShowComparisonSetup(true)} className="nodrag nopan nowheel w-full rounded-xl border border-[#F2C14E]/30 py-2 text-sm text-[#F2C14E] disabled:opacity-40">{t('comparison.title')}</button>
+          {showComparisonSetup && <ModelComparisonSetup onClose={() => setShowComparisonSetup(false)} onStart={handleCompare} />}
+          {comparisonGroupId && <ModelComparisonResults groupId={comparisonGroupId} onClose={() => setComparisonGroupId(undefined)} />}
+
           <button
             type="button"
             onClick={() => handleGenerate()}
@@ -624,8 +641,8 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             {data.isLoading ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                <span>{batchCount > 1
-                  ? t('promptNode.generatingProgress', { generated: generatedCount, total: batchCount })
+                <span>{taskCount > 1
+                  ? t('promptNode.generatingProgress', { generated: generatedCount, total: taskCount })
                   : t('promptNode.generating')}</span>
               </>
             ) : (

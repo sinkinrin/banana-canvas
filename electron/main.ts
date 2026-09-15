@@ -35,12 +35,14 @@ import {
   type DesktopUpdateInfo,
 } from './updateManager';
 import { createUpdatePreferencesStore } from './updatePreferences';
+import { runComparisonSmoke } from './comparisonSmoke';
 import {
   UPDATE_CHECK_CHANNEL,
   UPDATE_DOWNLOAD_CHANNEL,
   UPDATE_GET_STATE_CHANNEL,
   UPDATE_INSTALL_CHANNEL,
   UPDATE_SET_AUTOMATIC_CHANNEL,
+  UPDATE_SET_STARTUP_CHECK_CHANNEL,
   UPDATE_STATE_CHANGED_CHANNEL,
   SET_APP_LANGUAGE_CHANNEL,
   WRITE_IMAGE_TO_CLIPBOARD_CHANNEL,
@@ -116,6 +118,7 @@ function getDesktopUpdateState(): DesktopUpdateState {
     ...unavailable,
     supported: true,
     automaticUpdatesEnabled: getUpdatePreferencesStore().get().automaticUpdatesEnabled,
+    checkOnStartupEnabled: getUpdatePreferencesStore().get().checkOnStartupEnabled,
   };
 }
 
@@ -161,6 +164,14 @@ ipcMain.handle(UPDATE_SET_AUTOMATIC_CHANNEL, async (event, enabled: unknown) => 
 function isSmokeTest() {
   return process.env.BANANA_SMOKE_TEST === '1';
 }
+
+ipcMain.handle(UPDATE_SET_STARTUP_CHECK_CHANNEL, async (event, enabled: unknown) => {
+  assertApplicationWindowSender(event, 'Startup update preference');
+  if (typeof enabled !== 'boolean') throw new Error('Startup update preference must be a boolean');
+  getUpdatePreferencesStore().replace({ checkOnStartupEnabled: enabled });
+  startDesktopUpdates();
+  return updateManager ? updateManager.setCheckOnStartupEnabled(enabled) : getDesktopUpdateState();
+});
 
 function configureSmokeUserDataDir() {
   const smokeUserDataDir = process.env.BANANA_SMOKE_USER_DATA_DIR?.trim();
@@ -240,6 +251,19 @@ function startDesktopUpdates() {
     updater: autoUpdater,
     currentVersion: app.getVersion(),
     automaticUpdatesEnabled: preferences.automaticUpdatesEnabled,
+    checkOnStartupEnabled: preferences.checkOnStartupEnabled,
+    notifyUpdateAvailable: async (info) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const messages = getNativeAppMessages(desktopLanguage);
+      await dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: messages.updateAvailableTitle,
+        message: messages.updateAvailable(info.version),
+        detail: [messages.updateAvailableDetail, messages.unsignedDetail].join('\n\n'),
+        buttons: [messages.gotIt],
+        noLink: true,
+      });
+    },
     logger: (level, message) => logger({ level, message: `[update] ${message}` }),
     promptToRestart: promptToRestartForUpdate,
     beforeInstall: prepareForUpdateInstall,
@@ -641,6 +665,8 @@ async function runApplicationSettingsSmokeTest(window: BrowserWindow) {
       const dialog = document.querySelector('[data-runtime-settings-dialog="true"]');
       return dialog?.textContent?.includes('手动检查更新')
         && dialog?.textContent?.includes('自动更新默认关闭')
+        && dialog?.textContent?.includes('启动时检查更新')
+        && dialog?.querySelector('input[name="checkOnStartupEnabled"]')?.checked
         && dialog?.textContent?.includes('SmartScreen');
     })()`,
     'Application settings smoke update panel was incomplete'
@@ -1036,6 +1062,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   });
 
   await runCutoutSmoke({ window, localUrl, flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+  await runComparisonSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, QuickDraw and cutout probes passed');
 }
 

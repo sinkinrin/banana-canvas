@@ -1,11 +1,14 @@
-import { useRef, useState } from 'react';
-import { generateImage, type GenerateImageParams } from '../../services/gemini';
+import { useEffect, useRef, useState } from 'react';
+import { generateImageWithInfo as generateImage, type GenerateImageParams } from '../../services/gemini';
+import { asGenerationResult, type GenerationResult } from '../../lib/generationInfo';
+import { normalizeComparisonModels } from '../../lib/modelComparison';
 import i18n from '../../i18n';
 import type { AppNode } from '../../store';
 import type { InlineImageData } from '../../lib/canvasState';
 import {
   isBananaImageModel,
   isImage2Model,
+  getImageModelConfig,
   type BananaOptions,
   type Image2Options,
   type ImageModelId,
@@ -72,6 +75,8 @@ export function buildPromptGenerationEdges(sourceId: string, targetIds: string[]
 }
 
 export type PromptGenerationRunInput = {
+  comparisonModels?: ImageModelId[];
+  comparisonGroupId?: string;
   nodeId: string;
   prompt: string;
   imageModel: ImageModelId;
@@ -88,7 +93,7 @@ export type PromptGenerationRunInput = {
 };
 
 export type PromptGenerationRunnerDeps = {
-  generateImage: (input: GenerateImageParams) => Promise<string>;
+  generateImage: (input: GenerateImageParams) => Promise<string | GenerationResult>;
   addNode: (type: 'imageNode', position: { x: number; y: number }, data: AppNode['data']) => string;
   deleteNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, patch: Partial<AppNode['data']>) => void;
@@ -97,6 +102,7 @@ export type PromptGenerationRunnerDeps = {
   now: () => string;
   createAbortController?: () => AbortController;
   onGeneratedCountChange?: (count: number) => void;
+  onTaskCountChange?: (count: number) => void;
 };
 
 function getErrorMessage(error: unknown) {
@@ -148,23 +154,28 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
         const baseX = input.nodePosition ? input.nodePosition.x + 400 : 0;
         const baseY = input.nodePosition ? input.nodePosition.y : 0;
         const batchCount = Math.max(1, Math.floor(input.batchCount || 1));
+        const comparisonModels = normalizeComparisonModels(input.comparisonModels);
+        const isComparison = comparisonModels.length >= 2 && Boolean(input.comparisonGroupId);
+        const models = isComparison ? comparisonModels : Array<ImageModelId>(batchCount).fill(input.imageModel);
+        deps.onTaskCountChange?.(models.length);
         const createdAt = deps.now();
 
-        for (let index = 0; index < batchCount; index += 1) {
+        for (let index = 0; index < models.length; index += 1) {
+          const model = models[index];
           const nodeId = deps.addNode(
             'imageNode',
-            { x: baseX, y: baseY + index * 430 },
-            buildImagePlaceholderData({
+            { x: baseX + (isComparison ? index * 580 : 0), y: baseY + (isComparison ? 0 : index * 430) },
+            { ...buildImagePlaceholderData({
               prompt,
-              imageModel: input.imageModel,
-              imageModelLabel: input.imageModelLabel,
+              imageModel: model,
+              imageModelLabel: isComparison ? getImageModelConfig(model).label : input.imageModelLabel,
               aspectRatio: input.aspectRatio,
               imageSize: input.imageSize,
               bananaOptions: input.bananaOptions,
               image2Options: input.image2Options,
               createdAt,
               referenceData,
-            })
+            }), ...(isComparison ? { comparisonGroupId: input.comparisonGroupId } : {}) }
           );
           createdNodeIds.push(nodeId);
         }
@@ -172,18 +183,20 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
         deps.setEdges(buildPromptGenerationEdges(input.nodeId, createdNodeIds));
 
         const results = await Promise.allSettled(
-          createdNodeIds.map(async (nodeId) => {
+          createdNodeIds.map(async (nodeId, index) => {
+            const model = models[index];
             try {
-              const imageUrl = await deps.generateImage({
+              const result = asGenerationResult(await deps.generateImage({
                 prompt,
-                imageModel: input.imageModel,
+                imageModel: model,
                 aspectRatio: input.aspectRatio,
                 imageSize: input.imageSize,
-                bananaOptions: isBananaImageModel(input.imageModel) ? input.bananaOptions : undefined,
-                image2Options: isImage2Model(input.imageModel) ? input.image2Options : undefined,
+                bananaOptions: isBananaImageModel(model) ? input.bananaOptions : undefined,
+                image2Options: isImage2Model(model) ? input.image2Options : undefined,
                 referenceImages: toReferencePayload(input.referenceImages),
                 signal: controller.signal,
-              });
+              }));
+              const { imageUrl, generationInfo } = result;
 
               if (controller.signal.aborted) {
                 deps.deleteNode(nodeId);
@@ -192,12 +205,13 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
 
               deps.updateNodeData(nodeId, {
                 imageUrl,
+                generationInfo,
                 prompt,
-                imageModel: input.imageModel,
+                imageModel: model,
                 aspectRatio: input.aspectRatio,
                 imageSize: input.imageSize,
-                bananaOptions: isBananaImageModel(input.imageModel) ? input.bananaOptions : undefined,
-                image2Options: isImage2Model(input.imageModel) ? input.image2Options : undefined,
+                bananaOptions: isBananaImageModel(model) ? input.bananaOptions : undefined,
+                image2Options: isImage2Model(model) ? input.image2Options : undefined,
                 isLoading: false,
                 error: undefined,
               });
@@ -260,6 +274,7 @@ export function usePromptGeneration({
   commitPrompt: (prompt: string) => void;
 }) {
   const [generatedCount, setGeneratedCount] = useState(0);
+  const [taskCount, setTaskCount] = useState(0);
   const depsRef = useRef({
     nodeId,
     nodePosition,
@@ -290,11 +305,15 @@ export function usePromptGeneration({
       commitPrompt: (prompt) => depsRef.current.commitPrompt(prompt),
       now: () => new Date().toISOString(),
       onGeneratedCountChange: setGeneratedCount,
+      onTaskCountChange: setTaskCount,
     });
   }
 
+  useEffect(() => () => runnerRef.current?.abort(), []);
+
   return {
     generatedCount,
+    taskCount,
     runGeneration: (input: Omit<PromptGenerationRunInput, 'nodeId' | 'nodePosition'>) =>
       runnerRef.current!.run({
         ...input,

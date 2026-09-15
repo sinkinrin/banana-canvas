@@ -12,6 +12,7 @@ import {
   type ImageModelId,
 } from '../lib/imageModels';
 import i18n, { getCurrentLanguage } from '../i18n';
+import { normalizeGenerationInfo, type GenerationResult } from '../lib/generationInfo';
 
 export interface GenerateImageParams {
   prompt: string;
@@ -55,7 +56,7 @@ export function createGenerateImagePayload(
   };
 }
 
-export async function generateImage(params: GenerateImageParams): Promise<string> {
+async function requestImage(params: GenerateImageParams, includeGenerationInfo = false): Promise<GenerationResult> {
   const { signal: externalSignal } = params;
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(
@@ -84,9 +85,8 @@ export async function generateImage(params: GenerateImageParams): Promise<string
         'Accept-Language': getCurrentLanguage(),
       },
       signal,
-      body: JSON.stringify(createGenerateImagePayload(params)),
+      body: JSON.stringify({ ...createGenerateImagePayload(params), ...(includeGenerationInfo ? { includeGenerationInfo: true } : {}) }),
     });
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       let errorMessage = i18n.t('errors.generationFailed');
@@ -107,12 +107,14 @@ export async function generateImage(params: GenerateImageParams): Promise<string
     }
 
     const data = await response.json();
-    return data.imageUrl;
+    signal.throwIfAborted();
+    return { imageUrl: data.imageUrl, generationInfo: normalizeGenerationInfo(data.generationInfo) };
   } catch (error) {
     clearTimeout(timeoutId);
     console.error("Error generating image:", error);
     throw error;
   } finally {
+    clearTimeout(timeoutId);
     if (externalSignal && externalAbortListener) {
       externalSignal.removeEventListener('abort', externalAbortListener);
     }
@@ -167,4 +169,12 @@ export async function optimizePrompt(prompt: string, externalSignal?: AbortSigna
   } finally {
     externalSignal?.removeEventListener('abort', abortFromExternal);
   }
+}
+
+export async function generateImage(params: GenerateImageParams): Promise<string> {
+  return (await requestImage(params)).imageUrl;
+}
+
+export async function generateImageWithInfo(params: GenerateImageParams): Promise<GenerationResult> {
+  return requestImage(params, true);
 }

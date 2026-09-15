@@ -1,6 +1,25 @@
 import { en, type LocaleResource } from './en';
 
 export const zhCN: LocaleResource<typeof en> = {
+  comparison: {
+    title: '多模型对比', description: '使用同一提示词和参考图，每个模型生成一张。共用下方的画幅和分辨率；高级参数仅在模型支持时生效。',
+    count: '已选 {{count}} 个模型，将发起 {{count}} 次生成请求，各自可能产生费用。',
+    start: '开始对比生成', view: '查看对比', zoom: '同步缩放', reset: '重置视图',
+    resultsHint: '拖动任意图片可同步移动视图，点击标记最佳方案。关闭后，图片与参数仍保留在画布上。',
+    winner: '★ 最佳方案', markBest: '标记为最佳', interrupted: '暂无结果（已中断或不可用）', empty: '该组暂无结果。',
+  },
+  generationInfo: {
+    title: '结果信息', actualSize: '实际尺寸', format: '实际格式', elapsed: '生成耗时',
+    apiModel: '请求的 API 模型', reportedModel: '服务器回报型号', requestedSize: '请求尺寸', quality: '画质：请求 → 回报',
+    unknown: '未记录', hint: '尺寸和格式读取自图片，其他回报字段来自服务器，不代表已独立验证底层模型。旧图片可能没有生成记录。',
+  },
+  modelCatalog: {
+    title: '服务器支持的模型', load: '查看模型', refresh: '刷新', search: '搜索模型名称或提供方', count: '共 {{count}} 个模型', empty: '没有匹配的模型。',
+    hint: '使用已保存的 Image2 连接查询 GET /v1/models；修改连接后请先保存。列表中的模型不一定都支持图片生成。',
+    httpError: '服务器返回 HTTP {{status}}，请检查已保存的 Key、权限与模型列表接口。',
+    MODEL_CONNECTION_MISSING: '请先保存服务器地址和 API Key。', MODEL_LIST_UNAVAILABLE: '暂时无法获取模型列表，请检查连接或稍后重试。',
+    INVALID_MODEL_LIST: '服务器未返回标准模型列表。', MODEL_LIST_TOO_LARGE: '服务器模型列表过大。',
+  },
   cutout: {
     title: '智能抠图', tools: '图片工具', processing: '正在抠图…',
     interrupted: '任务已中断，请从原图重新抠图。',
@@ -180,7 +199,9 @@ export const zhCN: LocaleResource<typeof en> = {
   },
   updates: {
     title: '版本与更新',
-    description: '手动检查最新版本、阅读更新日志，并在下载时查看实时进度。自动更新默认关闭。',
+    description: '默认在启动时检查更新，发现新版本会弹窗提示。也可手动检查、阅读更新日志和下载。自动更新默认关闭。',
+    startupCheckTitle: '启动时检查更新',
+    startupCheckDescription: '默认开启。每次启动后检查一次，有新版本时弹窗；无更新或网络失败时不打扰。关闭后会记住你的选择。',
     checking: '正在获取最新版本信息…',
     available: '发现新版本 v{{version}}',
     downloading: '正在下载 v{{version}}',

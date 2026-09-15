@@ -9,6 +9,10 @@ export function getNativeAppMessages(language: string | null | undefined) {
     return {
       appName: '香蕉画图',
       updateReadyTitle: '香蕉画图更新已就绪',
+      updateAvailableTitle: '发现新版本',
+      updateAvailable: (version: string) => `香蕉画图 v${version} 已发布`,
+      updateAvailableDetail: '可在“应用设置 → 软件更新”中查看更新说明、下载和安装。也可以在那里关闭“启动时检查更新”。',
+      gotIt: '知道了',
       updateDownloaded: (version: string) => `版本 ${version} 已在后台下载完成`,
       restartDetail: '是否立即重启并安装？选择“稍后”会在退出应用后自动安装。',
       unsignedDetail: '当前安装包未进行代码签名，Windows 可能显示安全提示。',
@@ -25,6 +29,10 @@ export function getNativeAppMessages(language: string | null | undefined) {
   return {
     appName: 'Banana Canvas',
     updateReadyTitle: 'Banana Canvas update ready',
+    updateAvailableTitle: 'Update available',
+    updateAvailable: (version: string) => `Banana Canvas v${version} is available`,
+    updateAvailableDetail: 'Open App settings → Software updates to read the release notes, download, and install. You can also turn off “Check for updates on startup” there.',
+    gotIt: 'Got it',
     updateDownloaded: (version: string) => `Version ${version} was downloaded in the background`,
     restartDetail: 'Restart and install now? Choose “Later” to install automatically after you exit the app.',
     unsignedDetail: 'The installer is not code-signed. Windows may show a security warning.',

@@ -32,13 +32,15 @@ export type DesktopAutoUpdater = Pick<
 >;
 
 type UpdateLogLevel = 'info' | 'warn' | 'error';
-type UpdateActionSource = 'manual' | 'automatic';
+type UpdateActionSource = 'manual' | 'automatic' | 'startup';
 type UpdateMessageKey = 'checkBeforeDownload' | 'updateNotDownloaded';
 
 type DesktopUpdateManagerOptions = {
   updater: DesktopAutoUpdater;
   currentVersion: string;
   automaticUpdatesEnabled: boolean;
+  checkOnStartupEnabled?: boolean;
+  notifyUpdateAvailable?: (info: DesktopUpdateInfo) => Promise<void>;
   logger: (level: UpdateLogLevel, message: string) => void;
   promptToRestart: (info: DesktopUpdateInfo) => Promise<boolean>;
   beforeInstall: () => Promise<void>;
@@ -86,6 +88,8 @@ export function createDesktopUpdateManager({
   updater,
   currentVersion,
   automaticUpdatesEnabled,
+  checkOnStartupEnabled = true,
+  notifyUpdateAvailable = async () => {},
   logger,
   promptToRestart,
   beforeInstall,
@@ -99,6 +103,7 @@ export function createDesktopUpdateManager({
     supported: true,
     currentVersion,
     automaticUpdatesEnabled,
+    checkOnStartupEnabled,
     phase: 'idle',
     releaseNotes: '',
   };
@@ -108,6 +113,8 @@ export function createDesktopUpdateManager({
   let checkPromise: Promise<void> | undefined;
   let downloadPromise: Promise<void> | undefined;
   let restartPromptPending = false;
+  let startupCheckPending = true;
+  let startupNotificationShown = false;
   let lastProgressBucket = -1;
   let initialTimer: ReturnType<typeof setTimeout> | undefined;
   let intervalTimer: ReturnType<typeof setInterval> | undefined;
@@ -125,6 +132,7 @@ export function createDesktopUpdateManager({
   };
 
   const checkNow = async (source: UpdateActionSource = 'manual') => {
+    if (state.phase === 'downloading' || state.phase === 'downloaded') return getState();
     if (checkPromise) {
       await checkPromise;
       return getState();
@@ -181,11 +189,19 @@ export function createDesktopUpdateManager({
 
   const scheduleAutomaticChecks = () => {
     clearAutomaticTimers();
-    if (!started || !state.automaticUpdatesEnabled) return;
-    initialTimer = setTimeout(() => void checkNow('automatic'), initialDelayMs);
-    intervalTimer = setInterval(() => void checkNow('automatic'), checkIntervalMs);
-    unrefTimer(initialTimer);
-    unrefTimer(intervalTimer);
+    if (!started) return;
+    if (state.automaticUpdatesEnabled || (startupCheckPending && state.checkOnStartupEnabled)) {
+      initialTimer = setTimeout(() => {
+        const source = startupCheckPending && state.checkOnStartupEnabled ? 'startup' : 'automatic';
+        startupCheckPending = false;
+        void checkNow(source);
+      }, initialDelayMs);
+      unrefTimer(initialTimer);
+    }
+    if (state.automaticUpdatesEnabled) {
+      intervalTimer = setInterval(() => void checkNow('automatic'), checkIntervalMs);
+      unrefTimer(intervalTimer);
+    }
   };
 
   const handleError = (error: Error) => {
@@ -208,7 +224,15 @@ export function createDesktopUpdateManager({
       lastCheckedAt: new Date().toISOString(),
     });
     logger('info', `发现新版本 ${info.version}。`);
-    if (checkSource === 'automatic' && state.automaticUpdatesEnabled) {
+    if (checkSource === 'startup' && started && state.checkOnStartupEnabled && !startupNotificationShown) {
+      startupNotificationShown = true;
+      void Promise.resolve().then(() => {
+        if (started && state.checkOnStartupEnabled) return notifyUpdateAvailable(info);
+      }).catch((error) => {
+        logger('warn', `显示新版本提示失败：${errorMessage(error)}`);
+      });
+    }
+    if ((checkSource === 'automatic' || checkSource === 'startup') && state.automaticUpdatesEnabled) {
       logger('info', `开始后台下载版本 ${info.version}。`);
       void download('automatic');
     }
@@ -317,6 +341,12 @@ export function createDesktopUpdateManager({
     return getState();
   };
 
+  const setCheckOnStartupEnabled = (enabled: boolean) => {
+    patchState({ checkOnStartupEnabled: enabled });
+    scheduleAutomaticChecks();
+    return getState();
+  };
+
   const installNow = async () => {
     if (state.phase !== 'downloaded') {
       patchState({ phase: 'error', error: getMessage('updateNotDownloaded') });
@@ -341,5 +371,6 @@ export function createDesktopUpdateManager({
     downloadUpdate: () => download('manual'),
     installNow,
     setAutomaticUpdatesEnabled,
+    setCheckOnStartupEnabled,
   };
 }

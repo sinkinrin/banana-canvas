@@ -10,6 +10,34 @@ import {
 
 const referenceImage = { data: 'base64', mimeType: 'image/png', url: 'data:image/png;base64,base64' };
 
+test('multi-model comparison shares input, places results side by side and isolates failures', async () => {
+  const nodes: Record<string, { position: { x: number; y: number }; data: any }> = {};
+  const requests: any[] = [];
+  let count = 0;
+  const runner = createPromptGenerationRunner({
+    generateImage: async (input) => {
+      requests.push(input);
+      if (input.imageModel === 'banana-lite') throw new Error('model unavailable');
+      return { imageUrl: 'data:image/png;base64,result', generationInfo: { elapsedMs: 120, reportedQuality: 'medium' } };
+    },
+    addNode: (_type, position, data) => { const id = `n${count++}`; nodes[id] = { position, data }; return id; },
+    updateNodeData: (id, patch) => { if (nodes[id]) Object.assign(nodes[id].data, patch); },
+    deleteNode: id => { delete nodes[id]; }, setEdges: () => {}, commitPrompt: () => {}, now: () => '2026-09-15T00:00:00Z',
+  });
+  await runner.run({ nodeId: 'parent', prompt: 'same prompt', imageModel: 'image2', imageModelLabel: 'Image2', aspectRatio: '1:1', imageSize: '1K',
+    batchCount: 4, comparisonModels: ['image2.5-flare', 'banana-lite', 'image2.5-sunburst'], comparisonGroupId: 'comparison',
+    referenceImageIds: [], referenceImages: [referenceImage], hasPendingReferenceHydration: false,
+  });
+  assert.equal(requests.length, 3);
+  assert.ok(requests.every(request => request.prompt === 'same prompt' && request.referenceImages[0].data === referenceImage.data));
+  assert.ok(nodes.n0.position.x < nodes.n1.position.x && nodes.n1.position.x < nodes.n2.position.x);
+  assert.equal(nodes.n0.position.y, nodes.n2.position.y);
+  assert.equal(nodes.n0.data.generationInfo.elapsedMs, 120);
+  assert.equal(nodes.n1.data.error, 'model unavailable');
+  assert.ok(nodes.n2.data.imageUrl);
+  assert.ok(Object.values(nodes).every(node => node.data.comparisonGroupId === 'comparison' && node.data.isLoading === false));
+});
+
 test('buildGenerationReferenceData prefers asset IDs over inline references', () => {
   assert.deepEqual(
     buildGenerationReferenceData({

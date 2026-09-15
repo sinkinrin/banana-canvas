@@ -23,6 +23,8 @@ import {
   normalizeImageModel,
 } from '../../lib/imageModels';
 import { GeneratingImagePlaceholder } from './GeneratingImagePlaceholder';
+import { GenerationInfoCard } from './GenerationInfoCard';
+import { ModelComparisonResults } from './ModelComparisonDialog';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { MaskCompareModal } from '../mask/MaskCompareModal';
 import { buildImageMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
@@ -42,6 +44,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [showViewer, setShowViewer] = useState(false);
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
+  const [showModelComparison, setShowModelComparison] = useState(false);
   const cutout = useCutout(id);
   const isCutout = data.generationMode === 'cutout';
   const [copyImageFailed, setCopyImageFailed] = useState(false);
@@ -147,11 +150,13 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     setRerunSucceeded(false);
 
     try {
-      const newUrl = await generateImageAction(params);
+      const { imageUrl: newUrl, generationInfo } = await generateImageAction(params);
       // Only update if not aborted
       if (!controller.signal.aborted) {
         updateNodeData(id, {
           imageUrl: newUrl,
+          generationInfo,
+          comparisonWinner: undefined,
           imageAssetId: undefined,
           imageModel,
           bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
@@ -249,7 +254,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     }));
 
     try {
-      const url = await generateMaskImage(buildImageMaskGenerationPayload({
+      const { imageUrl: url, generationInfo } = await generateMaskImage(buildImageMaskGenerationPayload({
         imageModel,
         maskPrompt,
         maskImage,
@@ -261,6 +266,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
+        generationInfo,
         prompt: maskPrompt,
         imageModel: getImage2MaskModel(imageModel),
         aspectRatio: data.aspectRatio || '1:1',
@@ -448,6 +454,9 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
       {isCutout && <div data-cutout-result={id} className="flex items-center gap-2 px-2 py-2 text-xs text-[#B8A58D]"><Scissors size={13} className="text-[#F2C14E]" />{t('cutout.title')}<span className="ml-auto text-[10px] text-[#96836F]">{CUTOUT_MODELS.find((model) => model.id === data.cutoutModelId)?.name}</span></div>}
       {cutout.error && <p role="alert" className="max-w-[512px] px-2 py-2 text-xs text-red-300">{cutout.error}</p>}
+      {imageUrl && <GenerationInfoCard imageUrl={imageUrl} info={data.generationInfo} />}
+      {data.comparisonGroupId && <button type="button" className="nodrag nopan nowheel m-2 text-xs text-[#F2C14E]" onClick={() => setShowModelComparison(true)}>{data.comparisonWinner ? `${t('comparison.winner')} · ` : ''}{t('comparison.view')}</button>}
+      {showModelComparison && data.comparisonGroupId && <ModelComparisonResults groupId={data.comparisonGroupId} onClose={() => setShowModelComparison(false)} />}
       {data.prompt && (
         <div className="mt-3 px-2 pb-1 max-w-[512px] flex items-start justify-between gap-2">
           <div className="flex-1">

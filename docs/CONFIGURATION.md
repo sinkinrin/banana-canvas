@@ -16,6 +16,8 @@ The settings screen manages:
 
 In Electron, secrets are kept in `safeStorage` when operating-system encryption is available. The renderer receives only whether each Key is configured. npm development continues to support repository-local `.env` settings.
 
+**Server models** queries `GET <saved Image2 Base URL>/models` with the saved Key and proxy policy. Save connection edits before refreshing the catalog. The UI supports searching model IDs and providers; it does not automatically add arbitrary catalog entries to the image-model picker. Text-only models may appear. Authentication/endpoint failures are shown without exposing upstream error bodies or credentials.
+
 ## Models
 
 | UI model | API model / route | Output sizes | Best suited for |
@@ -114,6 +116,8 @@ The current autosave API still sends a full canvas snapshot. Projects containing
 
 ## Desktop updates
 
-Automatic updates are off by default. When enabled, the installed app checks every 4 hours and downloads an available update in the background. Installation still requires a user decision to restart immediately or defer until exit.
+The installed app checks once about 10 seconds after startup by default and shows a dialog only when a newer release is available. Turn off **Check for updates on startup** in **App settings → Software updates** to opt out; this choice is saved across launches. Existing installations receive the new default unless this setting has explicitly been disabled. Up-to-date and failed checks do not show a popup. Startup checking alone does not download or install updates.
+
+Automatic background downloads remain a separate, disabled-by-default setting. When enabled, the app checks every 4 hours and downloads available updates in the background. Installation still requires a user decision to restart immediately or defer until exit. Startup checking and automatic downloads share a single initial request when both settings are enabled.
 
 Windows installers are unsigned. Both manual installation and in-app updates may trigger a SmartScreen **Unknown publisher** warning.
