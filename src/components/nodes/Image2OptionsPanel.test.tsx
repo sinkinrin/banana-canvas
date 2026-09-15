@@ -3,6 +3,25 @@ import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { Image2OptionsPanel } from './Image2OptionsPanel';
+import i18n from '../../i18n';
+
+test('Image 2.5 controls explain relay limitations in both languages and prevent JPEG transparency', async () => {
+  try {
+    for (const language of ['zh-CN', 'en']) {
+      await i18n.changeLanguage(language);
+      for (const imageModel of ['image2.5-flare', 'image2.5-sunburst'] as const) {
+        const html = renderToStaticMarkup(<Image2OptionsPanel imageModel={imageModel} value={{ background: 'transparent', outputFormat: 'webp' }} hasReferenceImages onChange={() => {}} />);
+        assert.match(html, /Image 2\.5/);
+        assert.match(html, /value="transparent" selected=""/);
+        assert.match(html, /value="jpeg" disabled=""/);
+        assert.match(html, /value="xhigh" disabled=""/);
+        assert.match(html, /value="max" disabled=""/);
+        assert.match(html, /medium/);
+        assert.doesNotMatch(html, /image2Options\.|models\.image25/);
+      }
+    }
+  } finally { await i18n.changeLanguage('zh-CN'); }
+});
 
 test('Image2OptionsPanel renders supported relay controls and compatibility tips', () => {
   const html = renderToStaticMarkup(

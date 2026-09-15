@@ -27,6 +27,7 @@ export type BananaGenerateInput = {
 
 export type Image2GenerateInput = {
   requestId: string;
+  imageModel?: ImageModelId;
   prompt: string;
   aspectRatio?: BananaAspectRatio;
   imageSize?: BananaImageSize;
@@ -149,6 +150,7 @@ export function mountGenerationRoutes(
           })
         : await providers.generateImage2Image({
             requestId,
+            imageModel: body.imageModel,
             prompt: body.prompt,
             aspectRatio: body.aspectRatio,
             imageSize: body.imageSize,

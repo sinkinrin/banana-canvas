@@ -21,6 +21,8 @@ In Electron, secrets are kept in `safeStorage` when operating-system encryption 
 | UI model | API model / route | Output sizes | Best suited for |
 | --- | --- | --- | --- |
 | Image2 | Configured OpenAI-compatible relay | `512`–`4K` options | Default generation and mask editing |
+| Image 2.5 Flare | `gpt-image-2.5-flare`, Images API | Same requested sizes as Image2 | Fast everyday generation and transparent assets |
+| Image 2.5 Sunburst | `gpt-image-2.5-sunburst`, Images API | Same requested sizes as Image2 | Precise reference and mask editing |
 | Banana 2 | `gemini-3.1-flash-image` | `512`, `1K`, `2K`, `4K` | General multi-reference work |
 | Banana 2 Lite | `gemini-3.1-flash-lite-image` | `1K` | Fast, economical drafts and batches |
 | Banana Pro | `gemini-3-pro-image` | `1K`, `2K`, `4K` | Complex design, typography, and factual visuals |
@@ -28,6 +30,8 @@ In Electron, secrets are kept in `safeStorage` when operating-system encryption 
 Banana 2 and Banana 2 Lite support all 14 exposed aspect ratios and selectable `MINIMAL` / `HIGH` thinking levels. Banana Pro supports the 10 standard aspect ratios, manages thinking internally, and does not accept `mediaResolution`. Google Search grounding is available for Banana 2 and Banana Pro.
 
 Image2 automatically chooses `/v1/images/generations` or `/v1/images/edits` for `gpt-image-*` models and `/v1/chat/completions` for other model names. Override that detection with `IMAGE2_ENDPOINT_TYPE=images` or `IMAGE2_ENDPOINT_TYPE=chat` when required by a relay.
+
+The two explicit Image 2.5 options share the Image2 Base URL, Key, and network settings. They select their exact API model and always use the Images API. `IMAGE2_MODEL` and `IMAGE2_ENDPOINT_TYPE` continue to control the original Image2 option. Changing models does not migrate existing nodes. For verified relay behavior, see [Image 2.5](IMAGE25.md).
 
 Prompt optimization defaults to the production-ready `gemini-3.8-flash`. Change it in **App settings** or with `GEMINI_PROMPT_OPTIMIZER_MODEL`; the configured model must support Gemini `generateContent` for the current API Key.
 
@@ -50,7 +54,11 @@ The UI exposes the relay options that are currently used by the application:
 - `response_format`
 - `partial_images`
 
-Background is fixed to `opaque`, moderation to `low`, and streaming follows the runtime setting. `gpt-image-2` does not expose a transparent-background or `input_fidelity` toggle here. Mask edits upload the source and same-sized PNG mask to the Images endpoint.
+For the original Image2 option, background stays fixed to `opaque`. The explicit Image 2.5 options add `opaque`, `transparent`, and `auto` backgrounds. Transparency requires PNG/WebP; selecting transparency while using JPEG switches to PNG and removes JPEG compression. Moderation remains `low` and streaming follows runtime settings. `input_fidelity` is omitted. Mask edits upload the source and same-sized PNG mask and retain the selected Image 2.5 variant.
+
+The UI currently exposes `auto`, `low`, `medium`, and `high` quality. OpenAI's new `xhigh` and `max` tiers are shown as unavailable: live relay responses reported `medium` for those requests (and for `high`). Requested dimensions and quality are not guarantees of output size or rendering effort. The tested relay also returned JSON under an SSE content type, without partial-image events.
+
+WebP requests through the project returned PNG on the tested relay. The provider detects the actual returned image format, so previews and downloads use the correct type. A selected output format is a request parameter, not a verified promise of conversion by the relay.
 
 ## Environment variables
 

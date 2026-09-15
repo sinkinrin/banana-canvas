@@ -29,6 +29,7 @@ import {
   normalizeImage2BaseUrl,
   resolveImage2HedgeEnabled,
   type Image2Options,
+  type ImageModelId,
   type Image2ProxyMode,
   type ReferenceImageInput,
 } from '../../lib/imageModels';
@@ -709,19 +710,21 @@ async function normalizeGeneratedImageUrl(
 
 function appendImage2OptionsToFormData({
   formData,
+  model,
   image2Options,
   streamImages,
   partialImages,
 }: {
   formData: FormData;
+  model: string;
   image2Options: Image2Options;
   streamImages: boolean;
   partialImages: number;
 }) {
-  const options = normalizeImage2Options(image2Options);
+  const options = normalizeImage2Options(image2Options, model);
 
   if (options.quality) formData.set('quality', options.quality);
-  formData.set('background', 'opaque');
+  formData.set('background', options.background ?? 'opaque');
   if (options.outputFormat) formData.set('output_format', options.outputFormat);
   if (
     typeof options.outputCompression === 'number' &&
@@ -740,6 +743,7 @@ function appendImage2OptionsToFormData({
 
 export async function generateImage2Image({
   requestId,
+  imageModel,
   prompt,
   aspectRatio,
   imageSize,
@@ -750,6 +754,7 @@ export async function generateImage2Image({
   signal,
 }: {
   requestId: string;
+  imageModel?: ImageModelId;
   prompt: string;
   aspectRatio?: string;
   imageSize?: string;
@@ -760,12 +765,12 @@ export async function generateImage2Image({
   signal?: AbortSignal;
 }) {
   const env = runtimeConfig?.get().env ?? getRuntimeConfig().env;
-  const image2Config = createImage2Config(env);
+  const image2Config = createImage2Config(env, imageModel);
   if (image2Config.missingKeys.length > 0) {
     throw new Error(`image2 配置缺失：请在 .env 中设置 ${image2Config.missingKeys.join(', ')}`);
   }
 
-  const normalizedImage2Options = normalizeImage2Options(image2Options);
+  const normalizedImage2Options = normalizeImage2Options(image2Options, image2Config.model);
   const streamImages = image2Config.endpointType === 'images' && readBooleanEnv(env, 'IMAGE2_STREAM');
   const partialImages = streamImages
     ? normalizedImage2Options.partialImages ?? readNonNegativeIntEnv(
@@ -813,6 +818,7 @@ export async function generateImage2Image({
       });
       appendImage2OptionsToFormData({
         formData: request.body,
+        model: image2Config.model,
         image2Options: normalizedImage2Options,
         streamImages,
         partialImages,

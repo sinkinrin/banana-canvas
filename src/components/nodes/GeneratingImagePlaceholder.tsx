@@ -42,6 +42,7 @@ function formatElapsedTime(createdAt: string | undefined, nowMs: number) {
 }
 
 function getAvatarText(modelLabel: string) {
+  if (modelLabel.startsWith('Image 2.5')) return <>image<br />2.5</>;
   if (modelLabel.toLowerCase() === 'image2') {
     return (
       <>

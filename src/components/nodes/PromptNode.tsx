@@ -12,6 +12,8 @@ import {
   IMAGE_MODELS,
   getBananaImageSizeValues,
   isBananaImageModel,
+  isImage2Model,
+  getImage2MaskModel,
   normalizeBananaImageSize,
   normalizeBananaImageSizeForModel,
   normalizeImageModel,
@@ -168,7 +170,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       { x: baseX, y: baseY },
       {
         prompt: maskPrompt,
-        imageModel: 'image2',
+        imageModel: getImage2MaskModel(imageModel),
         aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
@@ -190,6 +192,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
     try {
       const url = await generateMaskImage(buildPromptMaskGenerationPayload({
+        imageModel,
         maskPrompt,
         maskImage,
         sourceImage,
@@ -203,7 +206,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
         prompt: maskPrompt,
-        imageModel: 'image2',
+        imageModel: getImage2MaskModel(imageModel),
         aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
@@ -516,8 +519,9 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 />
               )}
 
-              {imageModel === 'image2' && (
+              {isImage2Model(imageModel) && (
                 <Image2OptionsPanel
+                  imageModel={imageModel}
                   value={image2Options}
                   hasReferenceImages={referenceImages.length > 0}
                   onChange={(nextOptions) => {

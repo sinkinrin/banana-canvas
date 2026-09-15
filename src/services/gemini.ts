@@ -1,6 +1,7 @@
 
 import {
   isBananaImageModel,
+  isImage2Model,
   normalizeBananaOptionsForModel,
   normalizeImage2Options,
   normalizeImageModel,
@@ -30,7 +31,7 @@ export type GenerateImagePayload = Omit<GenerateImageParams, 'signal' | 'imageMo
 
 export function getGenerateImageTimeoutMs(imageModel?: ImageModelId) {
   const normalizedModel = normalizeImageModel(imageModel);
-  return normalizedModel === 'image2' || normalizedModel === 'banana-pro' ? 300000 : 60000;
+  return isImage2Model(normalizedModel) || normalizedModel === 'banana-pro' ? 300000 : 60000;
 }
 
 export function createGenerateImagePayload(
@@ -42,8 +43,8 @@ export function createGenerateImagePayload(
   const normalizedBananaOptions = isBananaImageModel(normalizedModel)
     ? normalizeBananaOptionsForModel(normalizedModel, bananaOptions)
     : {};
-  const normalizedImage2Options = normalizedModel === 'image2'
-    ? normalizeImage2Options(image2Options)
+  const normalizedImage2Options = isImage2Model(normalizedModel)
+    ? normalizeImage2Options(image2Options, normalizedModel)
     : {};
 
   return {

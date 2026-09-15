@@ -78,6 +78,35 @@ test('getImageModelConfig exposes provider metadata for every image model', () =
   );
 });
 
+test('Image 2.5 selections use exact model IDs and Images endpoints without changing legacy config', () => {
+  const env = { IMAGE2_BASE_URL: 'https://relay.example/v1', IMAGE2_API_KEY: 'fixture', IMAGE2_MODEL: 'custom', IMAGE2_ENDPOINT_TYPE: 'chat' };
+  for (const variant of ['flare', 'sunburst']) {
+    const id = `image2.5-${variant}`;
+    assert.equal(normalizeImageModel(id), id);
+    assert.equal(getImageModelConfig(id).provider, 'openai-chat');
+    assert.deepEqual(createImage2Config(env, id), {
+      baseUrl: 'https://relay.example/v1', apiKey: 'fixture', model: `gpt-image-2.5-${variant}`, endpointType: 'images', missingKeys: [],
+    });
+  }
+  assert.equal(createImage2Config(env).model, 'custom');
+  assert.equal(createImage2Config(env).endpointType, 'chat');
+});
+
+test('Image 2.5 preserves alpha-capable formats and converts transparent JPEG safely', () => {
+  assert.deepEqual(normalizeImage2Options({ background: 'transparent', outputFormat: 'jpeg', outputCompression: 70, quality: 'high' }, 'image2.5-flare'), {
+    background: 'transparent', outputFormat: 'png', quality: 'high',
+  });
+  assert.deepEqual(normalizeImage2Options({ background: 'transparent', outputFormat: 'webp', outputCompression: 70 }, 'image2.5-sunburst'), {
+    background: 'transparent', outputFormat: 'webp', outputCompression: 70,
+  });
+  for (const quality of ['xhigh', 'max']) {
+    assert.deepEqual(normalizeImage2Options({ quality }, 'image2.5-flare'), {});
+  }
+  const body = buildImage2ImagesRequestBody({ model: 'gpt-image-2.5-sunburst', prompt: 'sticker', size: '1024x1024', image2Options: { background: 'transparent', outputFormat: 'jpeg' } });
+  assert.equal(body.background, 'transparent');
+  assert.equal(body.output_format, 'png');
+});
+
 test('Banana model capabilities expose official model IDs and output constraints', () => {
   assert.equal(getBananaModelCapabilities('banana').apiModel, 'gemini-3.1-flash-image');
   assert.equal(getBananaModelCapabilities('banana-lite').apiModel, 'gemini-3.1-flash-lite-image');

@@ -5,6 +5,7 @@ import type { AppNode } from '../../store';
 import type { InlineImageData } from '../../lib/canvasState';
 import {
   isBananaImageModel,
+  isImage2Model,
   type BananaOptions,
   type Image2Options,
   type ImageModelId,
@@ -53,7 +54,7 @@ export function buildImagePlaceholderData({
     aspectRatio,
     imageSize,
     bananaOptions: isBananaImageModel(imageModel) ? bananaOptions : undefined,
-    image2Options: imageModel === 'image2' ? image2Options : undefined,
+    image2Options: isImage2Model(imageModel) ? image2Options : undefined,
     isLoading: true,
     error: undefined,
     createdAt,
@@ -179,7 +180,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 aspectRatio: input.aspectRatio,
                 imageSize: input.imageSize,
                 bananaOptions: isBananaImageModel(input.imageModel) ? input.bananaOptions : undefined,
-                image2Options: input.imageModel === 'image2' ? input.image2Options : undefined,
+                image2Options: isImage2Model(input.imageModel) ? input.image2Options : undefined,
                 referenceImages: toReferencePayload(input.referenceImages),
                 signal: controller.signal,
               });
@@ -196,7 +197,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 aspectRatio: input.aspectRatio,
                 imageSize: input.imageSize,
                 bananaOptions: isBananaImageModel(input.imageModel) ? input.bananaOptions : undefined,
-                image2Options: input.imageModel === 'image2' ? input.image2Options : undefined,
+                image2Options: isImage2Model(input.imageModel) ? input.image2Options : undefined,
                 isLoading: false,
                 error: undefined,
               });

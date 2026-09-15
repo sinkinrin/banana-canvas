@@ -850,6 +850,43 @@ async function runBananaModelSelectionSmokeTest(window: BrowserWindow) {
     'Banana model smoke Pro capabilities did not render correctly'
   );
 
+  for (const variant of ['flare', 'sunburst']) {
+    await window.webContents.executeJavaScript(`(() => {
+      const select = document.querySelector('select[name="imageModel"]');
+      select.value = 'image2.5-${variant}';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitForSmokePredicate(window, `(() => {
+      const quality = document.querySelector('select[name="image2Quality"]');
+      const background = document.querySelector('select[name="image2Background"]');
+      return document.body.textContent?.includes('Image 2.5 高级参数')
+        && quality?.querySelector('option[value="xhigh"]')?.disabled
+        && quality?.querySelector('option[value="max"]')?.disabled
+        && background?.querySelector('option[value="transparent"]');
+    })()`, 'Image 2.5 controls or pending-quality indicators are missing');
+    // Change through React's real DOM events to exercise state normalization.
+    await window.webContents.executeJavaScript(`(() => {
+      const background = document.querySelector('select[name="image2Background"]');
+      background.value = 'opaque';
+      background.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitForSmokePredicate(window, `document.querySelector('select[name="image2Background"]')?.value === 'opaque'`, 'Image 2.5 background did not update');
+    await window.webContents.executeJavaScript(`(() => {
+      const format = document.querySelector('select[name="image2OutputFormat"]');
+      format.value = 'jpeg';
+      format.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitForSmokePredicate(window, `document.querySelector('select[name="image2OutputFormat"]')?.value === 'jpeg'`, 'Image 2.5 JPEG selection did not update');
+    await window.webContents.executeJavaScript(`(() => {
+      const background = document.querySelector('select[name="image2Background"]');
+      background.value = 'transparent';
+      background.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitForSmokePredicate(window, `(() => {
+      const format = document.querySelector('select[name="image2OutputFormat"]');
+      return format?.value === 'png' && format.querySelector('option[value="jpeg"]')?.disabled;
+    })()`, 'Image 2.5 transparent JPEG was not converted to PNG');
+  }
   await window.webContents.executeJavaScript(`(() => {
     const select = [...document.querySelectorAll('select')]
       .find((item) => [...item.options].some((option) => option.value === 'image2'));

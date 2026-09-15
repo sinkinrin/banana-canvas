@@ -25,7 +25,7 @@ test('package metadata uses the banana-canvas package name', async () => {
 
   assert.equal(packageJson.name, 'banana-canvas');
   assert.match(packageJson.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
-  assert.match(packageJson.description, /Image2/);
+  assert.match(packageJson.description, /Image 2\.5/);
   assert.equal(packageJson.author, 'Banana Canvas Contributors');
   assert.equal(packageLock.name, 'banana-canvas');
   assert.equal(packageLock.version, packageJson.version);

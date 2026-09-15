@@ -216,6 +216,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
+                <p className="text-xs leading-relaxed md:col-span-2" style={{ color: '#B8A58D' }}>{t('settings.image25ConnectionHint')}</p>
                 <label className="space-y-1.5 md:col-span-2">
                   <span className="text-xs" style={{ color: '#B8A58D' }}>API Base URL</span>
                   <input

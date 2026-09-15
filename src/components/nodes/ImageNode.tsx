@@ -18,6 +18,8 @@ import { copyImageToClipboard, copyTextToClipboard } from '../../lib/clipboard';
 import {
   getImageModelConfig,
   isBananaImageModel,
+  isImage2Model,
+  getImage2MaskModel,
   normalizeImageModel,
 } from '../../lib/imageModels';
 import { GeneratingImagePlaceholder } from './GeneratingImagePlaceholder';
@@ -153,7 +155,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
           imageAssetId: undefined,
           imageModel,
           bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
-          image2Options: imageModel === 'image2' ? data.image2Options : undefined,
+          image2Options: isImage2Model(imageModel) ? data.image2Options : undefined,
         });
         setRerunSucceeded(true);
         setTimeout(() => setRerunSucceeded(false), 2_000);
@@ -222,7 +224,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       { x: pos.x + 430, y: pos.y },
       {
         prompt: maskPrompt,
-        imageModel: 'image2',
+        imageModel: getImage2MaskModel(imageModel),
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
         image2Options: data.image2Options,
@@ -248,6 +250,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
     try {
       const url = await generateMaskImage(buildImageMaskGenerationPayload({
+        imageModel,
         maskPrompt,
         maskImage,
         sourceImage,
@@ -259,7 +262,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
         prompt: maskPrompt,
-        imageModel: 'image2',
+        imageModel: getImage2MaskModel(imageModel),
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
         image2Options: data.image2Options,
@@ -331,7 +334,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     >
       <Handle type="target" position={Position.Left} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#9B70D0', borderColor: '#1D1A14'}} />
 
-      <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{ background: '#141210', ...(isCutout ? CHECKERBOARD_STYLE : {}), borderRadius: '10px', overflow: 'hidden' }}>
+      <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{ background: '#141210', ...(isCutout || data.image2Options?.background === 'transparent' ? CHECKERBOARD_STYLE : {}), borderRadius: '10px', overflow: 'hidden' }}>
         {imageUrl ? (
           <>
             <img

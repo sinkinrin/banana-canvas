@@ -182,6 +182,22 @@ test('history snapshot preserves selected image model metadata', () => {
   });
 });
 
+test('Image 2.5 variants and transparent options survive persisted and undo snapshots', () => {
+  const state: PersistedCanvasState = {
+    nodes: (['image2.5-flare', 'image2.5-sunburst'] as const).map((imageModel) => ({
+      id: imageModel, type: 'promptNode', position: { x: 0, y: 0 },
+      data: { imageModel, image2Options: { background: 'transparent', outputFormat: 'webp', outputCompression: 80 } },
+    })),
+    edges: [], assets: {},
+  };
+  for (const snapshot of [createPersistedSnapshot(state), createHistorySnapshot(state)]) {
+    for (const [index, node] of snapshot.nodes.entries()) {
+      assert.equal(node.data.imageModel, state.nodes[index].data.imageModel);
+      assert.deepEqual(node.data.image2Options, state.nodes[index].data.image2Options);
+    }
+  }
+});
+
 test('history snapshot preserves normalized Banana2 advanced options', () => {
   const state: PersistedCanvasState = {
     nodes: [

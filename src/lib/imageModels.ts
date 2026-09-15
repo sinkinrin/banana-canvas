@@ -29,9 +29,27 @@ export const IMAGE_MODELS = [
     descriptionKey: 'models.image2.description',
     provider: 'openai-chat',
   },
+  {
+    id: 'image2.5-flare',
+    label: 'Image 2.5 Flare',
+    descriptionKey: 'models.image25Flare.description',
+    provider: 'openai-chat',
+  },
+  {
+    id: 'image2.5-sunburst',
+    label: 'Image 2.5 Sunburst',
+    descriptionKey: 'models.image25Sunburst.description',
+    provider: 'openai-chat',
+  },
 ] as const;
 
 export type ImageModelId = (typeof IMAGE_MODELS)[number]['id'];
+export const IMAGE2_MODEL_IDS = ['image2', 'image2.5-flare', 'image2.5-sunburst'] as const;
+export type Image2ModelId = (typeof IMAGE2_MODEL_IDS)[number];
+const IMAGE25_API_MODELS = {
+  'image2.5-flare': 'gpt-image-2.5-flare',
+  'image2.5-sunburst': 'gpt-image-2.5-sunburst',
+} as const;
 export const BANANA_IMAGE_MODEL_IDS = ['banana', 'banana-lite', 'banana-pro'] as const;
 export type BananaImageModelId = (typeof BANANA_IMAGE_MODEL_IDS)[number];
 
@@ -463,11 +481,14 @@ export function getBananaParameterTipKeys(imageModel: unknown = 'banana') {
   ];
 }
 
-export function normalizeImage2Options(value: unknown): Image2Options {
+export function normalizeImage2Options(value: unknown, imageModel: unknown = 'image2'): Image2Options {
   if (!isRecord(value)) return {};
 
   const options: Image2Options = {};
   const quality = normalizeStringOption(value, 'quality', IMAGE2_QUALITY_VALUES);
+  const background = isImage25Model(imageModel)
+    ? normalizeStringOption(value, 'background', IMAGE2_BACKGROUND_VALUES)
+    : undefined;
   const outputFormat =
     normalizeStringOption(value, 'outputFormat', IMAGE2_OUTPUT_FORMAT_VALUES) ??
     normalizeStringOption(value, 'output_format', IMAGE2_OUTPUT_FORMAT_VALUES);
@@ -486,7 +507,10 @@ export function normalizeImage2Options(value: unknown): Image2Options {
   );
 
   if (quality) options.quality = quality;
+  if (background) options.background = background;
   if (outputFormat) options.outputFormat = outputFormat;
+  // JPEG cannot carry alpha. Preserve the requested transparent background.
+  if (background === 'transparent' && outputFormat === 'jpeg') options.outputFormat = 'png';
   if (responseFormat) options.responseFormat = responseFormat;
   if (typeof partialImages === 'number') options.partialImages = partialImages;
 
@@ -500,11 +524,11 @@ export function normalizeImage2Options(value: unknown): Image2Options {
   return options;
 }
 
-export function getImage2RelayParameterTipKeys() {
+export function getImage2RelayParameterTipKeys(imageModel: unknown = 'image2') {
   return [
-    'image2Options.tips.exposed',
-    'image2Options.tips.transparent',
-    'image2Options.tips.fidelity',
+    isImage25Model(imageModel) ? 'image2Options.tips.exposed25' : 'image2Options.tips.exposed',
+    isImage25Model(imageModel) ? 'image2Options.tips.transparent25' : 'image2Options.tips.transparent',
+    isImage25Model(imageModel) ? 'image2Options.tips.quality25' : 'image2Options.tips.fidelity',
     'image2Options.tips.ignored',
     'image2Options.tips.url',
     'image2Options.tips.fileId',
@@ -525,6 +549,21 @@ export function isImageModelId(value: unknown): value is ImageModelId {
 
 export function isBananaImageModel(value: unknown): value is BananaImageModelId {
   return typeof value === 'string' && (BANANA_IMAGE_MODEL_IDS as readonly string[]).includes(value);
+}
+
+export function isImage2Model(value: unknown): value is Image2ModelId {
+  return typeof value === 'string' && (IMAGE2_MODEL_IDS as readonly string[]).includes(value);
+}
+
+export function isImage25Model(value: unknown): boolean {
+  return typeof value === 'string' && (
+    Object.hasOwn(IMAGE25_API_MODELS, value) ||
+    /^gpt-image-2\.5-(flare|sunburst)(?:-\d{4}-\d{2}-\d{2})?$/.test(value)
+  );
+}
+
+export function getImage2MaskModel(imageModel: unknown): Image2ModelId {
+  return isImage2Model(imageModel) ? imageModel : 'image2';
 }
 
 export function normalizeBananaImageModel(value: unknown): BananaImageModelId {
@@ -567,12 +606,15 @@ export function normalizeImage2BaseUrl(baseUrl: string) {
   return normalizedBaseUrl;
 }
 
-export function createImage2Config(env: Image2Env): Image2Config {
+export function createImage2Config(env: Image2Env, imageModel: unknown = 'image2'): Image2Config {
   const rawBaseUrl = env.IMAGE2_BASE_URL?.trim() || env.IMAGE2_CHAT_COMPLETIONS_URL?.trim() || '';
   const baseUrl = rawBaseUrl ? normalizeImage2BaseUrl(rawBaseUrl) : '';
   const apiKey = env.IMAGE2_API_KEY?.trim() ?? '';
-  const model = env.IMAGE2_MODEL?.trim() || DEFAULT_IMAGE2_MODEL;
-  const endpointType = normalizeImage2EndpointType(env.IMAGE2_ENDPOINT_TYPE, model);
+  const selectedModel = typeof imageModel === 'string' && Object.hasOwn(IMAGE25_API_MODELS, imageModel)
+    ? IMAGE25_API_MODELS[imageModel as keyof typeof IMAGE25_API_MODELS]
+    : undefined;
+  const model = selectedModel ?? (env.IMAGE2_MODEL?.trim() || DEFAULT_IMAGE2_MODEL);
+  const endpointType = selectedModel ? 'images' : normalizeImage2EndpointType(env.IMAGE2_ENDPOINT_TYPE, model);
   const missingKeys = [
     baseUrl ? null : 'IMAGE2_BASE_URL',
     apiKey ? null : 'IMAGE2_API_KEY',
@@ -634,12 +676,12 @@ export function buildImage2ImagesRequestBody({
   partialImages?: number;
   image2Options?: Image2Options;
 }): Image2ImagesRequestBody {
-  const options = normalizeImage2Options(image2Options);
+  const options = normalizeImage2Options(image2Options, model);
   const body: Image2ImagesRequestBody = {
     model,
     prompt,
     size,
-    background: IMAGE2_FIXED_BACKGROUND,
+    background: options.background ?? IMAGE2_FIXED_BACKGROUND,
     moderation: IMAGE2_FIXED_MODERATION,
   };
 

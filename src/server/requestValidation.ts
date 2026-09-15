@@ -1,6 +1,7 @@
 import {
   getImageModelConfig,
   isBananaImageModel,
+  isImage2Model,
   normalizeBananaAspectRatio,
   normalizeBananaAspectRatioForModel,
   normalizeBananaImageSize,
@@ -191,8 +192,8 @@ export function validateGenerateImageRequest(body: unknown): ValidationResult<Va
       bananaOptions: isBananaModel
         ? normalizeBananaOptionsForModel(imageModel, requestBody.bananaOptions)
         : {},
-      image2Options: imageModel === 'image2'
-        ? normalizeImage2Options(requestBody.image2Options)
+      image2Options: isImage2Model(imageModel)
+        ? normalizeImage2Options(requestBody.image2Options, imageModel)
         : {},
     },
   };

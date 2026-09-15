@@ -216,7 +216,7 @@ export function createReferenceImagePayload(
 
 function sanitizeNodeDataForSnapshot(data: CanvasNodeData): CanvasNodeData {
   const bananaOptions = normalizeBananaOptions(data.bananaOptions);
-  const image2Options = normalizeImage2Options(data.image2Options);
+  const image2Options = normalizeImage2Options(data.image2Options, data.imageModel);
 
   return {
     prompt: data.prompt,

@@ -1,6 +1,6 @@
 import { generateImage, type GenerateImageParams } from '../../services/gemini';
 import type { InlineImageData } from '../../lib/canvasState';
-import type { Image2Options } from '../../lib/imageModels';
+import { getImage2MaskModel, type ImageModelId, type Image2Options } from '../../lib/imageModels';
 import type { MaskGeneratePayload } from '../mask/MaskEditorModal';
 
 type MaskImage = MaskGeneratePayload['maskImage'];
@@ -10,6 +10,7 @@ function toReferencePayload(image: InlineImageData) {
 }
 
 export function buildPromptMaskGenerationPayload({
+  imageModel,
   maskPrompt,
   maskImage,
   sourceImage,
@@ -19,6 +20,7 @@ export function buildPromptMaskGenerationPayload({
   imageSize,
   image2Options,
 }: {
+  imageModel?: ImageModelId;
   maskPrompt: string;
   maskImage: MaskImage;
   sourceImage: InlineImageData;
@@ -35,7 +37,7 @@ export function buildPromptMaskGenerationPayload({
 
   return {
     prompt: maskPrompt,
-    imageModel: 'image2' as const,
+    imageModel: getImage2MaskModel(imageModel),
     aspectRatio,
     imageSize,
     image2Options,
@@ -45,6 +47,7 @@ export function buildPromptMaskGenerationPayload({
 }
 
 export function buildImageMaskGenerationPayload({
+  imageModel,
   maskPrompt,
   maskImage,
   sourceImage,
@@ -52,6 +55,7 @@ export function buildImageMaskGenerationPayload({
   imageSize,
   image2Options,
 }: {
+  imageModel?: ImageModelId;
   maskPrompt: string;
   maskImage: MaskImage;
   sourceImage: InlineImageData;
@@ -61,7 +65,7 @@ export function buildImageMaskGenerationPayload({
 }): GenerateImageParams {
   return {
     prompt: maskPrompt,
-    imageModel: 'image2' as const,
+    imageModel: getImage2MaskModel(imageModel),
     aspectRatio,
     imageSize,
     image2Options,

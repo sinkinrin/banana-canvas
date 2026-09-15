@@ -10,6 +10,18 @@ import {
 } from './useImageNodeActions';
 import type { CanvasImageAsset } from '../../lib/canvasState';
 
+test('Image 2.5 reruns and reference branches keep the selected variant and transparent options', () => {
+  for (const imageModel of ['image2.5-flare', 'image2.5-sunburst'] as const) {
+    const data = { prompt: 'star', imageModel, image2Options: { background: 'transparent' as const, outputFormat: 'png' as const } };
+    const rerun = buildImageRerunParams(data, {});
+    assert.equal(rerun?.imageModel, imageModel);
+    assert.deepEqual(rerun?.image2Options, data.image2Options);
+    const reference = buildReferenceNodeData({ ...data, bananaOptions: undefined, referencePayload: { referenceImageIds: ['star'] } });
+    assert.equal(reference.imageModel, imageModel);
+    assert.deepEqual(reference.image2Options, data.image2Options);
+  }
+});
+
 test('canRerunImageNode disables rerun for mask edit results', () => {
   assert.equal(canRerunImageNode({ prompt: 'draw', generationMode: 'mask-edit' }), false);
   assert.equal(canRerunImageNode({ prompt: 'draw' }), true);

@@ -7,7 +7,7 @@ import {
 } from '../../lib/canvasState';
 import { generateImage, type GenerateImageParams } from '../../services/gemini';
 import type { AppNode } from '../../store';
-import { isBananaImageModel, normalizeImageModel } from '../../lib/imageModels';
+import { isBananaImageModel, isImage2Model, normalizeImageModel } from '../../lib/imageModels';
 import { buildImageDownloadFileName } from '../../lib/imageDownloads';
 
 export function canRerunImageNode(data: Partial<AppNode['data']>) {
@@ -43,7 +43,7 @@ export function buildImageRerunParams(
     aspectRatio: data.aspectRatio || '1:1',
     imageSize: data.imageSize || '1K',
     bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
-    image2Options: imageModel === 'image2' ? data.image2Options : undefined,
+    image2Options: isImage2Model(imageModel) ? data.image2Options : undefined,
     referenceImages: getRerunReferenceImages(data, assets),
     signal,
   };
@@ -66,7 +66,7 @@ export function buildReferenceNodeData({
     prompt: '',
     imageModel: normalizedModel,
     bananaOptions: isBananaImageModel(normalizedModel) ? bananaOptions : undefined,
-    image2Options: normalizedModel === 'image2' ? image2Options : undefined,
+    image2Options: isImage2Model(normalizedModel) ? image2Options : undefined,
     ...referencePayload,
   };
 }

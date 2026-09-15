@@ -1,8 +1,13 @@
 import { Info } from 'lucide-react';
+import { useId } from 'react';
 import { useAppTranslation } from '../../i18n';
 import {
   getImage2RelayParameterTipKeys,
+  getImageModelConfig,
+  isImage25Model,
   normalizeImage2Options,
+  type Image2Background,
+  type Image2ModelId,
   type Image2Options,
   type Image2OutputFormat,
   type Image2Quality,
@@ -11,6 +16,7 @@ import {
 import { ParameterTipsTooltip } from './ParameterTipsTooltip';
 
 type Image2OptionsPanelProps = {
+  imageModel?: Image2ModelId;
   value?: Image2Options;
   hasReferenceImages: boolean;
   onChange: (options: Image2Options) => void;
@@ -24,23 +30,27 @@ const selectStyle = {
 
 const labelStyle = { color: '#96836F' };
 
-export function Image2OptionsPanel({ value, hasReferenceImages, onChange }: Image2OptionsPanelProps) {
+export function Image2OptionsPanel({ imageModel = 'image2', value, hasReferenceImages, onChange }: Image2OptionsPanelProps) {
   const { t } = useAppTranslation();
-  const options = normalizeImage2Options(value);
+  const backgroundId = useId();
+  const options = normalizeImage2Options(value, imageModel);
+  const isImage25 = isImage25Model(imageModel);
   const outputFormat = options.outputFormat ?? 'png';
   const supportsCompression = outputFormat === 'jpeg' || outputFormat === 'webp';
   const compression = options.outputCompression ?? 100;
   const partialImages = options.partialImages ?? 1;
   const parameterTips = [
     t('image2Options.tips.onlyImage2'),
-    hasReferenceImages
+    isImage25
+      ? t('image2Options.tips.reference25')
+      : hasReferenceImages
       ? t('image2Options.tips.fidelityAttached')
       : t('image2Options.tips.fidelityEmpty'),
-    ...getImage2RelayParameterTipKeys().map((key) => t(key)),
+    ...getImage2RelayParameterTipKeys(imageModel).map((key) => t(key)),
   ];
 
   const commit = (nextOptions: Image2Options) => {
-    onChange(normalizeImage2Options(nextOptions));
+    onChange(normalizeImage2Options(nextOptions, imageModel));
   };
 
   const setOption = (patch: Image2Options) => {
@@ -60,15 +70,23 @@ export function Image2OptionsPanel({ value, hasReferenceImages, onChange }: Imag
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
           <Info size={13} />
-          {t('image2Options.advanced')}
+          {isImage25 ? t('image2Options.advanced25') : t('image2Options.advanced')}
         </div>
         <ParameterTipsTooltip tips={parameterTips} />
       </div>
+
+      {isImage25 && (
+        <p className="text-xs leading-relaxed" style={labelStyle}>
+          {t(getImageModelConfig(imageModel).descriptionKey)} · {t('image2Options.summary25')}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-[11px] font-medium" style={labelStyle}>{t('image2Options.quality')}</label>
           <select
+            aria-label={t('image2Options.quality')}
+            name="image2Quality"
             value={options.quality ?? 'auto'}
             onChange={(event) => setOption({ quality: event.target.value as Image2Quality })}
             className="nowheel w-full rounded-lg p-2 text-xs outline-none"
@@ -78,23 +96,48 @@ export function Image2OptionsPanel({ value, hasReferenceImages, onChange }: Imag
             <option value="low">{t('image2Options.qualityLow')}</option>
             <option value="medium">{t('image2Options.qualityMedium')}</option>
             <option value="high">{t('image2Options.qualityHigh')}</option>
+            {isImage25 && <option value="xhigh" disabled>{t('image2Options.qualityXhighPending')}</option>}
+            {isImage25 && <option value="max" disabled>{t('image2Options.qualityMaxPending')}</option>}
           </select>
         </div>
 
         <div className="space-y-1.5">
           <label className="text-[11px] font-medium" style={labelStyle}>{t('image2Options.outputFormat')}</label>
           <select
+            aria-label={t('image2Options.outputFormat')}
+            name="image2OutputFormat"
             value={outputFormat}
             onChange={(event) => setOutputFormat(event.target.value as Image2OutputFormat)}
             className="nowheel w-full rounded-lg p-2 text-xs outline-none"
             style={selectStyle}
           >
             <option value="png">{t('image2Options.png')}</option>
-            <option value="jpeg">{t('image2Options.jpeg')}</option>
+            <option value="jpeg" disabled={options.background === 'transparent'}>{t('image2Options.jpeg')}</option>
             <option value="webp">{t('image2Options.webp')}</option>
           </select>
         </div>
       </div>
+
+      {isImage25 && (
+        <div className="space-y-2">
+          <p className="text-[11px] leading-relaxed" style={labelStyle}>{t('image2Options.tips.quality25')}</p>
+          <label className="block text-[11px] font-medium" style={labelStyle} htmlFor={backgroundId}>{t('image2Options.background')}</label>
+          <select
+            id={backgroundId}
+            aria-label={t('image2Options.background')}
+            name="image2Background"
+            value={options.background ?? 'opaque'}
+            onChange={(event) => setOption({ background: event.target.value as Image2Background })}
+            className="nowheel w-full rounded-lg p-2 text-xs outline-none"
+            style={selectStyle}
+          >
+            <option value="opaque">{t('image2Options.backgroundOpaque')}</option>
+            <option value="transparent">{t('image2Options.backgroundTransparent')}</option>
+            <option value="auto">{t('image2Options.backgroundAuto')}</option>
+          </select>
+          <p className="text-[11px] leading-relaxed" style={labelStyle}>{t('image2Options.tips.transparent25')}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">

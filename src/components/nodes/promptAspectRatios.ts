@@ -2,6 +2,7 @@ import {
   BANANA_ASPECT_RATIO_VALUES,
   getBananaAspectRatioValues,
   isBananaImageModel,
+  isImage2Model,
   normalizeBananaAspectRatio,
   normalizeImageModel,
   type BananaAspectRatio,
@@ -12,7 +13,7 @@ export const IMAGE2_ASPECT_RATIO_VALUES = ['1:1', '4:3', '16:9', '3:4', '9:16'] 
 
 export function getPromptAspectRatioOptions(imageModel: ImageModelId): BananaAspectRatio[] {
   const normalizedModel = normalizeImageModel(imageModel);
-  if (normalizedModel === 'image2') return [...IMAGE2_ASPECT_RATIO_VALUES];
+  if (isImage2Model(normalizedModel)) return [...IMAGE2_ASPECT_RATIO_VALUES];
   if (isBananaImageModel(normalizedModel)) {
     return [...getBananaAspectRatioValues(normalizedModel)];
   }

@@ -10,6 +10,15 @@ const sourceImage = { data: 'source', mimeType: 'image/png', url: 'data:image/pn
 const extraImage = { data: 'extra', mimeType: 'image/png', url: 'data:image/png;base64,extra' };
 const maskImage = { data: 'mask', mimeType: 'image/png' } as const;
 
+test('both mask entry points preserve Image 2.5 while Banana keeps its Image2 fallback', () => {
+  for (const imageModel of ['image2.5-flare', 'image2.5-sunburst', 'banana'] as const) {
+    const input = { imageModel, maskPrompt: 'blue star', maskImage, sourceImage, image2Options: { background: 'transparent' as const }, aspectRatio: '1:1' as const, imageSize: '1K' as const };
+    const expected = imageModel === 'banana' ? 'image2' : imageModel;
+    assert.equal(buildImageMaskGenerationPayload(input).imageModel, expected);
+    assert.equal(buildPromptMaskGenerationPayload({ ...input, sourceIndex: 0, referenceImages: [sourceImage] }).imageModel, expected);
+  }
+});
+
 test('prompt mask generation places source image first and excludes edited reference duplicate', () => {
   assert.deepEqual(
     buildPromptMaskGenerationPayload({

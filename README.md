@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.7.0`
+Current version: `0.8.0`
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
@@ -17,7 +17,8 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 ## Highlights
 
 - **Visual generation workflow** — build and rearrange prompt-to-image flows with React Flow.
-- **Multiple image models** — use Image2 by default, or switch to Banana 2, Banana 2 Lite, and Banana Pro.
+- **Multiple image models** — use Image2 by default, or choose Image 2.5 Flare, Image 2.5 Sunburst, Banana 2, Banana 2 Lite, and Banana Pro.
+- **Image 2.5 transparent assets** — generate transparent assets (PNG verified on the relay); Flare targets fast everyday creation and Sunburst prioritizes editing precision.
 - **Reference-driven iteration** — upload or paste up to four references, then reuse any result in the next step.
 - **Composition sketches** — draw subject positions, actions, arrows, and framing before generating.
 - **Mask editing** — paint the area to change and compare the Image2 result with the original.
@@ -25,6 +26,8 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 - **Reusable prompt library** — save, search, tag, and apply prompts across projects.
 - **Local-first projects** — persist canvases, relationships, and image assets on your own machine.
 - **English and Simplified Chinese UI** — follow the system language on first launch and remember manual changes.
+
+Image 2.5 support is available from v0.8.0. Both variants reuse the Image2 connection and are selected per creation node. Reference edits, mask edits, reruns, and saved projects retain the chosen variant. The tested relay reported `low` / `medium` instead of the requested `xhigh` / `max`, so these new tiers remain disabled. See [Image 2.5 capabilities and backend verification](docs/IMAGE25.md) for tested behavior and limits.
 
 ## Preview
 

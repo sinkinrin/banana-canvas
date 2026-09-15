@@ -1,8 +1,8 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.7.0",
-  "description": "A local-first AI image creation canvas with Image2 and in-app connection settings.",
+  "version": "0.8.0",
+  "description": "A local-first AI image canvas with Image 2.5, transparent assets, reference and mask editing.",
   "author": "Banana Canvas Contributors",
   "repository": {
     "type": "git",
