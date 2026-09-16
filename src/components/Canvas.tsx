@@ -184,7 +184,8 @@ function CanvasInner() {
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onlyRenderVisibleElements
+        // Keep node-owned tasks and drafts mounted when panning, zooming or dragging offscreen.
+        onlyRenderVisibleElements={false}
         fitView
         className=""
         minZoom={0.1}
