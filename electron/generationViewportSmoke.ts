@@ -45,7 +45,6 @@ export async function runGenerationViewportSmoke({ window, localUrl, imageUrl, f
       });
     };
   })()`);
-  const wasVisible = window.isVisible();
   try {
     await window.loadURL(`${projectUrl}?lng=zh-CN`);
     await wait(`!!document.querySelector('${promptSelector} textarea')`);
@@ -113,6 +112,7 @@ export async function runGenerationViewportSmoke({ window, localUrl, imageUrl, f
     console.info('[banana:smoke] edge drag, offscreen completion, saved results, explicit cancel, source deletion and project exit passed');
   } finally {
     if (window.webContents.debugger.isAttached()) window.webContents.debugger.detach();
-    if (!wasVisible) window.hide();
+    // Keep the smoke window visible: hiding it suspends layout frames on Xvfb
+    // and prevents subsequent React Flow mount/close checks from initializing.
   }
 }
