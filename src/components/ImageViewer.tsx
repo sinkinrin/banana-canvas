@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppTranslation } from '../i18n';
-import { X, ZoomIn, ZoomOut, Download, Copy, Check, CircleAlert } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, Download, Copy, Check, CircleAlert, PencilLine } from 'lucide-react';
 import { motion } from 'motion/react';
 import { copyImageToClipboard } from '../lib/clipboard';
 import { buildImageDownloadFileName } from '../lib/imageDownloads';
@@ -12,9 +12,10 @@ interface ImageViewerProps {
   transparent?: boolean;
   prompt?: string;
   onClose: () => void;
+  onMaskEdit?: () => void;
 }
 
-export function ImageViewer({ imageUrl, prompt, transparent = false, onClose }: ImageViewerProps) {
+export function ImageViewer({ imageUrl, prompt, transparent = false, onClose, onMaskEdit }: ImageViewerProps) {
   const { t } = useAppTranslation();
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -93,6 +94,7 @@ export function ImageViewer({ imageUrl, prompt, transparent = false, onClose }: 
 
   return createPortal(
     <motion.div
+      data-image-viewer="true"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -148,6 +150,16 @@ export function ImageViewer({ imageUrl, prompt, transparent = false, onClose }: 
           >
             <Download size={20} />
           </button>
+          {onMaskEdit && <button
+            type="button"
+            data-image-action="mask-edit"
+            onClick={onMaskEdit}
+            className="p-2 text-white hover:bg-[rgba(242,193,78,0.1)] rounded-xl transition-colors"
+            title={t('imageNode.maskEdit')}
+            aria-label={t('imageNode.maskEdit')}
+          >
+            <PencilLine size={20} />
+          </button>}
           <div className="w-px h-6 mx-1" style={{background: 'rgba(242,193,78,0.15)'}} />
           <button
             type="button"

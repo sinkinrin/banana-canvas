@@ -49,7 +49,7 @@ function parseProjectAssetBody(body: unknown, assetId: string) {
 export function mountProjectRoutes(app: express.Express, projectStore: LocalProjectStore) {
   app.get('/api/projects', async (_req, res) => {
     try {
-      res.json({ projects: await projectStore.loadProjectIndex() });
+      res.json({ projects: await projectStore.loadProjectIndex(), storageInitialized: await projectStore.isInitialized() });
     } catch (error) {
       sendProjectRouteError(res, error);
     }
@@ -77,12 +77,27 @@ export function mountProjectRoutes(app: express.Express, projectStore: LocalProj
 
   app.get('/api/projects/:projectId', async (req, res) => {
     try {
-      const project = await projectStore.loadProject(req.params.projectId);
+      const project = await projectStore.loadProject(req.params.projectId, {
+        separateAssets: req.query.assets === 'separate',
+      });
       if (!project) {
         res.status(404).json({ error: '项目不存在' });
         return;
       }
       res.json(project);
+    } catch (error) {
+      sendProjectRouteError(res, error);
+    }
+  });
+
+  app.get('/api/projects/:projectId/assets/:assetId', async (req, res) => {
+    try {
+      const asset = await projectStore.loadProjectAsset(req.params.projectId, req.params.assetId);
+      if (!asset) {
+        res.status(404).json({ error: '项目图片不存在' });
+        return;
+      }
+      res.json({ asset });
     } catch (error) {
       sendProjectRouteError(res, error);
     }

@@ -94,3 +94,48 @@ test('leaving a project retains its captured snapshot and close waits for its ou
   assert.deepEqual(writes, ['edited A']);
   assert.equal(registry.hasPending(), false);
 });
+
+
+test('deleting a project waits for its active write and discards further pending saves', async () => {
+  const registry = createProjectSaveRegistry();
+  const writing = deferred();
+  const events: string[] = [];
+  const saver = createProjectAutosave({ initialSnapshot: snapshot('old'),
+    save: async () => { events.push('write'); await writing.promise; }, onStatusChange: () => {} });
+  registry.register(saver, 'A');
+  saver.update(snapshot('first'));
+  const flush = registry.flush();
+  await Promise.resolve();
+  await Promise.resolve();
+  saver.update(snapshot('second'));
+  const deleting = registry.deleteProject('A', async () => { events.push('delete'); });
+  assert.deepEqual(events, ['write']);
+  writing.resolve();
+  await Promise.all([flush, deleting]);
+  await registry.flush();
+  assert.deepEqual(events, ['write', 'delete']);
+  assert.equal(registry.hasPending(), false);
+});
+
+test('failed deletion preserves the dirty snapshot; successful deletion clears only that project', async () => {
+  const registry = createProjectSaveRegistry();
+  let failSave = true;
+  const writes: string[] = [];
+  const saver = createProjectAutosave({ initialSnapshot: snapshot('old'),
+    save: async value => { if (failSave) throw Error('disk full'); writes.push(value.nodes[0].data.prompt!); }, onStatusChange: () => {} });
+  registry.register(saver, 'A');
+  saver.update(snapshot('unsaved'));
+  await assert.rejects(registry.flush(), /disk full/);
+  await assert.rejects(registry.deleteProject('A', async () => { throw Error('delete failed'); }), /delete failed/);
+  assert.equal(registry.hasPending(), true);
+  failSave = false;
+  await registry.flush();
+  assert.deepEqual(writes, ['unsaved']);
+  saver.update(snapshot('delete this'));
+  const other = createProjectAutosave({ initialSnapshot: snapshot('B'), save: async value => { writes.push(value.nodes[0].data.prompt!); }, onStatusChange: () => {} });
+  registry.register(other, 'B');
+  other.update(snapshot('keep B'));
+  await registry.deleteProject('A', async () => {});
+  await registry.flush();
+  assert.deepEqual(writes, ['unsaved', 'keep B']);
+});

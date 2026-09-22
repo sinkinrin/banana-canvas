@@ -45,7 +45,7 @@ export async function runProjectLifecycleSmoke({
   };
   const session = window.webContents.session;
   session.webRequest.onBeforeRequest({ urls: [`${localUrl}/api/projects/*`] }, (request, callback) => {
-    if (request.url === `${localUrl}/api/projects/${ids[0]}` && request.method === 'GET') {
+    if (request.url === `${localUrl}/api/projects/${ids[0]}?assets=separate` && request.method === 'GET') {
       releaseLoadA = () => callback({});
     } else if (request.url === `${localUrl}/api/projects/${ids[1]}` && request.method === 'PUT') {
       if (failSave) callback({ cancel: true });
@@ -113,5 +113,43 @@ export async function runProjectLifecycleSmoke({
   }
   await window.loadURL(`${localUrl}/projects/${ids[1]}?lng=zh-CN`);
   await wait(`document.querySelector('textarea')?.value === 'retry B'`);
-  console.info('[banana:smoke] project switching, unload protection, desktop save acknowledgement, retry, and reload passed');
+  let rejectWrite = true;
+  session.webRequest.onBeforeRequest({ urls: [`${localUrl}/api/projects/${ids[1]}`] }, (request, callback) => {
+    callback(request.method === 'PUT' && rejectWrite ? { cancel: true } : {});
+  });
+  const editAndFail = async () => {
+    await wait(`(() => { const editor = document.querySelector('textarea'); return editor && getComputedStyle(editor).visibility === 'visible' && editor.getBoundingClientRect().height > 0; })()`);
+    window.webContents.focus();
+    await js(`(() => {
+      const editor = document.querySelector('textarea');
+      editor.focus();
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(editor, editor.value + ' changed');
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await js(`document.querySelector('textarea').focus()`);
+    let failed = false;
+    try { await flush(); } catch { failed = true; }
+    if (!failed) throw new Error('Expected injected save failure');
+  };
+  try {
+    await editAndFail();
+    await wait(`[...document.querySelectorAll('button')].some(button => button.textContent === '重试保存')`);
+    rejectWrite = false;
+    await js(`[...document.querySelectorAll('button')].find(button => button.textContent === '重试保存').click()`);
+    await wait(`document.querySelector('main')?.textContent.includes('已保存')`);
+    rejectWrite = true;
+    await editAndFail();
+    await js(`[...document.querySelectorAll('button')].find(button => button.textContent.includes('返回项目列表')).click()`);
+    await wait(`document.querySelector('button[aria-label="删除 Lifecycle B"]')`);
+    await js(`document.querySelector('button[aria-label="删除 Lifecycle B"]').click()`);
+    await wait(`[...document.querySelectorAll('button')].some(button => button.textContent === '删除')`);
+    await js(`[...document.querySelectorAll('button')].find(button => button.textContent === '删除').click()`);
+    await wait(`!document.querySelector('button[aria-label="删除 Lifecycle B"]')`);
+    await navigate(ids[0]);
+    await wait(`document.querySelector('textarea')?.value === 'A'`);
+    await flush();
+  } finally {
+    session.webRequest.onBeforeRequest(null);
+  }
+  console.info('[banana:smoke] project switching, save retry button, failed-save deletion, unload protection and reload passed');
 }

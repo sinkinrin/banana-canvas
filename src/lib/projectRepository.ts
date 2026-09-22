@@ -1,3 +1,4 @@
+import { projectSaveRegistry } from './projectSaveLifecycle';
 import { collectReferencedAssetIdsFromHistory } from './canvasState';
 import { createEmptyProjectSnapshot, type ProjectSnapshot } from './projectSession';
 import i18n, { getCurrentLanguage } from '../i18n';
@@ -26,6 +27,10 @@ type ProjectRepositoryOptions = {
   fetcher?: typeof fetch;
   storageAdapter?: StorageAdapter;
 };
+
+const LOCAL_MIGRATION_KEY = 'banana-local-project-migration-v1';
+type MigrationState = { pendingIds: string[] } | { complete: true };
+const migrations = new WeakMap<StorageAdapter, Promise<void>>();
 
 type RepositoryMode = 'local' | 'indexeddb';
 
@@ -157,7 +162,7 @@ export function createProjectRepository({
   storageAdapter = idbStorageAdapter,
 }: ProjectRepositoryOptions = {}): ProjectRepository {
   let mode: RepositoryMode | null = null;
-  let migrationAttempted = false;
+  let migrationComplete = false;
   const localAssetSignaturesByProject = new Map<string, AssetSignatureMap>();
 
   const rememberLocalAssetSignatures = async (
@@ -165,9 +170,10 @@ export function createProjectRepository({
     assets: ProjectSnapshot['assets']
   ) => {
     const signatures = localAssetSignaturesByProject.get(projectId) ?? new Map<string, string>();
-    await Promise.all(Object.values(assets).map(async (asset) => {
+    // Decode and hash one image at a time to bound temporary memory during loading.
+    for (const asset of Object.values(assets)) {
       signatures.set(asset.id, createAssetSignature(await createAssetRef(asset)));
-    }));
+    }
     localAssetSignaturesByProject.set(projectId, signatures);
   };
 
@@ -219,53 +225,74 @@ export function createProjectRepository({
   };
 
   const fetchLocalProjects = async () => {
-    const body = await readJson<{ projects: ProjectMeta[] }>(await fetcher('/api/projects'));
-    return Array.isArray(body.projects) ? body.projects : [];
+    const body = await readJson<{ projects: ProjectMeta[]; storageInitialized?: boolean }>(await fetcher('/api/projects'));
+    return { ...body, projects: Array.isArray(body.projects) ? body.projects : [] };
   };
 
-  const migrateIndexedDbToLocal = async () => {
-    if (migrationAttempted) return;
-    migrationAttempted = true;
-
-    await migrateLegacyCanvasIfNeeded(storageAdapter);
-    const projects = await loadProjectIndex(storageAdapter);
-    if (projects.length === 0) return;
-
-    const entries = [];
-    for (const project of projects) {
-      entries.push({
-        project,
-        snapshot: await loadProjectSnapshot(storageAdapter, project.id) ?? createEmptyProjectSnapshot(),
-      });
+  const migrateIndexedDbToLocal = async (local: Awaited<ReturnType<typeof fetchLocalProjects>>) => {
+    if (migrationComplete) return;
+    const existingMigration = migrations.get(storageAdapter);
+    if (existingMigration) {
+      await existingMigration;
+      migrationComplete = true;
+      return;
     }
+    const migration = (async () => {
+      const state = await Promise.resolve().then(() => storageAdapter.get(LOCAL_MIGRATION_KEY)).catch((error) => {
+        if (local.storageInitialized || local.projects.length > 0) return null;
+        throw error;
+      }) as MigrationState | null;
+      if (state && 'complete' in state) return;
+      if (!state && (local.storageInitialized || local.projects.length > 0)) return;
 
-    await readJson<{ ok: true }>(
-      await fetcher('/api/projects/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projects: entries }),
-      })
-    );
+      await migrateLegacyCanvasIfNeeded(storageAdapter);
+      const projects = await loadProjectIndex(storageAdapter);
+      let pendingIds = state && 'pendingIds' in state ? state.pendingIds : projects.map((project) => project.id);
+      // Keep a durable journal before creating any local records. Failed uploads
+      // can then resume even though the local project list is no longer empty.
+      await storageAdapter.set(LOCAL_MIGRATION_KEY, { pendingIds });
+      const localIds = new Set(local.projects.map((project) => project.id));
+      for (const id of [...pendingIds]) {
+        const project = projects.find((item) => item.id === id);
+        const snapshot = await loadProjectSnapshot(storageAdapter, id);
+        if (!project || !snapshot) throw new Error(i18n.t('projects.migrationSourceMissing'));
+        if (!localIds.has(id)) {
+          await readJson(await fetcher('/api/projects/import', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projects: [{ project, snapshot: createEmptyProjectSnapshot() }] }),
+          }));
+        }
+        await uploadChangedLocalAssets(id, snapshot, { force: true });
+        await saveLightweightLocalSnapshot(id, snapshot);
+        pendingIds = pendingIds.filter((pendingId) => pendingId !== id);
+        await storageAdapter.set(LOCAL_MIGRATION_KEY, { pendingIds });
+      }
+      await storageAdapter.set(LOCAL_MIGRATION_KEY, { complete: true });
+    })();
+    migrations.set(storageAdapter, migration);
+    try {
+      await migration;
+      migrationComplete = true;
+    } finally {
+      migrations.delete(storageAdapter);
+    }
   };
 
   const getLocalProjectsOrNull = async () => {
     if (mode === 'indexeddb') return null;
-
+    let local: Awaited<ReturnType<typeof fetchLocalProjects>>;
     try {
-      const projects = await fetchLocalProjects();
-      mode = 'local';
-      if (projects.length === 0) {
-        await migrateIndexedDbToLocal();
-        return await fetchLocalProjects();
-      }
-      return projects;
+      local = await fetchLocalProjects();
     } catch (error) {
-      if (!shouldFallbackToIndexedDb(error)) {
-        throw error;
-      }
+      if (!shouldFallbackToIndexedDb(error)) throw error;
       mode = 'indexeddb';
       return null;
     }
+    // Migration failures must remain visible and retryable, never switch storage.
+    const wasComplete = migrationComplete;
+    await migrateIndexedDbToLocal(local);
+    mode = 'local';
+    return wasComplete ? local.projects : (await fetchLocalProjects()).projects;
   };
 
   const useLocal = async () => {
@@ -302,10 +329,25 @@ export function createProjectRepository({
 
     async loadProject(projectId) {
       if (await useLocal()) {
-        const response = await fetcher(`/api/projects/${encodeURIComponent(projectId)}`);
+        const projectUrl = `/api/projects/${encodeURIComponent(projectId)}`;
+        const response = await fetcher(`${projectUrl}?assets=separate`);
         if (response.status === 404) return null;
-        const loaded = await readJson<{ project: ProjectMeta; snapshot: ProjectSnapshot }>(response);
+        const loaded = await readJson<{
+          project: ProjectMeta;
+          snapshot: ProjectSnapshot;
+          assetIds?: string[];
+        }>(response);
+        // Older servers may still return inline assets. New servers send a small
+        // manifest so the project never has to fit into a single JSON string.
         await rememberLocalAssetSignatures(projectId, loaded.snapshot.assets);
+        for (const assetId of loaded.assetIds ?? []) {
+          const assetResponse = await fetcher(`${projectUrl}/assets/${encodeURIComponent(assetId)}`);
+          // Preserve the existing behavior for an image file missing on disk.
+          if (assetResponse.status === 404) continue;
+          const { asset } = await readJson<{ asset: ProjectSnapshot['assets'][string] }>(assetResponse);
+          loaded.snapshot.assets[assetId] = asset;
+          await rememberLocalAssetSignatures(projectId, { [assetId]: asset });
+        }
         return loaded;
       }
 
@@ -358,20 +400,22 @@ export function createProjectRepository({
     },
 
     async deleteProject(projectId) {
-      if (await useLocal()) {
-        await readJson<{ ok: true }>(
-          await fetcher(`/api/projects/${encodeURIComponent(projectId)}`, {
-            method: 'DELETE',
-          })
-        );
-        return;
-      }
+      await projectSaveRegistry.deleteProject(projectId, async () => {
+        if (await useLocal()) {
+          await readJson<{ ok: true }>(
+            await fetcher(`/api/projects/${encodeURIComponent(projectId)}`, {
+              method: 'DELETE',
+            })
+          );
+          return;
+        }
 
-      await storageAdapter.del(getProjectSnapshotKey(projectId));
-      await saveProjectIndex(
-        storageAdapter,
-        (await loadProjectIndex(storageAdapter)).filter((project) => project.id !== projectId)
-      );
+        await storageAdapter.del(getProjectSnapshotKey(projectId));
+        await saveProjectIndex(
+          storageAdapter,
+          (await loadProjectIndex(storageAdapter)).filter((project) => project.id !== projectId)
+        );
+      });
     },
   };
 }

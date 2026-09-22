@@ -2,7 +2,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
 import { useAppTranslation } from '../../i18n';
-import { BookOpen, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, X, Trash2 } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
 import { cn } from '../../lib/utils';
 import { optimizePrompt } from '../../services/gemini';
@@ -36,8 +36,8 @@ import {
   getPromptAspectRatioOptions,
 } from './promptAspectRatios';
 import { PromptLibraryDialog } from '../prompts/PromptLibraryDialog';
-import { ImageToolsMenu } from './ImageToolsMenu';
-import { useCutout } from './useCutout';
+import { ImageViewer } from '../ImageViewer';
+import { ReferenceImageThumbnail } from './ReferenceImageThumbnail';
 import {
   formatMebibytes,
   MAX_REFERENCE_IMAGE_BYTES,
@@ -69,7 +69,6 @@ const imageSizeLabelKeys: Record<BananaImageSize, string> = {
 };
 
 export function PromptNode({ id, data }: NodeProps<AppNode>) {
-  const cutout = useCutout(id);
   const { t } = useAppTranslation();
   const updateNodeData = useStore((state) => state.updateNodeData);
   const saveNodeSketch = useStore((state) => state.saveNodeSketch);
@@ -87,6 +86,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const [showComparisonSetup, setShowComparisonSetup] = useState(false);
   const [comparisonGroupId, setComparisonGroupId] = useState<string>();
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [previewSource, setPreviewSource] = useState<{ image: InlineImageData; index: number } | null>(null);
   const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
   const [isSketchEditorOpen, setIsSketchEditorOpen] = useState(false);
   const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
@@ -106,7 +106,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     assetsHydrated,
     updateNodeData,
   });
-  const { generateMaskImage } = useMaskGeneration();
+  const { generateMaskImage } = useMaskGeneration(id);
   const batchCount = data.batchCount || 1;
   const imageModel = normalizeImageModel(data.imageModel);
   const imageSize = isBananaImageModel(imageModel)
@@ -204,7 +204,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
-      }));
+      }), placeholderNodeId);
 
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
@@ -359,7 +359,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </button>
           </div>
 
-          {cutout.error && <p role="alert" className="mb-2 text-xs text-red-300">{cutout.error}</p>}
           {/* Reference Images Section */}
           <div className="nodrag nopan nowheel" onPointerDown={(event) => event.stopPropagation()}>
             <button
@@ -389,26 +388,17 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   {referenceImages.map((img, index) => (
-                    <div key={index} className="relative w-full aspect-square rounded-lg overflow-hidden" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)'}}>
-                      <img src={img.url} alt={t('promptNode.referenceAlt', { index: index + 1 })} className="w-full h-full object-cover opacity-80" />
-                      <ImageToolsMenu compact onCutout={() => void cutout.start(img.url, referenceImageIds[index])} onMaskEdit={() => setMaskEditorSource({ image: img, index })} cutoutDisabled={!cutout.supported || cutout.busy} />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveImage(index);
-                        }}
-                        className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full shadow hover:bg-red-600 transition-colors z-20"
-                        title={t('promptNode.removeReference')}
-                      >
-                        <X size={10} />
-                      </button>
-                      <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded" style={{background: 'rgba(22,19,15,0.8)', color: '#F2C14E', fontSize: '10px', fontWeight: 500}}>
-                        {referenceImageIds[index] === data.sketch?.referenceImageAssetId
-                          ? <span data-reference-kind="sketch">{t('promptNode.sketchBadge', { index: index + 1, total: referenceImages.length })}</span>
-                          : `${index + 1}/${referenceImages.length}`}
-                      </div>
-                    </div>
+                    <ReferenceImageThumbnail
+                      key={referenceImageIds[index] ?? index}
+                      image={img}
+                      index={index}
+                      isSketch={referenceImageIds[index] === data.sketch?.referenceImageAssetId}
+                      badge={referenceImageIds[index] === data.sketch?.referenceImageAssetId
+                        ? t('promptNode.sketchBadge', { index: index + 1, total: referenceImages.length })
+                        : `${index + 1}/${referenceImages.length}`}
+                      onOpen={() => setPreviewSource({ image: img, index })}
+                      onRemove={() => handleRemoveImage(index)}
+                    />
                   ))}
                 </div>
                 {referenceImages.length < 4 && (
@@ -671,6 +661,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       </div>
 
       <Handle type="source" position={Position.Right} className="w-3 h-3 border-2" style={{background: '#5B9BD5', borderColor: '#1D1A14'}} />
+      {previewSource && (
+        <ImageViewer
+          imageUrl={previewSource.image.url}
+          onClose={() => setPreviewSource(null)}
+          onMaskEdit={() => { setMaskEditorSource(previewSource); setPreviewSource(null); }}
+        />
+      )}
       {maskEditorSource && (
         <MaskEditorModal
           title={t('promptNode.maskEditTitle')}

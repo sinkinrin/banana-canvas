@@ -81,6 +81,7 @@ export const zhCN: LocaleResource<typeof en> = {
   },
   projects: {
     loading: '加载项目中...',
+    migrationSourceMissing: '原项目数据缺失，已停止迁移以保护现有项目。',
     loadFailed: '项目加载失败',
     readFailed: '无法读取本地项目数据。',
     openFailed: '无法打开这个项目。',
@@ -102,6 +103,7 @@ export const zhCN: LocaleResource<typeof en> = {
     backToList: '返回项目列表',
     loadingProject: '加载项目中...',
     loadingCanvas: '加载画布中...',
+    retrySave: '重试保存',
     saveStatus: {
       loading: '加载中',
       saving: '保存中',
@@ -250,6 +252,7 @@ export const zhCN: LocaleResource<typeof en> = {
     referenceLimitReached: '参考图已达到 4 张上限',
     sketchHint: '绘制人物位置、动作和画面构图',
     referenceAlt: '参考图 {{index}}',
+    previewReference: '放大查看图片（右键缩略图复制）',
     maskEditReference: '使用 Image2 蒙版编辑',
     removeReference: '移除此参考图',
     sketchBadge: '草图 · {{index}}/{{total}}',
@@ -457,6 +460,7 @@ export const zhCN: LocaleResource<typeof en> = {
     referenceTotalSize: '转换后的参考图合计超过 40 MiB，请减少图片数量或分辨率。',
     referenceRejected: '服务端不支持第 {{index}} 张参考图的格式或颜色模式，请导出为普通 JPG 或 PNG 后重试。',
     referencesRejected: '服务端不支持参考图的格式或颜色模式，请导出为普通 JPG 或 PNG 后重试。',
+    generationTimeout: '图像生成超时，请重试。',
     generationFailed: '图像生成失败',
     generationFailedWithRequestId: '图像生成失败（请求 ID：{{requestId}}）',
     optimizeFailed: '提示词优化失败',

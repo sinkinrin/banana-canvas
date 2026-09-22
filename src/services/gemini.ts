@@ -61,7 +61,7 @@ async function requestImage(params: GenerateImageParams, includeGenerationInfo =
   const { signal: externalSignal } = params;
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(
-    () => timeoutController.abort(),
+    () => timeoutController.abort(new DOMException(i18n.t('errors.generationTimeout'), 'TimeoutError')),
     getGenerateImageTimeoutMs(params.imageModel)
   );
 

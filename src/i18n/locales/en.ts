@@ -79,6 +79,7 @@ export const en = {
   },
   projects: {
     loading: 'Loading projects...',
+    migrationSourceMissing: 'The original project data is missing. Migration was stopped to protect your projects.',
     loadFailed: 'Could not load projects',
     readFailed: 'Could not read local project data.',
     openFailed: 'Could not open this project.',
@@ -100,6 +101,7 @@ export const en = {
     backToList: 'Back to projects',
     loadingProject: 'Loading project...',
     loadingCanvas: 'Loading canvas...',
+    retrySave: 'Retry save',
     saveStatus: {
       loading: 'Loading',
       saving: 'Saving',
@@ -248,6 +250,7 @@ export const en = {
     referenceLimitReached: 'The 4-image reference limit has been reached',
     sketchHint: 'Sketch subject positions, actions, and composition',
     referenceAlt: 'Reference image {{index}}',
+    previewReference: 'Enlarge image (right-click thumbnail to copy)',
     maskEditReference: 'Edit with an Image2 mask',
     removeReference: 'Remove this reference image',
     sketchBadge: 'Sketch · {{index}}/{{total}}',
@@ -455,6 +458,7 @@ export const en = {
     referenceTotalSize: 'Converted references exceed 40 MiB in total. Use fewer images or smaller dimensions.',
     referenceRejected: 'The server does not support the format or color mode of reference image {{index}}. Export it as a standard JPG or PNG and retry.',
     referencesRejected: 'The server does not support a reference image format or color mode. Export it as a standard JPG or PNG and retry.',
+    generationTimeout: 'Image generation timed out. Please retry.',
     generationFailed: 'Image generation failed.',
     generationFailedWithRequestId: 'Image generation failed (request ID: {{requestId}}).',
     optimizeFailed: 'Prompt optimization failed.',

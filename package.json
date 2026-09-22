@@ -1,7 +1,7 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "A local-first AI image canvas with Image 2.5, multi-model comparisons, result details and reference editing.",
   "author": "Banana Canvas Contributors",
   "repository": {

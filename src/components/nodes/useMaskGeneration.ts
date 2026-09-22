@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+import { useStore } from '../../store';
 import { generateImageWithInfo as generateImage, type GenerateImageParams } from '../../services/gemini';
 import type { InlineImageData } from '../../lib/canvasState';
 import { getImage2MaskModel, type ImageModelId, type Image2Options } from '../../lib/imageModels';
@@ -74,8 +76,34 @@ export function buildImageMaskGenerationPayload({
   };
 }
 
-export function useMaskGeneration() {
+export function createMaskGenerationRunner(sourceNodeId: string, generate = generateImage) {
+  const controllers = new Set<AbortController>();
   return {
-    generateMaskImage: generateImage,
+    abort() { for (const controller of controllers) controller.abort(); },
+    async run(input: GenerateImageParams, resultNodeId: string) {
+      const controller = new AbortController();
+      const projectSessionId = useStore.getState().projectSessionId;
+      controllers.add(controller);
+      const unsubscribe = useStore.subscribe((state) => {
+        if (state.projectSessionId !== projectSessionId ||
+          !state.nodes.some((node) => node.id === sourceNodeId) ||
+          !state.nodes.some((node) => node.id === resultNodeId)) controller.abort();
+      });
+      try {
+        const result = await generate({ ...input, signal: controller.signal });
+        controller.signal.throwIfAborted();
+        return result;
+      } finally {
+        unsubscribe();
+        controllers.delete(controller);
+      }
+    },
   };
+}
+
+export function useMaskGeneration(sourceNodeId: string) {
+  const runner = useRef<ReturnType<typeof createMaskGenerationRunner> | null>(null);
+  runner.current ??= createMaskGenerationRunner(sourceNodeId);
+  useEffect(() => () => runner.current?.abort(), []);
+  return { generateMaskImage: runner.current.run };
 }

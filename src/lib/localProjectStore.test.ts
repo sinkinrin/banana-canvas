@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, stat, utimes } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, stat, utimes, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -372,4 +372,25 @@ test('local project store rejects path traversal project ids', async () => {
     () => store.saveProjectSnapshot('..\\outside', { nodes: [], edges: [], assets: {} }),
     /Invalid project id/
   );
+});
+
+
+test('missing or malformed metadata blocks loading and saving without deleting recoverable images', async () => {
+  const { rootDir, store } = await createTempStore();
+  const asset = { id: 'a', mimeType: 'image/png', data: 'aGVsbG8=' };
+  const project = await store.createProject('recoverable', {
+    nodes: [{ id: 'n', type: 'imageNode', position: { x: 0, y: 0 }, data: { imageAssetId: 'a' } }], edges: [], assets: { a: asset },
+  });
+  const metadata = join(rootDir, 'projects', project.id, 'project.json');
+  const image = join(rootDir, 'projects', project.id, 'assets', 'a.png');
+  for (const corrupt of [null, '{}', '{broken']) {
+    if (corrupt === null) await unlink(metadata);
+    else await writeFile(metadata, corrupt);
+    await assert.rejects(store.loadProject(project.id));
+    await assert.rejects(store.loadProjectAsset(project.id, 'a'));
+    await assert.rejects(store.saveProjectSnapshot(project.id, { nodes: [], edges: [], assets: {} }));
+    await assert.rejects(store.saveProjectAsset(project.id, asset));
+    assert.equal((await readFile(image)).toString(), 'hello');
+    if (corrupt !== null) assert.equal(await readFile(metadata, 'utf8'), corrupt);
+  }
 });

@@ -28,6 +28,7 @@ export function createProjectAutosave({
   onStatusChange: (status: ProjectSaveStatus) => void;
   delayMs?: number;
 }) {
+  let paused = false;
   let saved = initialSnapshot;
   let latest = initialSnapshot;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -38,11 +39,12 @@ export function createProjectAutosave({
     clearTimeout(timer);
     timer = undefined;
     if (inFlight) return inFlight;
+    if (paused) return Promise.resolve();
     if (!hasProjectSnapshotChanged(saved, latest)) return Promise.resolve();
     onStatusChange('saving');
     inFlight = (async () => {
       try {
-        while (hasProjectSnapshotChanged(saved, latest)) {
+        while (!paused && hasProjectSnapshotChanged(saved, latest)) {
           const snapshot = latest;
           await save(snapshot);
           saved = snapshot;
@@ -61,12 +63,24 @@ export function createProjectAutosave({
   return {
     isPending,
     flush,
+    async pause() {
+      paused = true;
+      clearTimeout(timer);
+      timer = undefined;
+      await inFlight?.catch(() => undefined);
+    },
+    resume() {
+      paused = false;
+      if (isPending()) timer = setTimeout(() => {
+        void flush().catch((error) => console.error('Failed to save project:', error));
+      }, delayMs);
+    },
     update(snapshot: ProjectSnapshot) {
       if (!hasProjectSnapshotChanged(latest, snapshot)) return;
       latest = snapshot;
       clearTimeout(timer);
       onStatusChange(isPending() ? 'saving' : 'saved');
-      if (!isPending()) return;
+      if (paused || !isPending()) return;
       timer = setTimeout(() => {
         void flush().catch((error) => console.error('Failed to save project:', error));
       }, delayMs);

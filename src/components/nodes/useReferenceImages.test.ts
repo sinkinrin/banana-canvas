@@ -1,3 +1,4 @@
+import { normalizeNodeDataWithAssets, resolveReferenceImages, type CanvasNodeData, type CanvasImageAsset } from '../../lib/canvasState';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -115,7 +116,10 @@ test('reference image controller upload and paste read through injected reader a
     {
       nodeId: 'prompt-1',
       patch: {
-        referenceImages: [{ data: 'paste.jpg', mimeType: 'image/jpeg', url: 'data:image/jpeg;base64,paste.jpg' }],
+        referenceImages: [
+          { data: 'upload.png', mimeType: 'image/png', url: 'data:image/png;base64,upload.png' },
+          { data: 'paste.jpg', mimeType: 'image/jpeg', url: 'data:image/jpeg;base64,paste.jpg' },
+        ],
         referenceImageIds: undefined,
         referenceImage: undefined,
       },
@@ -319,4 +323,33 @@ test('remove reference image handles asset-backed and inline references', () => 
 
 test('add and remove patches are blocked by pending hydration through canAddReferenceImage', () => {
   assert.equal(canAddReferenceImage({ hasPendingReferenceHydration: true, referenceCount: 1 }), false);
+});
+
+
+test('overlapping pastes append to current references and ignore a closed project', async () => {
+  let data: CanvasNodeData = {};
+  let assets: Record<string, CanvasImageAsset> = {};
+  let active = true;
+  const reads = new Map<string, (value: typeof image) => void>();
+  const controller = createReferenceImageController({ nodeId: 'n', data, assets, assetsHydrated: true,
+    getCurrent: () => active ? { data, assets, assetsHydrated: true } : null,
+    updateNodeData: (_id, patch) => { const result = normalizeNodeDataWithAssets({ ...data, ...patch }, assets); data = result.data; assets = result.assets; },
+    readImageFile: file => new Promise(resolve => { reads.set(file.name, resolve); }),
+  });
+  const paste = (name: string) => controller.handlePaste({
+    clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => ({ type: 'image/png', name, size: 3 } as File) }] }, preventDefault: () => {},
+  });
+  const first = paste('A');
+  const second = paste('B');
+  const makeImage = (value: string) => ({ data: Buffer.from(value).toString('base64'), mimeType: 'image/png', url: 'data:image/png;base64,' + Buffer.from(value).toString('base64') });
+  reads.get('B')!(makeImage('BBB')); await second;
+  reads.get('A')!(makeImage('AAA')); await first;
+  assert.deepEqual(resolveReferenceImages(data, assets).map(item => Buffer.from(item.data, 'base64').toString()), ['BBB', 'AAA']);
+  const third = paste('C');
+  controller.removeReferenceImage(0);
+  reads.get('C')!(makeImage('CCC')); await third;
+  assert.deepEqual(resolveReferenceImages(data, assets).map(item => Buffer.from(item.data, 'base64').toString()), ['AAA', 'CCC']);
+  const last = paste('D'); active = false;
+  reads.get('D')!(makeImage('DDD')); await last;
+  assert.equal(resolveReferenceImages(data, assets).length, 2);
 });

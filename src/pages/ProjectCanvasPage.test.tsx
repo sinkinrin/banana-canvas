@@ -41,10 +41,12 @@ test('ProjectCanvasPageView renders autosave failures in the header', () => {
       saveStatus="error"
       onBack={() => {}}
       onRename={() => {}}
+      onRetrySave={() => {}}
     />
   );
 
   assert.match(html, /保存失败/);
+  assert.match(html, /重试保存/);
 });
 
 test('hasProjectSnapshotChanged ignores identical persisted snapshots', () => {

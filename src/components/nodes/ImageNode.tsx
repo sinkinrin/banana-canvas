@@ -63,7 +63,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     createReferenceImagePayload: createReferenceImagePayloadAction,
     imageAssetFromDataUrl: imageAssetFromDataUrlAction,
   } = useImageNodeActions();
-  const { generateMaskImage } = useMaskGeneration();
+  const { generateMaskImage } = useMaskGeneration(id);
   const deleteNode = useStore((state) => state.deleteNode);
   const addNode = useStore((state) => state.addNode);
   const assets = useStore(useShallow((state) => {
@@ -262,7 +262,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
         image2Options: data.image2Options,
-      }));
+      }), placeholderNodeId);
 
       updateNodeData(placeholderNodeId, {
         imageUrl: url,
@@ -490,6 +490,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
             transparent={isCutout}
             prompt={data.prompt}
             onClose={() => setShowViewer(false)}
+            onMaskEdit={() => { setShowViewer(false); setShowMaskEditor(true); }}
           />
         )}
       </AnimatePresence>

@@ -794,6 +794,68 @@ async function runImageClipboardSmokeTest(window: BrowserWindow) {
   }
 }
 
+async function runReferencePreviewSmokeTest(localUrl: string, window: BrowserWindow) {
+  const previousClipboard = captureSmokeClipboard();
+  const firstImage = createSmokeJpegDataUrl();
+  const previewImage = nativeImage.createFromDataURL(createSmokeJpegDataUrl(0xeb, 0x50, 0x30)).resize({ width: 640, height: 480 });
+  const secondImage = `data:image/jpeg;base64,${previewImage.toJPEG(90).toString('base64')}`;
+  const images = [firstImage, secondImage];
+  const response = await fetch(`${localUrl}/api/projects`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Reference preview smoke', snapshot: {
+      nodes: [{ id: 'preview-prompt', type: 'promptNode', position: { x: 100, y: 100 },
+        data: { prompt: 'Reference preview', referenceImageIds: ['reference-0', 'reference-1'] } }],
+      edges: [], assets: Object.fromEntries(images.map((url, index) => [`reference-${index}`, {
+        id: `reference-${index}`, mimeType: 'image/jpeg', data: url.split(',')[1],
+      }])),
+    } }),
+  });
+  if (!response.ok) throw new Error('Could not create reference preview fixture');
+  const { project } = await response.json() as { project: { id: string } };
+  const js = (source: string) => window.webContents.executeJavaScript(source);
+  const wait = (predicate: string) => waitForSmokePredicate(window, predicate, `Reference preview smoke failed: ${predicate}`);
+  const screenshot = async (name: string) => {
+    const directory = process.env.BANANA_REFERENCE_SCREENSHOT_DIR;
+    if (!directory) return;
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, name), (await window.webContents.capturePage()).toPNG());
+  };
+  try {
+    await window.loadURL(`${localUrl}/projects/${project.id}?lng=zh-CN`);
+    window.show();
+    await wait(`document.querySelectorAll('[data-reference-action="preview"]').length === 2`);
+    if (await js(`Boolean(document.querySelector('.react-flow__node-promptNode [data-image-action="tools"]'))`)) {
+      throw new Error('Reference thumbnail still exposes the old tools menu');
+    }
+    await clickSmokeElementWithMouse(window, '[data-reference-image="1"] [data-reference-action="preview"] span', 'Reference preview button could not be clicked');
+    await wait(`document.querySelector('[data-image-viewer] img')?.src === ${JSON.stringify(secondImage)}`);
+    await wait(`Number(getComputedStyle(document.querySelector('[data-image-viewer]')).opacity) >= 0.99 && document.querySelector('[data-image-viewer] img').naturalWidth === 640`);
+    await screenshot('reference-preview.png');
+    if (!await js(`(() => {
+      const root = document.querySelector('[data-image-viewer]');
+      const download = root.querySelector('button[title="下载"]');
+      return download?.nextElementSibling?.getAttribute('data-image-action') === 'mask-edit';
+    })()`)) throw new Error('Mask edit is not directly after download in the viewer toolbar');
+    await clickSmokeElementWithMouse(window, '[data-image-viewer] [data-image-action="mask-edit"]', 'Viewer mask edit could not be clicked');
+    await wait(`!document.querySelector('[data-image-viewer]') && document.querySelector('img[alt="蒙版编辑原图"]')?.src === ${JSON.stringify(secondImage)}`);
+    await screenshot('reference-mask-editor.png');
+    await js(`document.querySelector('button[title="关闭"]').click()`);
+    await wait(`!document.querySelector('img[alt="蒙版编辑原图"]')`);
+    clipboard.clear();
+    await js(`document.querySelector('[data-reference-image="1"] img').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))`);
+    const size = await waitForSmokeClipboardImage();
+    if (size.width !== 640 || size.height !== 480) throw new Error('Reference copy has wrong dimensions');
+    const actual = clipboard.readImage().toBitmap();
+    const expected = nativeImage.createFromDataURL(secondImage).toBitmap();
+    if (actual.subarray(0, 3).some((value, index) => Math.abs(value - expected[index]) > 2)) throw new Error('Reference copy copied the wrong image');
+    await wait(`document.querySelector('[data-reference-image="1"] [role="status"]')?.textContent.includes('图片已复制')`);
+    await screenshot('reference-thumbnails.png');
+    console.info('[banana:smoke] reference single-click preview, viewer mask edit and right-click native image copy passed');
+  } finally {
+    restoreSmokeClipboard(previousClipboard);
+  }
+}
+
 async function runBananaModelSelectionSmokeTest(window: BrowserWindow) {
   await window.webContents.executeJavaScript(`
     document.querySelector('button[title="设置"]')?.click()
@@ -1069,6 +1131,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   await runCutoutSmoke({ window, localUrl, flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runGenerationViewportSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runComparisonSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+  await runReferencePreviewSmokeTest(localUrl, window);
   await runReferenceImageSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, QuickDraw and cutout probes passed');
 }

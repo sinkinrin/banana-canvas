@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { temporal } from 'zundo';
-import { get, set, del } from 'idb-keyval';
 import {
   Connection,
   Edge,
@@ -36,24 +34,6 @@ import i18n from './i18n';
 
 type BananaStoreGlobals = typeof globalThis & {
   __bananaTemporalAssetsUnsub?: () => void;
-  __bananaHydrationAssetsUnsub?: () => void;
-  __bananaAssetPersistUnsub?: () => void;
-};
-
-const ASSET_STORAGE_KEY = 'banana-art-assets';
-let pruneStoreAssetsNow: (() => void) | undefined;
-
-// Custom storage for IndexedDB
-const storage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    return (await get(name)) || null;
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    await set(name, value);
-  },
-  removeItem: async (name: string): Promise<void> => {
-    await del(name);
-  },
 };
 
 export type AppNodeData = CanvasNodeData;
@@ -65,6 +45,7 @@ export type AppState = {
   edges: Edge[];
   assets: Record<string, CanvasImageAsset>;
   assetsHydrated: boolean;
+  projectSessionId: number;
   onNodesChange: OnNodesChange<AppNode>;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -81,8 +62,7 @@ export type AppState = {
 
 export const useStore = create<AppState>()(
   temporal(
-    persist(
-      (set, get, store) => {
+    (set, get, store) => {
         const globalStore = globalThis as BananaStoreGlobals;
         const temporalStore = store.temporal as {
           subscribe: (listener: () => void) => () => void;
@@ -139,7 +119,6 @@ export const useStore = create<AppState>()(
         globalStore.__bananaTemporalAssetsUnsub?.();
         globalStore.__bananaTemporalAssetsUnsub = temporalStore.subscribe(pruneStoreAssets);
         queueMicrotask(pruneStoreAssets);
-        pruneStoreAssetsNow = pruneStoreAssets;
 
         return ({
         nodes: [
@@ -155,7 +134,8 @@ export const useStore = create<AppState>()(
         ],
         edges: [],
         assets: {},
-        assetsHydrated: false,
+        assetsHydrated: true,
+        projectSessionId: 0,
         onNodesChange: (changes: NodeChange<AppNode>[]) => {
           const currentNodes = get().nodes;
           const nextNodes = applyNodeChanges(changes, currentNodes);
@@ -280,6 +260,7 @@ export const useStore = create<AppState>()(
             edges: normalizedSnapshot.edges,
             assets,
             assetsHydrated: true,
+            projectSessionId: get().projectSessionId + 1,
           });
           temporalStore.getState().clear();
         },
@@ -289,32 +270,6 @@ export const useStore = create<AppState>()(
           assets: get().assets,
         }),
       })},
-      {
-        name: 'banana-art-storage',
-        storage: createJSONStorage(() => storage),
-        partialize: (state) => createHistorySnapshot({
-          nodes: state.nodes,
-          edges: state.edges,
-          assets: state.assets,
-        }),
-        merge: (persistedState, currentState) => {
-          const typedPersistedState = persistedState as Partial<Pick<AppState, 'nodes' | 'edges'>>;
-          const migrated = migrateCanvasNodesToAssetIds(
-            typedPersistedState.nodes ?? currentState.nodes,
-            currentState.assets
-          );
-
-          return {
-            ...currentState,
-            ...typedPersistedState,
-            nodes: migrated.nodes,
-            edges: typedPersistedState.edges ?? currentState.edges,
-            assets: migrated.assets,
-            assetsHydrated: false,
-          };
-        },
-      }
-    ),
     {
       // Only track nodes and edges for history
       partialize: (state) => createHistorySnapshot({
@@ -328,78 +283,3 @@ export const useStore = create<AppState>()(
     }
   )
 );
-
-const globalStore = globalThis as BananaStoreGlobals;
-globalStore.__bananaHydrationAssetsUnsub?.();
-
-let lastPersistedAssetSignature = '';
-let assetsHydrated = false;
-
-const getCurrentAssetSignature = () => {
-  const currentAssetIds = [...collectReferencedAssetIdsFromHistory([{ nodes: useStore.getState().nodes }])].sort();
-  return currentAssetIds.join('|');
-};
-
-const persistCurrentAssets = async () => {
-  if (!assetsHydrated) return;
-
-  const signature = getCurrentAssetSignature();
-  if (signature === lastPersistedAssetSignature) return;
-
-  const currentAssetIds = new Set(signature ? signature.split('|') : []);
-  const assets = pruneAssets(useStore.getState().assets, currentAssetIds);
-
-  if (Object.keys(assets).length === 0) {
-    await del(ASSET_STORAGE_KEY);
-  } else {
-    await set(ASSET_STORAGE_KEY, assets);
-  }
-
-  lastPersistedAssetSignature = signature;
-};
-
-globalStore.__bananaAssetPersistUnsub?.();
-globalStore.__bananaAssetPersistUnsub = useStore.subscribe(() => {
-  void persistCurrentAssets();
-});
-
-globalStore.__bananaHydrationAssetsUnsub = (
-  useStore.persist as unknown as {
-    hasHydrated: () => boolean;
-    onFinishHydration: (listener: () => void) => () => void;
-  }
-).onFinishHydration(() => {
-  pruneStoreAssetsNow?.();
-  void get(ASSET_STORAGE_KEY).then((persistedAssets) => {
-    const nextAssets = pruneAssets(
-      {
-        ...useStore.getState().assets,
-        ...((persistedAssets as Record<string, CanvasImageAsset> | undefined) ?? {}),
-      },
-      collectReferencedAssetIdsFromHistory([{ nodes: useStore.getState().nodes }])
-    );
-    assetsHydrated = true;
-    useStore.setState({ assets: nextAssets, assetsHydrated: true });
-    lastPersistedAssetSignature = '';
-    void persistCurrentAssets();
-  });
-});
-
-if (
-  (useStore.persist as unknown as { hasHydrated: () => boolean }).hasHydrated()
-) {
-  pruneStoreAssetsNow?.();
-  void get(ASSET_STORAGE_KEY).then((persistedAssets) => {
-    const nextAssets = pruneAssets(
-      {
-        ...useStore.getState().assets,
-        ...((persistedAssets as Record<string, CanvasImageAsset> | undefined) ?? {}),
-      },
-      collectReferencedAssetIdsFromHistory([{ nodes: useStore.getState().nodes }])
-    );
-    assetsHydrated = true;
-    useStore.setState({ assets: nextAssets, assetsHydrated: true });
-    lastPersistedAssetSignature = '';
-    void persistCurrentAssets();
-  });
-}

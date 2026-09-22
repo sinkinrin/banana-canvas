@@ -157,7 +157,7 @@ test('metadata generation keeps timeout active through the response body and cle
     await Promise.resolve();
     t.mock.timers.tick(300_001);
     release();
-    await assert.rejects(timedOut, { name: 'AbortError' });
+    await assert.rejects(timedOut, { name: 'TimeoutError' });
   } finally { globalThis.fetch = original; release(); }
 });
 

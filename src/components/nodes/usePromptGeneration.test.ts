@@ -449,3 +449,23 @@ test('prompt generation runner reports invalid Banana key and always clears load
   assert.ok(calls.some((call) => call.includes('API key not valid')));
   assert.ok(calls.includes('update:prompt-1:{"isLoading":false}'));
 });
+
+
+test('request timeout keeps a failed result while explicit cancellation removes it', async () => {
+  for (const reason of ['TimeoutError', 'AbortError']) {
+    const nodes: Record<string, any> = { parent: {} };
+    const runner = createPromptGenerationRunner({
+      generateImage: async () => { throw new DOMException('request timed out', reason); },
+      addNode: (_type, _position, data) => { nodes.result = data; return 'result'; },
+      updateNodeData: (id, patch) => { if (nodes[id]) Object.assign(nodes[id], patch); },
+      deleteNode: id => { delete nodes[id]; }, setEdges: () => {}, commitPrompt: () => {}, now: () => new Date().toISOString(),
+    });
+    await runner.run({ nodeId: 'parent', prompt: 'draw', imageModel: 'image2', imageModelLabel: 'Image2', aspectRatio: '1:1', imageSize: '1K', batchCount: 1,
+      referenceImageIds: [], referenceImages: [], hasPendingReferenceHydration: false });
+    if (reason === 'TimeoutError') {
+      assert.equal(nodes.result.error, 'request timed out');
+      assert.equal(nodes.result.isLoading, false);
+      assert.equal(nodes.parent.error, 'request timed out');
+    } else assert.equal(nodes.result, undefined);
+  }
+});

@@ -1,7 +1,9 @@
+import { useStore } from '../../store';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  createMaskGenerationRunner,
   buildImageMaskGenerationPayload,
   buildPromptMaskGenerationPayload,
 } from './useMaskGeneration';
@@ -66,4 +68,28 @@ test('image mask generation uses only the edited image as reference', () => {
       maskImage,
     }
   );
+});
+
+
+test('mask tasks abort on deletion, project switching, and component exit', async () => {
+  for (const action of ['delete-source', 'delete-result', 'switch', 'unmount']) {
+    const nodes = ['source', 'result'].map(id => ({ id, type: 'imageNode', position: { x: 0, y: 0 }, data: {} }));
+    useStore.getState().hydrateProject({ nodes, edges: [], assets: {} });
+    let signal: AbortSignal | undefined;
+    let finish!: () => void;
+    const runner = createMaskGenerationRunner('source', async input => {
+      signal = input.signal;
+      // Simulate a provider that returns a late result even after cancellation.
+      await new Promise<void>(resolve => { finish = resolve; });
+      return { imageUrl: 'data:image/png;base64,aGVsbG8=' };
+    });
+    const result = runner.run({ prompt: 'mask', imageModel: 'image2' }, 'result');
+    if (action === 'delete-source') useStore.getState().deleteNode('source');
+    if (action === 'delete-result') useStore.getState().deleteNode('result');
+    if (action === 'switch') useStore.getState().hydrateProject({ nodes, edges: [], assets: {} });
+    if (action === 'unmount') runner.abort();
+    assert.equal(signal?.aborted, true, action);
+    finish();
+    await assert.rejects(result, { name: 'AbortError' });
+  }
 });

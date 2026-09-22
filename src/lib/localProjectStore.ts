@@ -46,11 +46,13 @@ const MAX_PROJECT_ASSET_BYTES = 32 * 1024 * 1024;
 
 export type LocalProjectStore = {
   loadProjectIndex: () => Promise<ProjectMeta[]>;
+  isInitialized: () => Promise<boolean>;
   saveProjectIndex: (projects: ProjectMeta[]) => Promise<void>;
   createProject: (name: string, snapshot?: ProjectSnapshot) => Promise<ProjectMeta>;
   importProject: (project: ProjectMeta, snapshot: ProjectSnapshot) => Promise<void>;
   importProjects: (entries: ProjectImportEntry[]) => Promise<void>;
-  loadProject: (projectId: string) => Promise<{ project: ProjectMeta; snapshot: ProjectSnapshot } | null>;
+  loadProject: (projectId: string, options?: { separateAssets?: boolean }) => Promise<{ project: ProjectMeta; snapshot: ProjectSnapshot; assetIds?: string[] } | null>;
+  loadProjectAsset: (projectId: string, assetId: string) => Promise<CanvasImageAsset | null>;
   saveProjectAsset: (projectId: string, asset: CanvasImageAsset) => Promise<void>;
   saveProjectSnapshot: (projectId: string, snapshot: ProjectSnapshot) => Promise<void>;
   renameProject: (projectId: string, nextName: string) => Promise<ProjectMeta | null>;
@@ -236,9 +238,10 @@ function normalizeIndex(value: unknown): ProjectMeta[] {
 }
 
 function normalizeStoredSnapshot(value: unknown): StoredProjectSnapshot {
-  if (!isRecord(value)) {
-    return { nodes: [], edges: [], assets: {} };
+  if (!isRecord(value) || !Array.isArray(value.nodes) || !Array.isArray(value.edges) || !isRecord(value.assets)) {
+    throw new Error('Project metadata missing or invalid');
   }
+  validateProjectSnapshotInput({ ...value, assets: {} });
 
   const assets: Record<string, StoredAsset> = {};
   if (isRecord(value.assets)) {
@@ -256,6 +259,8 @@ function normalizeStoredSnapshot(value: unknown): StoredProjectSnapshot {
           byteLength: typeof asset.byteLength === 'number' ? asset.byteLength : undefined,
           sha256: typeof asset.sha256 === 'string' ? asset.sha256 : undefined,
         };
+      } else {
+        throw new Error('Project metadata missing or invalid');
       }
     }
   }
@@ -342,13 +347,13 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
     };
   };
 
-  const writeProjectSnapshotFiles = async (projectId: string, snapshot: ProjectSnapshotWithAssetRefs) => {
+  const writeProjectSnapshotFiles = async (projectId: string, snapshot: ProjectSnapshotWithAssetRefs, allowCreate = false) => {
     const validatedSnapshot = validateProjectSnapshotInput(snapshot);
     const dir = projectDir(projectId);
     const assetDir = assetsDir(projectId);
     await mkdir(assetDir, { recursive: true });
     const previousSnapshot = normalizeStoredSnapshot(
-      await readJsonFile<unknown>(projectJsonPath(projectId), { nodes: [], edges: [], assets: {} })
+      await readJsonFile<unknown>(projectJsonPath(projectId), allowCreate ? { nodes: [], edges: [], assets: {} } : null)
     );
 
     const referencedAssetIds = collectReferencedAssetIdsFromHistory([{ nodes: validatedSnapshot.nodes }]);
@@ -413,6 +418,7 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
   };
 
   const store: LocalProjectStore = {
+    isInitialized: () => fileExists(indexPath),
     async loadProjectIndex() {
       const value = await readJsonFile<unknown>(indexPath, []);
       return normalizeIndex(value);
@@ -426,7 +432,7 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
       return await runWriteTask(async () => {
         const project = createProjectMeta(name);
         const projects = await store.loadProjectIndex();
-        await writeProjectSnapshotFiles(project.id, snapshot);
+        await writeProjectSnapshotFiles(project.id, snapshot, true);
         await writeJsonFile(indexPath, [project, ...projects]);
         return project;
       });
@@ -448,7 +454,7 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
         const projects = await store.loadProjectIndex();
 
         for (const entry of normalizedEntries) {
-          await writeProjectSnapshotFiles(entry.project.id, entry.snapshot);
+          await writeProjectSnapshotFiles(entry.project.id, entry.snapshot, !projects.some((project) => project.id === entry.project.id));
         }
 
         const importedIds = new Set(normalizedEntries.map((entry) => entry.project.id));
@@ -459,18 +465,18 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
       });
     },
 
-    async loadProject(projectId) {
+    async loadProject(projectId, { separateAssets = false } = {}) {
       validateProjectId(projectId);
       const projects = await store.loadProjectIndex();
       const project = projects.find((item) => item.id === projectId);
       if (!project) return null;
 
       const stored = normalizeStoredSnapshot(
-        await readJsonFile<unknown>(projectJsonPath(projectId), { nodes: [], edges: [], assets: {} })
+        await readJsonFile<unknown>(projectJsonPath(projectId), null)
       );
       const assets: Record<string, CanvasImageAsset> = {};
 
-      for (const [assetId, asset] of Object.entries(stored.assets)) {
+      for (const [assetId, asset] of separateAssets ? [] : Object.entries(stored.assets)) {
         validateAssetId(assetId);
         const filePath = join(assetsDir(projectId), asset.fileName);
         ensureInside(assetsDir(projectId), filePath);
@@ -487,12 +493,37 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
 
       return {
         project,
+        ...(separateAssets ? { assetIds: Object.keys(stored.assets) } : {}),
         snapshot: {
           nodes: stored.nodes,
           edges: stored.edges,
           assets,
         },
       };
+    },
+
+    async loadProjectAsset(projectId, assetId) {
+      validateProjectId(projectId);
+      validateAssetId(assetId);
+      const projects = await store.loadProjectIndex();
+      if (!projects.some((project) => project.id === projectId)) return null;
+      const stored = normalizeStoredSnapshot(
+        await readJsonFile<unknown>(projectJsonPath(projectId), null)
+      );
+      const asset = stored.assets[assetId];
+      if (!asset) return null;
+      const filePath = join(assetsDir(projectId), asset.fileName);
+      ensureInside(assetsDir(projectId), filePath);
+      try {
+        return {
+          id: asset.id,
+          mimeType: asset.mimeType || mimeTypeFromFileName(asset.fileName),
+          data: (await readFile(filePath)).toString('base64'),
+        };
+      } catch (error: any) {
+        if (error?.code === 'ENOENT') return null;
+        throw error;
+      }
     },
 
     async saveProjectAsset(projectId, asset) {
@@ -504,7 +535,7 @@ export function createLocalProjectStore(rootDir: string): LocalProjectStore {
         }
 
         const previousSnapshot = normalizeStoredSnapshot(
-          await readJsonFile<unknown>(projectJsonPath(projectId), { nodes: [], edges: [], assets: {} })
+          await readJsonFile<unknown>(projectJsonPath(projectId), null)
         );
         const storedAsset = await writeProjectAssetFile(projectId, asset, previousSnapshot.assets);
 

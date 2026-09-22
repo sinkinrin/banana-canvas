@@ -26,6 +26,7 @@ export type ProjectCanvasPageViewProps = {
   saveStatus: SaveStatus;
   onBack: () => void;
   onRename: () => void;
+  onRetrySave?: () => void;
   onOpenSettings?: () => void;
   children?: ReactNode;
 };
@@ -55,6 +56,7 @@ export function ProjectCanvasPageView({
   saveStatus,
   onBack,
   onRename,
+  onRetrySave,
   onOpenSettings = () => {},
   children,
 }: ProjectCanvasPageViewProps) {
@@ -90,6 +92,9 @@ export function ProjectCanvasPageView({
         <div className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs" style={{ color: '#96836F' }}>
           <Save size={14} />
           {t(saveStatusKey(saveStatus))}
+          {saveStatus === 'error' && onRetrySave && (
+            <button type="button" onClick={onRetrySave} className="underline">{t('projects.retrySave')}</button>
+          )}
         </div>
         <button
           type="button"
@@ -145,7 +150,7 @@ export function ProjectCanvasPage({
           save: (snapshot) => projectRepository.saveProjectSnapshot(projectId, snapshot),
           onStatusChange: (next) => { if (!disposed) setSaveStatus(next); },
         });
-        detachSave = projectSaveRegistry.register(saver);
+        detachSave = projectSaveRegistry.register(saver, projectId);
         unsubscribe = useStore.subscribe(() => saver.update(useStore.getState().exportProject()));
         setProject(loaded.project);
         setSaveStatus('saved');
@@ -216,6 +221,10 @@ export function ProjectCanvasPage({
         saveStatus={saveStatus}
         onBack={navigateToProjects}
         onRename={handleRename}
+        onRetrySave={() => {
+          setSaveStatus('saving');
+          void projectSaveRegistry.flush().then(() => setSaveStatus('saved'), () => setSaveStatus('error'));
+        }}
         onOpenSettings={onOpenSettings}
       >
         <Suspense

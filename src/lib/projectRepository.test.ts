@@ -106,6 +106,7 @@ test('project repository migrates IndexedDB projects into an empty local file st
   });
 
   const imports: unknown[] = [];
+  const snapshots: any[] = [];
   let migrated = false;
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -128,6 +129,10 @@ test('project repository migrates IndexedDB projects into an empty local file st
       migrated = true;
       return jsonResponse({ ok: true });
     }
+    if (url === '/api/projects/p-old' && init?.method === 'PUT') {
+      snapshots.push(JSON.parse(String(init.body)));
+      return jsonResponse({ ok: true });
+    }
     throw new Error(`unexpected request ${url}`);
   };
 
@@ -135,6 +140,8 @@ test('project repository migrates IndexedDB projects into an empty local file st
   const projects = await repository.listProjects();
 
   assert.equal(projects[0].id, 'p-old');
+  assert.equal(snapshots[0].nodes[0].data.prompt, 'banana');
+  assert.deepEqual(snapshots[0].assets, {});
   assert.deepEqual(imports, [
     {
       projects: [
@@ -145,18 +152,7 @@ test('project repository migrates IndexedDB projects into an empty local file st
             createdAt: '2026-04-25T10:00:00.000Z',
             updatedAt: '2026-04-25T10:00:00.000Z',
           },
-          snapshot: {
-            nodes: [
-              {
-                id: 'n1',
-                type: 'promptNode',
-                position: { x: 0, y: 0 },
-                data: { prompt: 'banana' },
-              },
-            ],
-            edges: [],
-            assets: {},
-          },
+          snapshot: { nodes: [], edges: [], assets: {} },
         },
       ],
     },
@@ -188,7 +184,7 @@ test('project repository uploads changed local assets separately from snapshot m
       return jsonResponse({ ok: true });
     }
 
-    if (url === '/api/projects/p-local') {
+    if (url === '/api/projects/p-local' || url === '/api/projects/p-local?assets=separate') {
       savedSnapshots.push(JSON.parse(String(init?.body)));
       return jsonResponse({ ok: true });
     }
@@ -263,7 +259,7 @@ test('project repository reuploads an asset after a snapshot prunes it and undo 
       return jsonResponse({ ok: true });
     }
 
-    if (url === '/api/projects/p-local') {
+    if (url === '/api/projects/p-local' || url === '/api/projects/p-local?assets=separate') {
       savedSnapshots.push(JSON.parse(String(init?.body)));
       return jsonResponse({ ok: true });
     }
@@ -321,7 +317,7 @@ test('project repository retries a lightweight save after reuploading missing re
       });
     }
 
-    if (url === '/api/projects/p-local') {
+    if (url === '/api/projects/p-local' || url === '/api/projects/p-local?assets=separate') {
       if (!init) {
         return jsonResponse({
           project: {
@@ -399,7 +395,7 @@ test('project repository retries when the server reports a referenced asset cont
       });
     }
 
-    if (url === '/api/projects/p-local') {
+    if (url === '/api/projects/p-local' || url === '/api/projects/p-local?assets=separate') {
       if (!init) {
         return jsonResponse({
           project: {
@@ -453,4 +449,21 @@ test('project repository retries when the server reports a referenced asset cont
   assert.equal(uploads.length, 1);
   assert.equal(JSON.stringify(savedSnapshots).includes(assetData), false);
   assert.equal(typeof (savedSnapshots[0] as any).assetRefs['asset-shared'].sha256, 'string');
+});
+
+
+test('project repository stops loading when an individual image request fails', async () => {
+  const project = { id: 'p', name: 'P', createdAt: '2026-04-25T00:00:00Z', updatedAt: '2026-04-25T00:00:00Z' };
+  const requests: string[] = [];
+  const repository = createProjectRepository({ fetcher: async (input) => {
+    const url = String(input);
+    requests.push(url);
+    if (url === '/api/projects') return jsonResponse({ projects: [project] });
+    if (url.endsWith('?assets=separate')) {
+      return jsonResponse({ project, snapshot: { nodes: [], edges: [], assets: {} }, assetIds: ['a', 'b'] });
+    }
+    return jsonResponse({ error: 'image read failed' }, 500);
+  } });
+  await assert.rejects(repository.loadProject('p'));
+  assert.equal(requests.includes('/api/projects/p/assets/b'), false);
 });
