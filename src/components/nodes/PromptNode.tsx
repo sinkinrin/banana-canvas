@@ -462,11 +462,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               type="file"
               ref={fileInputRef}
               className="hidden"
-              accept="image/png, image/jpeg, image/webp, image/heic, image/heif"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/heic,image/heif,.mpo"
               onChange={handleImageUpload}
             />
             <p className="mt-1 text-center text-[10px]" style={{ color: '#5C4E3E' }}>
               {referenceImageLimitHint}
+              <br />{t('promptNode.referenceCompatibilityHint')}
             </p>
           </div>
 

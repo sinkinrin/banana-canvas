@@ -36,6 +36,7 @@ import {
 } from './updateManager';
 import { createUpdatePreferencesStore } from './updatePreferences';
 import { runComparisonSmoke } from './comparisonSmoke';
+import { runReferenceImageSmoke } from './referenceImageSmoke';
 import { runGenerationViewportSmoke } from './generationViewportSmoke';
 import { registerWindowControls, observeWindowState } from './windowControls';
 import { runWindowCloseSmoke } from './windowCloseSmoke';
@@ -1068,6 +1069,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   await runCutoutSmoke({ window, localUrl, flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runGenerationViewportSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runComparisonSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+  await runReferenceImageSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, QuickDraw and cutout probes passed');
 }
 

@@ -14,6 +14,17 @@ async function createTempStore() {
   };
 }
 
+test('local project storage preserves AVIF and HEIC originals for send-time conversion', async () => {
+  const {store} = await createTempStore();
+  for (const mimeType of ['image/avif','image/heic','image/heif']) {
+    const asset = {id:'original',mimeType,data:Buffer.from('original-container').toString('base64')};
+    const project = await store.createProject('Compatible reference', {
+      nodes:[{id:'n',type:'promptNode',position:{x:0,y:0},data:{referenceImageIds:['original']}}], edges:[],assets:{original:asset},
+    });
+    assert.deepEqual((await store.loadProject(project.id))?.snapshot.assets.original, asset);
+  }
+});
+
 test('local project store writes and loads a project snapshot', async () => {
   const { store } = await createTempStore();
 

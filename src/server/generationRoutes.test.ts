@@ -8,6 +8,20 @@ import type { AddressInfo } from 'node:net';
 import { mountGenerationRoutes, type GenerationProviders } from './generationRoutes';
 import { createRuntimeConfigManager } from './runtimeConfig';
 import { DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL } from '../lib/promptOptimizer';
+import { parseImageInputError } from './imageInputError';
+
+test('provider image rejections expose safe structured errors without upstream text or credentials', async () => {
+  const error = parseImageInputError({error:{code:'invalid_image_file',message:'Invalid image file or mode for image 2. secret-key'}});
+  assert.ok(error);
+  assert.equal(parseImageInputError({error:{code:'other',message:'secret-key'}}),undefined);
+  const app = createApp({generateBananaImage:async () => '', generateImage2Image:async () => {throw error;}});
+  const response = await requestJson(app,'/api/generate-image',{prompt:'edit',imageModel:'image2'});
+  assert.equal(response.status,422);
+  assert.equal(response.body.code,'INVALID_REFERENCE_IMAGE');
+  assert.equal(response.body.imageIndex,2);
+  assert.ok(response.body.requestId);
+  assert.doesNotMatch(JSON.stringify(response.body),/secret-key/);
+});
 
 async function requestJson(app: express.Express, path: string, body: unknown) {
   const server = app.listen(0);

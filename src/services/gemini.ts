@@ -13,6 +13,7 @@ import {
 } from '../lib/imageModels';
 import i18n, { getCurrentLanguage } from '../i18n';
 import { normalizeGenerationInfo, type GenerationResult } from '../lib/generationInfo';
+import { prepareReferenceImages } from '../lib/prepareReferenceImages';
 
 export interface GenerateImageParams {
   prompt: string;
@@ -78,6 +79,11 @@ async function requestImage(params: GenerateImageParams, includeGenerationInfo =
   }
 
   try {
+    const payload = createGenerateImagePayload(params);
+    if (payload.referenceImages?.length) {
+      payload.referenceImages = await prepareReferenceImages(payload.referenceImages, signal);
+    }
+    signal.throwIfAborted();
     const response = await fetch('/api/generate-image', {
       method: 'POST',
       headers: {
@@ -85,15 +91,19 @@ async function requestImage(params: GenerateImageParams, includeGenerationInfo =
         'Accept-Language': getCurrentLanguage(),
       },
       signal,
-      body: JSON.stringify({ ...createGenerateImagePayload(params), ...(includeGenerationInfo ? { includeGenerationInfo: true } : {}) }),
+      body: JSON.stringify({ ...payload, ...(includeGenerationInfo ? { includeGenerationInfo: true } : {}) }),
     });
 
     if (!response.ok) {
       let errorMessage = i18n.t('errors.generationFailed');
       try {
         const text = await response.text();
-        const json = JSON.parse(text) as { error?: string; requestId?: string };
-        if (response.status === 401) {
+        const json = JSON.parse(text) as { error?: string; requestId?: string; code?: string; imageIndex?: number };
+        if (json.code === 'INVALID_REFERENCE_IMAGE') {
+          errorMessage = Number.isInteger(json.imageIndex) && json.imageIndex! >= 1 && json.imageIndex! <= 4
+            ? i18n.t('errors.referenceRejected', { index: json.imageIndex })
+            : i18n.t('errors.referencesRejected');
+        } else if (response.status === 401) {
           errorMessage = i18n.t('errors.apiKeyRequired');
         } else if (json.requestId) {
           errorMessage = i18n.t('errors.generationFailedWithRequestId', { requestId: json.requestId });

@@ -1,4 +1,5 @@
 import { lookup } from 'node:dns/promises';
+import { parseImageInputError } from '../imageInputError';
 import { BlockList } from 'node:net';
 
 import {
@@ -876,6 +877,8 @@ export async function generateImage2Image({
   console.info(`[image2:${requestId}] relay status=${response.status} ok=${response.ok}`);
 
   if (!response.ok) {
+    const imageError = parseImageInputError(responseJson);
+    if (imageError) throw imageError;
     const message = extractErrorMessage(responseJson) || responseText || 'image2 图像生成失败';
     console.error(`[image2:${requestId}] relay error body=${previewResponseBody(responseText)}`);
     throw new Error(`image2 请求失败 (${response.status}): ${message}`);

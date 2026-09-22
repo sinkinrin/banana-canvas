@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { resolveReferenceImages, type InlineImageData } from '../../lib/canvasState';
 import type { AppNode } from '../../store';
 import i18n from '../../i18n';
+import { base64ToBytes, inspectReferenceImage } from '../../lib/referenceImageFormat';
 import {
   decodedBase64ByteLength,
   formatMebibytes,
@@ -30,7 +31,14 @@ export function createBrowserImageFileReader({
     reader.onload = (event) => {
       const base64String = event.target?.result as string;
       try {
-        resolve(parseImageDataUrl(base64String));
+        if (!/^data:image\/(?:png|jpeg|webp|gif|avif|heic|heif);base64,/.test(base64String)) {
+          const encoded = base64String.split(';base64,')[1];
+          if (!encoded) throw new Error('Invalid image format');
+          const format = inspectReferenceImage(base64ToBytes(encoded));
+          resolve(parseImageDataUrl(`data:${format.mimeType};base64,${encoded}`));
+        } else {
+          resolve(parseImageDataUrl(base64String));
+        }
       } catch (error) {
         reject(error);
       }
@@ -58,7 +66,7 @@ export function selectImageFiles(
 ) {
   const remainingSlots = Math.max(0, maxCount - currentCount);
   return Array.from(files)
-    .filter((file) => file.type.startsWith('image/'))
+    .filter((file) => file.type.startsWith('image/') || /\.(?:png|jpe?g|webp|gif|mpo|heic|heif|avif)$/i.test(file.name))
     .slice(0, remainingSlots);
 }
 

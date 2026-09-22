@@ -1,4 +1,6 @@
 import express from 'express';
+import { ImageInputError } from './imageInputError';
+import { extractReferencePrimaryImages } from './prepareReferenceImages';
 import { GoogleGenAI } from '@google/genai';
 import {
   validateGenerateImageRequest,
@@ -137,6 +139,7 @@ export function mountGenerationRoutes(
     }
 
     try {
+      body.referenceImages = extractReferencePrimaryImages(body.referenceImages);
       console.info(
         `[generate-image:${requestId}] model=${body.imageModel} provider=${body.provider} refs=${body.referenceImages.length} promptChars=${body.prompt.length}`
       );
@@ -178,7 +181,12 @@ export function mountGenerationRoutes(
         console.error(`[generate-image:${requestId}] failed:`, error);
       }
       if (canWriteResponse(res, requestAbort.signal)) {
-        res.status(500).json({ error: `图像生成失败（请求 ID：${requestId}）`, requestId });
+        if (error instanceof ImageInputError) {
+          res.status(422).json({ code: 'INVALID_REFERENCE_IMAGE', imageIndex: error.imageIndex,
+            error: '参考图格式或颜色模式不受支持，请重新导出为普通 JPG 或 PNG 后重试。', requestId });
+        } else {
+          res.status(500).json({ error: `图像生成失败（请求 ID：${requestId}）`, requestId });
+        }
       }
     } finally {
       requestAbort.cleanup();

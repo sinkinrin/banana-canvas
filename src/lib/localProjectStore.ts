@@ -96,6 +96,7 @@ function mimeTypeFromFileName(fileName: string) {
   if (ext === 'png') return 'image/png';
   if (ext === 'webp') return 'image/webp';
   if (ext === 'gif') return 'image/gif';
+  if (['avif', 'heic', 'heif'].includes(ext)) return `image/${ext}`;
   return 'image/png';
 }
 
@@ -163,7 +164,7 @@ function validateCanvasAsset(asset: unknown, expectedId?: string): asserts asset
     typeof asset.mimeType !== 'string' ||
     typeof asset.data !== 'string' ||
     (expectedId !== undefined && asset.id !== expectedId) ||
-    !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(asset.mimeType.toLowerCase()) ||
+    !['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif'].includes(asset.mimeType.toLowerCase()) ||
     !/^[A-Za-z0-9+/]+={0,2}$/.test(asset.data) ||
     Buffer.from(asset.data, 'base64').byteLength > MAX_PROJECT_ASSET_BYTES
   ) {
