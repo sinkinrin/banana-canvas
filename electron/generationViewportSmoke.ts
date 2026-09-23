@@ -88,7 +88,7 @@ export async function runGenerationViewportSmoke({ window, localUrl, imageUrl, f
     await installMock();
     await start();
     await wait('window.__viewportRequests.length === 1');
-    await js(`([...document.querySelectorAll('${promptSelector} button')].find(b => b.textContent.includes('重置'))).click()`);
+    await js(`([...document.querySelectorAll('${promptSelector} button')].find(b => b.textContent.includes('停止全部'))).click()`);
     await wait('window.__viewportRequests[0].aborted');
     await wait(`document.querySelectorAll('.react-flow__node-imageNode').length === 1`);
     if ((await snapshot()).nodes.length !== 2) throw new Error('Explicit cancellation removed a completed result');

@@ -81,7 +81,11 @@ export function BananaOptionsPanel({
   };
 
   return (
-    <div className="space-y-4 rounded-xl p-3" style={{ background: 'rgba(242,193,78,0.04)', border: '1px solid rgba(242,193,78,0.12)' }}>
+    <details data-advanced-options="banana" className="rounded-xl p-3" style={{ background: 'rgba(242,193,78,0.04)', border: '1px solid rgba(242,193,78,0.12)' }}>
+      <summary className="cursor-pointer text-xs text-[#F2C14E]">{t('bananaOptions.advanced', { model: modelConfig.label })}
+        {(options.thinkingLevel || options.mediaResolution || options.searchGrounding) && <span className="ml-2 text-[10px] text-[#B8A58D]">{t('categories.custom')}</span>}
+      </summary>
+      <div className="mt-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
           <Info size={13} />
@@ -160,6 +164,7 @@ export function BananaOptionsPanel({
         </div>
       </div>
 
-    </div>
+      </div>
+    </details>
   );
 }

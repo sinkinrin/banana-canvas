@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { getCutoutBridge } from '../../lib/cutoutModels';
 import { imageAssetFromDataUrl } from '../../lib/canvasState';
+import { inheritNodeCategory } from '../../lib/nodeCategories';
 import { cutoutErrorMessage, removeImageBackground } from '../../services/cutout';
 import { useAppTranslation } from '../../i18n';
 
@@ -39,6 +40,7 @@ export function useCutout(sourceNodeId: string) {
       while (store.nodes.some((node) => Math.abs(node.position.x - position.x) < 450 && Math.abs(node.position.y - position.y) < 550)) position.y += 600;
       const sourceAsset = sourceImageAssetId ? undefined : imageAssetFromDataUrl(url);
       resultId = store.addNode('imageNode', position, {
+        ...inheritNodeCategory(source.data),
         generationMode: 'cutout', cutoutModelId: state.selectedModelId,
         generationTitle: t('cutout.title'), createdAt: new Date().toISOString(), isLoading: true,
         sourceImageAssetId,

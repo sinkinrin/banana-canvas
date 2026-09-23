@@ -91,7 +91,8 @@ export function SoftwareUpdatePanel() {
   const statusIsSuccess = state.phase === 'up-to-date' || state.phase === 'downloaded';
 
   return (
-    <div data-software-update-panel="true" className="space-y-5 p-6">
+    <div data-software-update-panel="true" className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-6">
+      <div className="min-h-0 space-y-5 overflow-y-auto">
       <section
         className="rounded-xl border p-5"
         style={{ background: '#18150F', borderColor: 'rgba(242,193,78,0.14)' }}
@@ -210,7 +211,23 @@ export function SoftwareUpdatePanel() {
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap gap-2">
+
+      </section>
+
+      {(state.releaseName || state.releaseNotes) && (
+        <section className="rounded-xl border p-5" style={{ background: '#18150F', borderColor: 'rgba(242,193,78,0.14)' }}>
+          <h3 className="font-semibold">{state.releaseName || t('updates.releaseNotesTitle', { version: state.latestVersion })}</h3>
+          <div
+            className="mt-3 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border p-4 text-sm leading-6"
+            style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.1)', color: '#B8A58D' }}
+          >
+            {state.releaseNotes || t('updates.noReleaseNotes')}
+          </div>
+        </section>
+      )}
+      </div>
+      <footer className="mt-3 shrink-0 border-t border-[#F2C14E]/15 pt-3" data-update-actions="true">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             disabled={!state.supported || busy || !bridge}
@@ -260,19 +277,7 @@ export function SoftwareUpdatePanel() {
         <p className="mt-4 text-xs leading-5" style={{ color: '#96836F' }}>
           {t('updates.unsignedWarning')}
         </p>
-      </section>
-
-      {(state.releaseName || state.releaseNotes) && (
-        <section className="rounded-xl border p-5" style={{ background: '#18150F', borderColor: 'rgba(242,193,78,0.14)' }}>
-          <h3 className="font-semibold">{state.releaseName || t('updates.releaseNotesTitle', { version: state.latestVersion })}</h3>
-          <div
-            className="mt-3 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border p-4 text-sm leading-6"
-            style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.1)', color: '#B8A58D' }}
-          >
-            {state.releaseNotes || t('updates.noReleaseNotes')}
-          </div>
-        </section>
-      )}
+      </footer>
     </div>
   );
 }

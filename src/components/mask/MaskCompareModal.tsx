@@ -26,15 +26,15 @@ export function MaskCompareModal({
       onClick={onClose}
     >
       <section
-        className="w-full max-w-6xl rounded-3xl border p-5 shadow-2xl"
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col rounded-3xl border p-5 shadow-2xl"
         style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.22)' }}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold" style={{ color: '#EEE4CE' }}>{t('mask.compareTitle')}</h2>
             {prompt && (
-              <p className="mt-1 max-w-3xl text-sm" style={{ color: '#96836F' }}>{prompt}</p>
+              <p className="mt-1 max-h-20 max-w-3xl overflow-y-auto text-sm" style={{ color: '#96836F' }}>{prompt}</p>
             )}
           </div>
           <button
@@ -47,7 +47,7 @@ export function MaskCompareModal({
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid min-h-0 gap-4 overflow-y-auto md:grid-cols-2">
           <figure className="rounded-2xl border p-3" style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.14)' }}>
             <figcaption className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
               {t('mask.original')}
@@ -66,7 +66,7 @@ export function MaskCompareModal({
           </figure>
         </div>
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <div className="mt-5 flex shrink-0 flex-wrap justify-end gap-2">
           <button
             type="button"
             onClick={onUseAsReference}

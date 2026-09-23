@@ -23,6 +23,10 @@ const updateSubscriptions = new Map<string, (_event: Electron.IpcRendererEvent, 
 let nextUpdateSubscriptionId = 0;
 
 contextBridge.exposeInMainWorld('bananaDesktop', Object.freeze({
+  comparison: Object.freeze({
+    get: () => ipcRenderer.invoke('banana:comparison:get'),
+    set: (selection: unknown) => ipcRenderer.invoke('banana:comparison:set', selection),
+  }),
   window: Object.freeze({
     getState: () => ipcRenderer.invoke(WINDOW_STATE_CHANNEL),
     minimize: () => ipcRenderer.invoke(WINDOW_MINIMIZE_CHANNEL),

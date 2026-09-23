@@ -3,7 +3,9 @@ import { generateImageWithInfo as generateImage, type GenerateImageParams } from
 import { asGenerationResult, type GenerationResult } from '../../lib/generationInfo';
 import { normalizeComparisonModels } from '../../lib/modelComparison';
 import i18n from '../../i18n';
-import type { AppNode } from '../../store';
+import { useStore, type AppNode } from '../../store';
+import { inheritNodeCategory } from '../../lib/nodeCategories';
+import { registerGenerationTask } from '../../lib/generationTasks';
 import type { InlineImageData } from '../../lib/canvasState';
 import {
   isBananaImageModel,
@@ -185,7 +187,15 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
         const results = await Promise.allSettled(
           createdNodeIds.map(async (nodeId, index) => {
             const model = models[index];
+            const taskController = models.length === 1 ? controller : new AbortController();
+            const abortTask = () => taskController.abort();
+            if (taskController !== controller) {
+              if (controller.signal.aborted) abortTask();
+              else controller.signal.addEventListener('abort', abortTask, { once: true });
+            }
+            const unregister = registerGenerationTask(nodeId, taskController);
             try {
+              taskController.signal.throwIfAborted();
               const result = asGenerationResult(await deps.generateImage({
                 prompt,
                 imageModel: model,
@@ -194,11 +204,11 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 bananaOptions: isBananaImageModel(model) ? input.bananaOptions : undefined,
                 image2Options: isImage2Model(model) ? input.image2Options : undefined,
                 referenceImages: toReferencePayload(input.referenceImages),
-                signal: controller.signal,
+                signal: taskController.signal,
               }));
               const { imageUrl, generationInfo } = result;
 
-              if (controller.signal.aborted) {
+              if (taskController.signal.aborted) {
                 deps.deleteNode(nodeId);
                 throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
               }
@@ -219,9 +229,9 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
               deps.onGeneratedCountChange?.(generatedCount);
               return imageUrl;
             } catch (error) {
-              if (isAbortError(error)) {
+              if (taskController.signal.aborted || isAbortError(error)) {
                 deps.deleteNode(nodeId);
-                throw error;
+                throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
               }
 
               const errorMessage = getErrorMessage(error);
@@ -230,6 +240,9 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 error: errorMessage,
               });
               throw error;
+            } finally {
+              controller.signal.removeEventListener('abort', abortTask);
+              unregister();
             }
           })
         );
@@ -299,7 +312,9 @@ export function usePromptGeneration({
     runnerRef.current = createPromptGenerationRunner({
       generateImage,
       updateNodeData: (targetNodeId, patch) => depsRef.current.updateNodeData(targetNodeId, patch),
-      addNode: (type, position, data) => depsRef.current.addNode(type, position, data),
+      addNode: (type, position, data) => depsRef.current.addNode(type, position, {
+        ...data, ...inheritNodeCategory(useStore.getState().nodes.find(node => node.id === depsRef.current.nodeId)?.data),
+      }),
       deleteNode: (targetNodeId) => depsRef.current.deleteNode(targetNodeId),
       setEdges: (edges) => depsRef.current.setEdges(edges),
       commitPrompt: (prompt) => depsRef.current.commitPrompt(prompt),

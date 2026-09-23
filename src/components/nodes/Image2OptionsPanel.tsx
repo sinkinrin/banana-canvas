@@ -66,7 +66,14 @@ export function Image2OptionsPanel({ imageModel = 'image2', value, hasReferenceI
   };
 
   return (
-    <div className="space-y-4 rounded-xl p-3" style={{ background: 'rgba(242,193,78,0.04)', border: '1px solid rgba(242,193,78,0.12)' }}>
+    <details data-advanced-options="image2" className="rounded-xl p-3" style={{ background: 'rgba(242,193,78,0.04)', border: '1px solid rgba(242,193,78,0.12)' }}>
+      <summary className="cursor-pointer text-xs text-[#F2C14E]">
+        <span className="inline-flex items-center gap-2">
+          {isImage25 ? t('image2Options.advanced25') : t('image2Options.advanced')}
+          {((options.quality && options.quality !== 'auto') || outputFormat !== 'png' || (options.responseFormat && options.responseFormat !== 'b64_json') || partialImages !== 1 || (supportsCompression && compression !== 100) || (options.background && options.background !== 'opaque')) && <span className="text-[10px] text-[#B8A58D]">{t('categories.custom')}</span>}
+        </span>
+      </summary>
+      <div className="mt-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
           <Info size={13} />
@@ -185,6 +192,7 @@ export function Image2OptionsPanel({ imageModel = 'image2', value, hasReferenceI
           className="nodrag nowheel w-full accent-[#F2C14E] disabled:opacity-30"
         />
       </div>
-    </div>
+      </div>
+    </details>
   );
 }

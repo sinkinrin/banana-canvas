@@ -261,7 +261,7 @@ export function MaskEditorModal({
   const content = (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#16130F]/95 p-4 backdrop-blur-md">
       <section
-        className="grid max-h-[94vh] w-full max-w-6xl grid-rows-[auto_1fr] overflow-hidden rounded-3xl border shadow-2xl"
+        className="grid h-[94vh] w-full max-w-6xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-3xl border shadow-2xl"
         style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.22)' }}
       >
         <div className="flex items-center justify-between gap-4 border-b px-5 py-4" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
@@ -276,14 +276,14 @@ export function MaskEditorModal({
           </button>
         </div>
 
-        <div className="grid min-h-0 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border" style={{ background: '#0F0D0A', borderColor: 'rgba(242,193,78,0.14)' }}>
+        <div className="grid min-h-0 grid-rows-2 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:grid-rows-1">
+          <div data-mask-preview="true" className="flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border" style={{ containerType: 'size', background: '#0F0D0A', borderColor: 'rgba(242,193,78,0.14)' }}>
             <div className="relative max-h-full max-w-full">
               <img
                 ref={imageRef}
                 src={sourceImage.url}
                 alt={t('mask.sourceAlt')}
-                className="max-h-[70vh] max-w-full select-none rounded-xl object-contain"
+                className="max-h-[100cqh] max-w-[100cqw] select-none rounded-xl object-contain"
                 draggable={false}
               />
               <canvas
@@ -299,7 +299,8 @@ export function MaskEditorModal({
             </div>
           </div>
 
-          <aside className="space-y-4 overflow-y-auto rounded-2xl border p-4" style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.12)' }}>
+          <aside className="flex min-h-0 flex-col rounded-2xl border p-4" style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.12)' }}>
+            <div className="min-h-0 space-y-4 overflow-y-auto">
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -378,11 +379,12 @@ export function MaskEditorModal({
               </p>
             )}
 
+            </div>
             <button
               type="button"
               disabled={!canGenerate}
               onClick={handleGenerate}
-              className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45"
+              className="mt-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45"
               style={{ background: '#F2C14E', color: '#16130F' }}
             >
               {isGenerating && <Loader2 size={16} className="animate-spin" />}

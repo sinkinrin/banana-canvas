@@ -4,6 +4,7 @@ import { generateImageWithInfo as generateImage, type GenerateImageParams } from
 import type { InlineImageData } from '../../lib/canvasState';
 import { getImage2MaskModel, type ImageModelId, type Image2Options } from '../../lib/imageModels';
 import type { MaskGeneratePayload } from '../mask/MaskEditorModal';
+import { registerGenerationTask } from '../../lib/generationTasks';
 
 type MaskImage = MaskGeneratePayload['maskImage'];
 
@@ -84,6 +85,7 @@ export function createMaskGenerationRunner(sourceNodeId: string, generate = gene
       const controller = new AbortController();
       const projectSessionId = useStore.getState().projectSessionId;
       controllers.add(controller);
+      const unregister = registerGenerationTask(resultNodeId, controller);
       const unsubscribe = useStore.subscribe((state) => {
         if (state.projectSessionId !== projectSessionId ||
           !state.nodes.some((node) => node.id === sourceNodeId) ||
@@ -94,6 +96,7 @@ export function createMaskGenerationRunner(sourceNodeId: string, generate = gene
         controller.signal.throwIfAborted();
         return result;
       } finally {
+        unregister();
         unsubscribe();
         controllers.delete(controller);
       }

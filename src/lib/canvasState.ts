@@ -63,6 +63,7 @@ export type CanvasNodeData = {
   isLoading?: boolean;
   error?: string;
   color?: string;
+  categoryName?: string;
   createdAt?: string;
   generationTitle?: string;
   sketch?: CanvasSketchData;
@@ -241,6 +242,7 @@ function sanitizeNodeDataForSnapshot(data: CanvasNodeData): CanvasNodeData {
     generationMode: data.generationMode,
     cutoutModelId: data.cutoutModelId,
     color: data.color,
+    categoryName: typeof data.categoryName === 'string' ? data.categoryName.trim().slice(0, 32) || undefined : undefined,
     createdAt: data.createdAt,
     generationTitle: data.generationTitle,
     sketch: data.sketch,

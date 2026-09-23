@@ -1,6 +1,7 @@
 import { en, type LocaleResource } from './en';
 
 export const zhCN: LocaleResource<typeof en> = {
+  categories: { title: '节点分类', assign: '节点分类', unassigned: '未分类', color: '分类 {{index}}', name: '分类名称', hint: '点击颜色归类。归类后可命名，同色节点共用名称；修改后自动保存。', all: '定位全部', locate: '定位分类', custom: '已自定义' },
   window: { minimize: '最小化窗口', maximize: '最大化窗口', restore: '还原窗口', close: '关闭窗口' },
   comparison: {
     title: '多模型对比', description: '使用同一提示词和参考图，每个模型生成一张。共用下方的画幅和分辨率；高级参数仅在模型支持时生效。',
@@ -270,7 +271,7 @@ export const zhCN: LocaleResource<typeof en> = {
     generatingProgress: '生成中 {{generated}}/{{total}}',
     generating: '生成中...',
     generate: '生成图像 · {{model}}',
-    resetLoading: '如果长时间无响应，点击此处重置状态',
+    resetLoading: '停止全部未完成任务',
     maskEditTitle: '局部编辑参考图',
     generationTask: '生成任务',
     maskGenerationTitle: 'Image2 局部编辑 | {{prompt}}',
@@ -394,6 +395,7 @@ export const zhCN: LocaleResource<typeof en> = {
     rerunFailed: '重新生成失败，请重试',
   },
   generating: {
+    stopTask: '停止此任务', stopped: '任务已停止',
     failed: '生成失败',
     active: '生成中',
     elapsed: '已耗时 {{time}}',

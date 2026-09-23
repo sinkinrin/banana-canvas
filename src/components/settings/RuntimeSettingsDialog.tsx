@@ -125,11 +125,11 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="runtime-settings-title"
-        className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border shadow-2xl"
+        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
         style={{ background: '#1D1A14', borderColor: 'rgba(242,193,78,0.24)', color: '#EEE4CE' }}
       >
         <header
-          className="sticky top-0 z-10 flex items-center justify-between border-b px-6 py-4"
+          className="shrink-0 flex items-center justify-between border-b px-6 py-4"
           style={{ background: 'rgba(29,26,20,0.98)', borderColor: 'rgba(242,193,78,0.14)' }}
         >
           <div className="flex items-center gap-3">
@@ -152,7 +152,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
         </header>
 
         <nav
-          className="sticky top-[73px] z-10 flex flex-wrap gap-1 border-b px-6 py-2"
+          className="shrink-0 flex flex-wrap gap-1 border-b px-6 py-2"
           style={{ background: 'rgba(29,26,20,0.98)', borderColor: 'rgba(242,193,78,0.12)' }}
           aria-label={t('settings.categories')}
           role="tablist"
@@ -201,7 +201,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
             {errorMessage ? errorMessage : <><Loader2 size={18} className="animate-spin" />{t('settings.loading')}</>}
           </div>
         ) : (
-          <div className="space-y-6 p-6">
+          <div className="min-h-0 space-y-6 overflow-y-auto p-6" data-settings-body="true">
             <section className="rounded-xl border p-5" style={{ background: '#18150F', borderColor: 'rgba(242,193,78,0.14)' }}>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -419,14 +419,16 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                 </label>
               </div>
             </section>
-
+          </div>
+        )}
+        {activeTab === 'models' && form && settings && <div className="shrink-0 space-y-2 border-t border-[#F2C14E]/15 px-6 py-3">
             {(message || errorMessage) && (
               <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: errorMessage ? 'rgba(217,123,58,0.3)' : 'rgba(124,203,138,0.3)', color: errorMessage ? '#D97B3A' : '#7CCB8A', background: errorMessage ? 'rgba(217,123,58,0.08)' : 'rgba(124,203,138,0.08)' }}>
                 {errorMessage || message}
               </div>
             )}
 
-            <footer className="flex flex-wrap items-center justify-between gap-3">
+            <footer className="flex flex-wrap items-center justify-between gap-3" data-settings-actions="true">
               <p className="text-xs" style={{ color: '#96836F' }}>
                 {t('settings.hotReloadHint')}
               </p>
@@ -446,8 +448,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
             </footer>
-          </div>
-        )}
+        </div>}
       </section>
     </div>
   );

@@ -36,6 +36,8 @@ import {
 } from './updateManager';
 import { createUpdatePreferencesStore } from './updatePreferences';
 import { runComparisonSmoke } from './comparisonSmoke';
+import { runLayoutSmoke } from './layoutSmoke';
+import { normalizeComparisonSelection } from '../src/lib/modelComparison';
 import { runReferenceImageSmoke } from './referenceImageSmoke';
 import { runGenerationViewportSmoke } from './generationViewportSmoke';
 import { registerWindowControls, observeWindowState } from './windowControls';
@@ -106,6 +108,20 @@ ipcMain.handle(SET_APP_LANGUAGE_CHANNEL, async (event, language: unknown) => {
   }
   desktopLanguage = language;
   mainWindow?.setTitle(getNativeAppMessages(desktopLanguage).appName);
+});
+
+ipcMain.handle('banana:comparison:get', (event) => {
+  assertApplicationWindowSender(event, 'Comparison preferences');
+  if (event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid preference sender');
+  try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'comparison-preferences.json'), 'utf8')); }
+  catch { return null; }
+});
+ipcMain.handle('banana:comparison:set', (event, value: unknown) => {
+  assertApplicationWindowSender(event, 'Comparison preferences');
+  if (event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid preference sender');
+  const destination = path.join(app.getPath('userData'), 'comparison-preferences.json');
+  fs.writeFileSync(`${destination}.tmp`, JSON.stringify(normalizeComparisonSelection(value)), 'utf8');
+  fs.renameSync(`${destination}.tmp`, destination);
 });
 
 function getUpdatePreferencesStore() {
@@ -1131,6 +1147,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   await runCutoutSmoke({ window, localUrl, flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runGenerationViewportSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runComparisonSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+  await runLayoutSmoke({ window, localUrl, imageUrl: nativeImage.createFromDataURL(createSmokeJpegDataUrl()).resize({ width: 640, height: 480 }).toDataURL(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runReferencePreviewSmokeTest(localUrl, window);
   await runReferenceImageSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, QuickDraw and cutout probes passed');
@@ -1240,6 +1257,11 @@ async function createMainWindow() {
 
   if (isSmokeTest()) {
     if (process.env.BANANA_SMOKE_RESTART !== '1') await runSmokeTest(localServer.url, mainWindow);
+    else {
+      const persisted = await mainWindow.webContents.executeJavaScript(`bananaDesktop.comparison.get()`);
+      if (persisted?.aspectRatio !== '16:9' || persisted?.imageSize !== '2K' || persisted?.models?.join(',') !== 'image2.5-flare,image2.5-sunburst') throw new Error('Comparison preferences did not survive desktop restart');
+      console.info('[banana:smoke] comparison models, ratio and resolution survived desktop restart on a new local port');
+    }
     await runWindowCloseSmoke({ window: mainWindow, localUrl: localServer.url, waitForPredicate: waitForSmokePredicate });
   }
 }

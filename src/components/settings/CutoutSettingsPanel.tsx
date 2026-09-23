@@ -24,7 +24,7 @@ export function CutoutSettingsPanel() {
     catch (failure) { setError(cutoutErrorMessage(failure)); }
     finally { setPending(false); }
   }
-  return <div data-cutout-settings="true" className="space-y-5 p-6">
+  return <div data-cutout-settings="true" className="min-h-0 space-y-5 overflow-y-auto p-6">
     <div className="flex gap-3"><Scissors size={22} className="mt-1 shrink-0 text-[#F2C14E]" /><div>
       <h3 className="font-semibold">{t('cutout.settingsTitle')}</h3>
       <p className="mt-1 text-xs leading-5 text-[#96836F]">{t('cutout.settingsDescription')}</p>

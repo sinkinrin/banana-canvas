@@ -21,6 +21,7 @@ import { APP_VERSION } from '../lib/appVersion';
 import { DEFAULT_IMAGE_MODEL } from '../lib/imageModels';
 import { BookOpen, Plus, Sparkles, Undo2, Redo2, LayoutGrid, Maximize2 } from 'lucide-react';
 import { PromptLibraryDialog } from './prompts/PromptLibraryDialog';
+import { getNodeCategories } from '../lib/nodeCategories';
 
 function CanvasInner() {
   const { t } = useAppTranslation();
@@ -39,6 +40,8 @@ function CanvasInner() {
 
   const [confirmClear, setConfirmClear] = useState(false);
   const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
+  const categories = getNodeCategories(nodes);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -197,6 +200,7 @@ function CanvasInner() {
         <Background variant={BackgroundVariant.Dots} gap={24} size={2} color="rgba(242,193,78,0.08)" />
         <Controls className="bg-white shadow-lg border-none rounded-xl overflow-hidden" />
         <MiniMap
+          nodeColor={node => typeof node.data.color === 'string' ? node.data.color : '#96836F'}
           className="bg-white shadow-lg rounded-xl overflow-hidden border-none"
           maskColor="rgba(22, 19, 15, 0.8)"
         />
@@ -262,6 +266,19 @@ function CanvasInner() {
                 <LayoutGrid size={16} />
               </button>
             </div>
+          </div>
+          <div className="w-72 max-w-[80vw] rounded-xl border border-[#F2C14E]/20 bg-[#1D1A14]/95 p-2 text-xs text-[#EEE4CE]" data-category-panel="true">
+            <button type="button" className="w-full p-1 text-left" aria-expanded={showCategories} onClick={() => setShowCategories(value => !value)}>{t('categories.title')} · {nodes.length} {showCategories ? '▾' : '▸'}</button>
+            {showCategories && <div className="mt-2 max-h-[30vh] space-y-1 overflow-y-auto">
+              <button type="button" className="w-full rounded p-2 text-left hover:bg-white/5" onClick={() => fitView({ padding: 0.2, duration: 300 })}>{t('categories.all')} ({nodes.length})</button>
+              {[{ color: '', name: t('categories.unassigned'), ids: nodes.filter(node => !node.data.color).map(node => node.id) }, ...categories].filter(category => category.ids.length).map(category => <button
+                key={category.color} type="button" data-locate-category={category.color} title={t('categories.locate')}
+                className="flex w-full items-center gap-2 rounded p-2 text-left hover:bg-white/5"
+                onClick={() => fitView({ nodes: category.ids.map(id => ({ id })), padding: 0.2, duration: 300 })}>
+                <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: category.color || '#96836F' }} />
+                <span className="min-w-0 flex-1 truncate">{category.name || t('categories.color', { index: categories.indexOf(category) + 1 })}</span><span>{category.ids.length}</span>
+              </button>)}
+            </div>}
           </div>
         </Panel>
 

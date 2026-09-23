@@ -8,6 +8,7 @@ type GeneratingImagePlaceholderProps = {
   prompt?: string;
   createdAt?: string;
   error?: string;
+  onCancel?: () => void;
 };
 
 function formatGenerationTime(createdAt: string | undefined, locale: string) {
@@ -60,6 +61,7 @@ export function GeneratingImagePlaceholder({
   prompt,
   createdAt,
   error,
+  onCancel,
 }: GeneratingImagePlaceholderProps) {
   const { t, i18n } = useAppTranslation();
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -114,6 +116,8 @@ export function GeneratingImagePlaceholder({
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#F2C14E]" />
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#F2C14E] [animation-delay:120ms]" />
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#F2C14E] [animation-delay:240ms]" />
+            {onCancel && <button type="button" data-generation-cancel="true" className="nodrag nopan nowheel ml-2 rounded-full border border-[#F2C14E]/40 px-3 py-1 text-[#EEE4CE] hover:bg-[#F2C14E]/15"
+              onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); onCancel(); }}>{t('generating.stopTask')}</button>}
           </div>
         )}
       </div>

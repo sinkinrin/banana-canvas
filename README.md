@@ -8,7 +8,9 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.9.4`
+Current version: `0.10.0`
+
+Node categories now support shared color labels, counts, and one-click navigation. Categories are saved with each project and inherited by generated results.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
@@ -18,7 +20,7 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 
 - **Frameless desktop window** — a matching draggable title area with minimize, maximize/restore, and close controls; closing waits for project saves and fully exits the app.
 - **Visual generation workflow** — build and rearrange prompt-to-image flows with React Flow.
-- **Multi-model comparisons** — generate one image per selected model from the same prompt and references, inspect results with synchronized zoom/pan, and save your preferred result.
+- **Multi-model comparisons** — generate one image per selected model from the same prompt and references, navigate the group on the canvas, stop individual tasks, and mark your preferred result.
 - **Result information** — inspect actual dimensions/format, generation time, requested API model, and server-reported model/quality. Missing metadata is shown as unrecorded.
 - **Server model catalog** — query, refresh, and search the saved relay's standard model list in App settings.
 - **Multiple image models** — use Image2 by default, or choose Image 2.5 Flare, Image 2.5 Sunburst, Banana 2, Banana 2 Lite, and Banana Pro.
@@ -83,7 +85,7 @@ Browsing projects, arranging a canvas, viewing saved images, and local desktop b
 5. Generate images, then branch from a result or use mask editing for targeted changes.
 6. Use auto layout, fit-to-view, undo, redo, and the prompt library as the canvas grows.
 
-Choose **Compare models** on a creation node to select at least two models and shared aspect ratio/resolution. Each model generates one image and may incur its own charge. Results stay side by side on the canvas; **View comparison** reopens the group after saving or restarting. A failed request does not discard the other results. See [Comparison and result details](docs/COMPARISON.md).
+Choose **Compare models** on a creation node to select at least two models and shared aspect ratio/resolution. Starting returns directly to the canvas. Each model generates one image and may incur its own charge. Results stay side by side; **View comparison** locates the group on the canvas after saving or restarting. Stopping or failing one request does not discard the other results. See [Comparison and result details](docs/COMPARISON.md).
 
 ## Language
 

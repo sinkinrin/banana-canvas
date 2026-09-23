@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useAppTranslation } from '../../i18n';
 import { BookOpen, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
-import { cn } from '../../lib/utils';
 import { optimizePrompt } from '../../services/gemini';
 import { PromptTextarea } from './PromptTextarea';
 import {
@@ -23,7 +22,9 @@ import {
 } from '../../lib/imageModels';
 import { BananaOptionsPanel } from './BananaOptionsPanel';
 import { Image2OptionsPanel } from './Image2OptionsPanel';
-import { ModelComparisonSetup, ModelComparisonResults, type ComparisonSelection } from './ModelComparisonDialog';
+import { ModelComparisonSetup, type ComparisonSelection } from './ModelComparisonDialog';
+import { NodeCategory } from './NodeCategory';
+import { inheritNodeCategory } from '../../lib/nodeCategories';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { useReferenceImages } from './useReferenceImages';
 import { buildPromptMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
@@ -84,7 +85,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const [prompt, setPrompt] = useState(data.prompt || '');
   const [showSettings, setShowSettings] = useState(false);
   const [showComparisonSetup, setShowComparisonSetup] = useState(false);
-  const [comparisonGroupId, setComparisonGroupId] = useState<string>();
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [previewSource, setPreviewSource] = useState<{ image: InlineImageData; index: number } | null>(null);
   const [maskEditorSource, setMaskEditorSource] = useState<{ image: InlineImageData; index: number } | null>(null);
@@ -173,6 +173,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       { x: baseX, y: baseY },
       {
         prompt: maskPrompt,
+        ...inheritNodeCategory(data),
         imageModel: getImage2MaskModel(imageModel),
         aspectRatio: maskEditAspectRatio,
         imageSize,
@@ -222,7 +223,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       });
       setMaskEditorSource(null);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('promptNode.errors.maskGeneration');
+      const errorMessage = error instanceof Error && error.name === 'AbortError' ? t('generating.stopped') : error instanceof Error ? error.message : t('promptNode.errors.maskGeneration');
       updateNodeData(placeholderNodeId, {
         isLoading: false,
         error: errorMessage,
@@ -270,7 +271,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const handleCompare = (selection: ComparisonSelection) => {
     const groupId = crypto.randomUUID();
     setShowComparisonSetup(false);
-    setComparisonGroupId(groupId);
     void runGeneration({ prompt, imageModel, imageModelLabel, ...selection,
       comparisonModels: selection.models, comparisonGroupId: groupId,
       bananaOptions, image2Options, batchCount: 1, referenceImageIds, referenceImages, hasPendingReferenceHydration });
@@ -325,6 +325,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           </div>
         </div>
 
+        <NodeCategory nodeId={id} />
         <div className="space-y-4">
           <div className="relative">
             <PromptTextarea
@@ -461,6 +462,59 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </p>
           </div>
 
+          {data.error && (
+            <div className="p-3 text-xs rounded-lg" style={{background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#F87171'}}>
+              {data.error}
+            </div>
+          )}
+
+          <button type="button" data-compare-models="true" disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration} onClick={() => setShowComparisonSetup(true)} className="nodrag nopan nowheel w-full rounded-xl border border-[#F2C14E]/30 py-2 text-sm text-[#F2C14E] disabled:opacity-40">{t('comparison.title')}</button>
+          {showComparisonSetup && <ModelComparisonSetup defaults={{ aspectRatio, imageSize }} onClose={() => setShowComparisonSetup(false)} onStart={handleCompare} />}
+
+          <button
+            type="button"
+            onClick={() => handleGenerate()}
+            disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration}
+            className="nodrag nopan nowheel w-full py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            style={{
+              background: data.isLoading || !prompt.trim()
+                ? 'rgba(242,193,78,0.15)'
+                : 'linear-gradient(135deg, #F2C14E 0%, #D97B3A 100%)',
+              color: data.isLoading || !prompt.trim() ? '#5C4E3E' : '#16130F',
+              boxShadow: data.isLoading || !prompt.trim()
+                ? 'none'
+                : '0 4px 20px rgba(242,193,78,0.3)',
+            }}
+          >
+            {data.isLoading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>{taskCount > 1
+                  ? t('promptNode.generatingProgress', { generated: generatedCount, total: taskCount })
+                  : t('promptNode.generating')}</span>
+              </>
+            ) : (
+              <>
+                <ImageIcon size={18} />
+                <span>{t('promptNode.generate', { model: imageModelLabel })}</span>
+              </>
+            )}
+          </button>
+
+          {data.isLoading && (
+            <button
+              type="button"
+              onClick={() => {
+                abortGeneration();
+                updateNodeData(id, { isLoading: false });
+              }}
+              className="nodrag nopan nowheel w-full py-1 text-[10px] transition-colors hover:text-[#96836F]"
+              style={{color: '#5C4E3E'}}
+            >
+              {t('promptNode.resetLoading')}
+            </button>
+          )}
+
           {showSettings && (
             <div className="nodrag nopan nowheel p-4 rounded-xl space-y-4" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.1)'}} onPointerDown={(event) => event.stopPropagation()}>
               <div className="space-y-2">
@@ -510,32 +564,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 </select>
               </div>
 
-              {isBananaImageModel(imageModel) && (
-                <BananaOptionsPanel
-                  imageModel={imageModel}
-                  value={bananaOptions}
-                  hasReferenceImages={referenceImages.length > 0}
-                  onChange={(nextOptions) => {
-                    updateNodeData(id, {
-                      bananaOptions: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
-                    });
-                  }}
-                />
-              )}
-
-              {isImage2Model(imageModel) && (
-                <Image2OptionsPanel
-                  imageModel={imageModel}
-                  value={image2Options}
-                  hasReferenceImages={referenceImages.length > 0}
-                  onChange={(nextOptions) => {
-                    updateNodeData(id, {
-                      image2Options: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
-                    });
-                  }}
-                />
-              )}
-
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.resolution')}</label>
                 <select
@@ -578,85 +606,35 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.nodeColor')}</label>
-                <div className="flex gap-2 flex-wrap">
-                  {['', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444'].map(color => (
-                    <button
-                      type="button"
-                      key={color}
-                      onClick={() => {
-                        updateNodeData(id, { color });
-                      }}
-                      className={cn(
-                        "w-6 h-6 rounded-full border-2 transition-all",
-                        (data.color || '') === color ? "scale-110" : "border-transparent"
-                      )}
-                      style={{
-                        backgroundColor: color || '#2A2620',
-                        borderColor: (data.color || '') === color ? '#F2C14E' : 'transparent'
-                      }}
-                      title={color ? color : t('common.default')}
-                    />
-                  ))}
-                </div>
-              </div>
+              {isBananaImageModel(imageModel) && (
+                <BananaOptionsPanel
+                  imageModel={imageModel}
+                  value={bananaOptions}
+                  hasReferenceImages={referenceImages.length > 0}
+                  onChange={(nextOptions) => {
+                    updateNodeData(id, {
+                      bananaOptions: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
+                    });
+                  }}
+                />
+              )}
+
+              {isImage2Model(imageModel) && (
+                <Image2OptionsPanel
+                  imageModel={imageModel}
+                  value={image2Options}
+                  hasReferenceImages={referenceImages.length > 0}
+                  onChange={(nextOptions) => {
+                    updateNodeData(id, {
+                      image2Options: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
+                    });
+                  }}
+                />
+              )}
+
             </div>
           )}
 
-          {data.error && (
-            <div className="p-3 text-xs rounded-lg" style={{background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#F87171'}}>
-              {data.error}
-            </div>
-          )}
-
-          <button type="button" data-compare-models="true" disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration} onClick={() => setShowComparisonSetup(true)} className="nodrag nopan nowheel w-full rounded-xl border border-[#F2C14E]/30 py-2 text-sm text-[#F2C14E] disabled:opacity-40">{t('comparison.title')}</button>
-          {showComparisonSetup && <ModelComparisonSetup onClose={() => setShowComparisonSetup(false)} onStart={handleCompare} />}
-          {comparisonGroupId && <ModelComparisonResults groupId={comparisonGroupId} onClose={() => setComparisonGroupId(undefined)} />}
-
-          <button
-            type="button"
-            onClick={() => handleGenerate()}
-            disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration}
-            className="nodrag nopan nowheel w-full py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            style={{
-              background: data.isLoading || !prompt.trim()
-                ? 'rgba(242,193,78,0.15)'
-                : 'linear-gradient(135deg, #F2C14E 0%, #D97B3A 100%)',
-              color: data.isLoading || !prompt.trim() ? '#5C4E3E' : '#16130F',
-              boxShadow: data.isLoading || !prompt.trim()
-                ? 'none'
-                : '0 4px 20px rgba(242,193,78,0.3)',
-            }}
-          >
-            {data.isLoading ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                <span>{taskCount > 1
-                  ? t('promptNode.generatingProgress', { generated: generatedCount, total: taskCount })
-                  : t('promptNode.generating')}</span>
-              </>
-            ) : (
-              <>
-                <ImageIcon size={18} />
-                <span>{t('promptNode.generate', { model: imageModelLabel })}</span>
-              </>
-            )}
-          </button>
-
-          {data.isLoading && (
-            <button
-              type="button"
-              onClick={() => {
-                abortGeneration();
-                updateNodeData(id, { isLoading: false });
-              }}
-              className="nodrag nopan nowheel w-full py-1 text-[10px] transition-colors hover:text-[#96836F]"
-              style={{color: '#5C4E3E'}}
-            >
-              {t('promptNode.resetLoading')}
-            </button>
-          )}
         </div>
       </div>
 

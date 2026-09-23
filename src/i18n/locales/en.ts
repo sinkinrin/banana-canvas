@@ -1,4 +1,5 @@
 export const en = {
+  categories: { title: 'Categories', assign: 'Node category', unassigned: 'Unassigned', color: 'Category {{index}}', name: 'Category name', hint: 'Choose a color to assign. Name an assigned category; all nodes of that color share its name.', all: 'Locate all', locate: 'Locate category', custom: 'Customized' },
   window: { minimize: 'Minimize window', maximize: 'Maximize window', restore: 'Restore window', close: 'Close window' },
   comparison: {
     title: 'Compare models', description: 'Use the same prompt and reference images across models, with one image per model. Shared aspect ratio and resolution are selected below; advanced options apply only where supported.',
@@ -268,7 +269,7 @@ export const en = {
     generatingProgress: 'Generating {{generated}}/{{total}}',
     generating: 'Generating...',
     generate: 'Generate · {{model}}',
-    resetLoading: 'If this is taking too long, click here to reset the state',
+    resetLoading: 'Stop all unfinished tasks',
     maskEditTitle: 'Edit reference image',
     generationTask: 'Generation task',
     maskGenerationTitle: 'Image2 mask edit | {{prompt}}',
@@ -392,6 +393,7 @@ export const en = {
     rerunFailed: 'Regeneration failed. Please try again.',
   },
   generating: {
+    stopTask: 'Stop this task', stopped: 'Task stopped',
     failed: 'Generation failed',
     active: 'Generating',
     elapsed: 'Elapsed {{time}}',

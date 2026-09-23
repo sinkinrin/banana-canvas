@@ -1,4 +1,4 @@
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, useReactFlow } from '@xyflow/react';
 import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, GitCompare, CircleAlert, Scissors, Loader2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAppTranslation } from '../../i18n';
@@ -24,7 +24,10 @@ import {
 } from '../../lib/imageModels';
 import { GeneratingImagePlaceholder } from './GeneratingImagePlaceholder';
 import { GenerationInfoCard } from './GenerationInfoCard';
-import { ModelComparisonResults } from './ModelComparisonDialog';
+import { markComparisonWinner } from '../../lib/modelComparison';
+import { NodeCategory } from './NodeCategory';
+import { inheritNodeCategory } from '../../lib/nodeCategories';
+import { cancelGenerationTask } from '../../lib/generationTasks';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { MaskCompareModal } from '../mask/MaskCompareModal';
 import { buildImageMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
@@ -44,7 +47,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
   const [showViewer, setShowViewer] = useState(false);
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
-  const [showModelComparison, setShowModelComparison] = useState(false);
+  const { fitView } = useReactFlow();
   const cutout = useCutout(id);
   const isCutout = data.generationMode === 'cutout';
   const [copyImageFailed, setCopyImageFailed] = useState(false);
@@ -199,12 +202,12 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     const pos = thisNode?.position || { x: 0, y: 0 };
     const newNodeId = addNode('promptNode',
       { x: pos.x + 50, y: pos.y + 300 },
-      buildReferenceNodeData({
+      { ...inheritNodeCategory(data), ...buildReferenceNodeData({
         imageModel,
         bananaOptions: data.bananaOptions,
         image2Options: data.image2Options,
         referencePayload,
-      })
+      }) }
     );
     useStore.setState((state) => ({
       edges: [...state.edges, {
@@ -229,6 +232,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       { x: pos.x + 430, y: pos.y },
       {
         prompt: maskPrompt,
+        ...inheritNodeCategory(data),
         imageModel: getImage2MaskModel(imageModel),
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
@@ -280,7 +284,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       });
       setShowMaskEditor(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('promptNode.errors.maskGeneration');
+      const errorMessage = error instanceof Error && error.name === 'AbortError' ? t('generating.stopped') : error instanceof Error ? error.message : t('promptNode.errors.maskGeneration');
       updateNodeData(placeholderNodeId, {
         isLoading: false,
         error: errorMessage,
@@ -311,6 +315,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
           prompt={data.prompt}
           createdAt={data.createdAt}
           error={data.error}
+          onCancel={data.isLoading ? () => cancelGenerationTask(id) : undefined}
         />
         <Handle type="source" position={Position.Right} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#5B9BD5', borderColor: '#ffffff'}} />
       </div>
@@ -323,7 +328,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       className="rounded-2xl overflow-hidden transition-all group"
       style={{
         background: '#1D1A14',
-        border: '1px solid rgba(242,193,78,0.15)',
+        border: `1px solid ${data.color || 'rgba(242,193,78,0.15)'}`,
         boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
         padding: '6px',
         pointerEvents: 'auto',
@@ -339,6 +344,8 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       onDoubleClick={() => setShowViewer(true)}
     >
       <Handle type="target" position={Position.Left} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#9B70D0', borderColor: '#1D1A14'}} />
+
+      <NodeCategory nodeId={id} />
 
       <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{ background: '#141210', ...(isCutout || data.image2Options?.background === 'transparent' ? CHECKERBOARD_STYLE : {}), borderRadius: '10px', overflow: 'hidden' }}>
         {imageUrl ? (
@@ -444,6 +451,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
                 aria-live="polite"
               >
                 {rerunError || (rerunSucceeded ? t('imageNode.rerunSucceeded') : `${t('imageNode.rerunning')}…`)}
+                {isRegenerating && <button type="button" className="nodrag nopan nowheel pointer-events-auto ml-2 rounded-full border border-[#F2C14E]/40 px-2 py-1" onClick={event => { event.stopPropagation(); rerunAbortRef.current?.abort(); }}>{t('generating.stopTask')}</button>}
               </div>
             )}
           </>
@@ -454,9 +462,14 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
       {isCutout && <div data-cutout-result={id} className="flex items-center gap-2 px-2 py-2 text-xs text-[#B8A58D]"><Scissors size={13} className="text-[#F2C14E]" />{t('cutout.title')}<span className="ml-auto text-[10px] text-[#96836F]">{CUTOUT_MODELS.find((model) => model.id === data.cutoutModelId)?.name}</span></div>}
       {cutout.error && <p role="alert" className="max-w-[512px] px-2 py-2 text-xs text-red-300">{cutout.error}</p>}
+      {data.comparisonGroupId && <div className="nodrag nopan nowheel m-2 flex flex-wrap gap-3 text-xs text-[#F2C14E]">
+        <button type="button" data-view-comparison="true" onClick={() => {
+          const group = useStore.getState().nodes.filter(node => node.data.comparisonGroupId === data.comparisonGroupId);
+          void fitView({ nodes: group.map(node => ({ id: node.id })), padding: 0.2, duration: 300 });
+        }}>{t('comparison.view')}</button>
+        <button type="button" data-comparison-winner="true" aria-pressed={!!data.comparisonWinner} disabled={!imageUrl || data.isLoading} onClick={() => useStore.setState(state => ({ nodes: markComparisonWinner(state.nodes, id) }))}>{t(data.comparisonWinner ? 'comparison.winner' : 'comparison.markBest')}</button>
+      </div>}
       {imageUrl && <GenerationInfoCard imageUrl={imageUrl} info={data.generationInfo} />}
-      {data.comparisonGroupId && <button type="button" className="nodrag nopan nowheel m-2 text-xs text-[#F2C14E]" onClick={() => setShowModelComparison(true)}>{data.comparisonWinner ? `${t('comparison.winner')} · ` : ''}{t('comparison.view')}</button>}
-      {showModelComparison && data.comparisonGroupId && <ModelComparisonResults groupId={data.comparisonGroupId} onClose={() => setShowModelComparison(false)} />}
       {data.prompt && (
         <div className="mt-3 px-2 pb-1 max-w-[512px] flex items-start justify-between gap-2">
           <div className="flex-1">

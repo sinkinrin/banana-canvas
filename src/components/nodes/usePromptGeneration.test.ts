@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { cancelGenerationTask } from '../../lib/generationTasks';
 
 import {
   buildGenerationReferenceData,
@@ -9,6 +10,38 @@ import {
 } from './usePromptGeneration';
 
 const referenceImage = { data: 'base64', mimeType: 'image/png', url: 'data:image/png;base64,base64' };
+
+test('stopping one comparison task aborts only its request and discards late results', async () => {
+  for (const lateResult of [false, true]) {
+    const nodes: Record<string, any> = {};
+    const requests: Array<{ signal: AbortSignal; finish: () => void }> = [];
+    let count = 0;
+    const runner = createPromptGenerationRunner({
+      generateImage: ({ signal }) => new Promise((resolve, reject) => {
+        requests.push({ signal: signal!, finish: () => resolve('data:image/png;base64,result') });
+        if (!lateResult) signal!.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), { once: true });
+      }),
+      addNode: (_type, _position, data) => { const id = `cancel-${count++}`; nodes[id] = data; return id; },
+      updateNodeData: (id, patch) => { nodes[id] = { ...nodes[id], ...patch }; },
+      deleteNode: id => { delete nodes[id]; }, setEdges: () => {}, commitPrompt: () => {}, now: () => '2026-09-23T00:00:00Z',
+    });
+    const run = runner.run({ nodeId: 'parent', prompt: 'same input', imageModel: 'image2', imageModelLabel: 'Image2', aspectRatio: '1:1', imageSize: '1K', batchCount: 2,
+      comparisonModels: ['banana', 'image2.5-flare'], comparisonGroupId: 'pair', referenceImageIds: [], referenceImages: [], hasPendingReferenceHydration: false });
+    assert.equal(requests.length, 2);
+    cancelGenerationTask('cancel-0');
+    assert.equal(requests[0].signal.aborted, true);
+    assert.equal(requests[1].signal.aborted, false);
+    assert.equal(runner.abortController?.signal.aborted, false);
+    requests.forEach(request => request.finish());
+    await run;
+    assert.equal(nodes['cancel-0'], undefined);
+    assert.equal(nodes['cancel-1'].imageUrl, 'data:image/png;base64,result');
+    assert.equal(nodes.parent.isLoading, false);
+    assert.equal(nodes.parent.error, undefined);
+    cancelGenerationTask('cancel-1');
+    assert.equal(requests[1].signal.aborted, false, 'completed task registration is cleaned up');
+  }
+});
 
 test('multi-model comparison shares input, places results side by side and isolates failures', async () => {
   const nodes: Record<string, { position: { x: number; y: number }; data: any }> = {};
