@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-15
+
+### 新增
+
+- 新增 Banana 2.1（`gemini-nano-banana-2.1`），支持 1K / 2K / 4K、14 种画幅、Google Search 和 MINIMAL / MEDIUM / HIGH 思考等级（默认 MEDIUM）；保留原有 Banana 模型及已有项目选择。
+
+### 安全更新
+
+- 更新 Electron 42.x、undici 及相关间接依赖的锁定版本，修复发布审计报告的高危与严重漏洞。
+
+### 构建改进
+
+- Windows 打包复用锁定版本的 Electron 缓存和包内校验元数据；CI 与 Release 分别缓存 Electron 运行时及构建工具，减少重复下载。
+
+### 安装提示
+
+- Windows 安装包目前未签名，安装或更新时可能出现 SmartScreen“未知发布者”提示。后台下载完成后仍由用户确认是否立即重启安装。
+
 ## [0.10.0] - 2026-09-23
 
 ### 新增

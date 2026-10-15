@@ -28,6 +28,19 @@ jobs:
           node-version: 22.17.1
           cache: npm
 
+      - name: Read Electron tool versions
+        id: electron-tools
+        shell: bash
+        run: node -e "const p=require('./package-lock.json').packages; console.log('key='+p['node_modules/electron'].version+'-'+p['node_modules/electron-builder'].version)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron runtime and builder tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-tools-${{ runner.os }}-${{ runner.arch }}-release-${{ steps.electron-tools.outputs.key }}
+
       - name: Install exact dependencies
         run: npm ci
 

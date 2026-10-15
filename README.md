@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.10.0`
+Current version: `0.11.0`
 
 Node categories now support shared color labels, counts, and one-click navigation. Categories are saved with each project and inherited by generated results.
 
@@ -23,7 +23,7 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 - **Multi-model comparisons** — generate one image per selected model from the same prompt and references, navigate the group on the canvas, stop individual tasks, and mark your preferred result.
 - **Result information** — inspect actual dimensions/format, generation time, requested API model, and server-reported model/quality. Missing metadata is shown as unrecorded.
 - **Server model catalog** — query, refresh, and search the saved relay's standard model list in App settings.
-- **Multiple image models** — use Image2 by default, or choose Image 2.5 Flare, Image 2.5 Sunburst, Banana 2, Banana 2 Lite, and Banana Pro.
+- **Multiple image models** — use Image2 by default, or choose Image 2.5 Flare, Image 2.5 Sunburst, Banana 2.1, Banana 2, Banana 2 Lite, and Banana Pro.
 - **Image 2.5 transparent assets** — generate transparent assets (PNG verified on the relay); Flare targets fast everyday creation and Sunburst prioritizes editing precision.
 - **Reference-driven iteration** — upload or paste up to four references, then reuse any result in the next step.
 - **Composition sketches** — draw subject positions, actions, arrows, and framing before generating.

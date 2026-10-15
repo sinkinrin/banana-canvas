@@ -77,7 +77,7 @@ export async function runLayoutSmoke({ window, localUrl, imageUrl, flush, waitFo
       await wait(`(() => { const box = document.querySelector('[data-update-actions]')?.getBoundingClientRect(); return box && box.top >= 0 && box.bottom <= innerHeight; })()`, `Update actions clipped at ${width}x${height}`);
       await screenshot(`updates-${width}`);
       await window.webContents.executeJavaScript(`document.querySelector('[data-settings-close]').click(); document.querySelector('[data-compare-models]').click()`);
-      await wait(`(() => { const modal = document.querySelector('[data-model-comparison]'); const box = modal?.querySelector('footer')?.getBoundingClientRect(); return box && box.top >= 0 && box.bottom <= innerHeight && modal.getBoundingClientRect().width <= 896; })()`, `Comparison action clipped at ${width}x${height}`);
+      await wait(`(() => { const modal = document.querySelector('[data-model-comparison]'); const box = modal?.querySelector('footer')?.getBoundingClientRect(); return box && box.top >= 0 && box.bottom <= innerHeight && Math.round(modal.getBoundingClientRect().width) <= 896; })()`, `Comparison action clipped at ${width}x${height}`);
       await screenshot(`comparison-${width}`);
       await window.webContents.executeJavaScript(`document.querySelector('[data-model-comparison] header button').click()`);
       await window.webContents.executeJavaScript(`document.querySelector('[data-image-node-id="layout-image"] button[title="对比原图和新图"]').click()`);

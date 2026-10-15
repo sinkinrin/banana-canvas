@@ -231,6 +231,7 @@ export const zhCN: LocaleResource<typeof en> = {
     noReleaseNotes: '该版本暂未提供更新日志。',
   },
   models: {
+    banana21: { description: '新版通用模型 · 1K–4K' },
     banana: { description: '通用稳定版 · 0.5K–4K' },
     bananaLite: { description: '极速低成本 · 仅 1K' },
     bananaPro: { description: '专业复杂任务 · 1K–4K' },
@@ -312,6 +313,8 @@ export const zhCN: LocaleResource<typeof en> = {
     mediaWithReferences: '参考图解析仅在带参考图时发送；纯文生图发送会被 Gemini 拒绝。',
     mediaUnsupported: '{{model}} 当前不支持参考图解析等级，本项目不会发送 mediaResolution。',
     thinkingLevel: '思考等级',
+    medium: 'medium 平衡质量与延迟',
+    defaultMedium: '默认 / medium',
     minimal: 'minimal 最低延迟',
     high: 'high 高推理',
     defaultMinimal: '默认 / minimal',
@@ -322,6 +325,7 @@ export const zhCN: LocaleResource<typeof en> = {
     liteUnsupported: 'Lite 不支持',
     searchOn: '开启 Google Search',
     tips: {
+      banana21: 'Banana 2.1 支持 1K、2K、4K、全部 14 种画幅和 Google Search；思考等级支持 MINIMAL / MEDIUM / HIGH，默认为 MEDIUM。不支持 512 分辨率。',
       banana: 'Banana 2 是通用首选，支持 512、1K、2K、4K、全部 14 种画幅、Google Search，以及 MINIMAL / HIGH 思考等级。',
       lite: 'Banana 2 Lite 固定为 1K，支持全部 14 种画幅与 MINIMAL / HIGH 思考等级，但不支持 Google Search grounding；适合低延迟、低成本和批量任务。',
       liteConsistency: '官方没有针对多参考图或连续多轮编辑优化 Lite，复杂一致性任务建议改用 Banana 2 或 Pro。',

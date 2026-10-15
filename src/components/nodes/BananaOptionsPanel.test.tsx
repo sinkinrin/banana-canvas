@@ -88,3 +88,19 @@ test('BananaOptionsPanel keeps Search available for Pro while thinking is model-
   assert.doesNotMatch(html, /value="MEDIA_RESOLUTION_HIGH" selected/);
   assert.match(html, /开启 Google Search/);
 });
+
+
+test('Banana 2.1 offers medium thinking and old models discard an inherited medium selection', () => {
+  const render = (imageModel: 'banana-2.1' | 'banana' | 'banana-lite') => renderToStaticMarkup(
+    <BananaOptionsPanel imageModel={imageModel} value={{ thinkingLevel: 'MEDIUM' }} hasReferenceImages onChange={() => {}} />
+  );
+  const html = render('banana-2.1');
+  assert.match(html, /Banana 2.1 高级参数/);
+  assert.match(html, /新版通用模型/);
+  assert.match(html, /默认 \/ medium/);
+  assert.match(html, /value="MEDIUM" selected="">medium/);
+  for (const model of ['banana', 'banana-lite'] as const) {
+    assert.doesNotMatch(render(model), /value="MEDIUM"/);
+    assert.match(render(model), /value="default" selected="">默认 \/ minimal/);
+  }
+});

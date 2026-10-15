@@ -2,11 +2,10 @@ import { Info } from 'lucide-react';
 import { useAppTranslation } from '../../i18n';
 import {
   BANANA_MEDIA_RESOLUTION_VALUES,
-  BANANA_THINKING_LEVEL_VALUES,
   getBananaModelCapabilities,
   getBananaParameterTipKeys,
   getImageModelConfig,
-  normalizeBananaOptions,
+  normalizeBananaOptionsForModel,
   type BananaImageModelId,
   type BananaMediaResolution,
   type BananaOptions,
@@ -35,7 +34,7 @@ export function BananaOptionsPanel({
   onChange,
 }: BananaOptionsPanelProps) {
   const { t } = useAppTranslation();
-  const options = normalizeBananaOptions(value);
+  const options = normalizeBananaOptionsForModel(imageModel, value);
   const capabilities = getBananaModelCapabilities(imageModel);
   const modelConfig = getImageModelConfig(imageModel);
   const parameterTips = [
@@ -47,7 +46,7 @@ export function BananaOptionsPanel({
   ];
 
   const commit = (nextOptions: BananaOptions) => {
-    onChange(normalizeBananaOptions(nextOptions));
+    onChange(normalizeBananaOptionsForModel(imageModel, nextOptions));
   };
 
   const setThinkingLevel = (thinkingLevel: BananaThinkingLevel | 'default') => {
@@ -112,11 +111,13 @@ export function BananaOptionsPanel({
             style={selectStyle}
           >
             <option value="default">
-              {capabilities.supportsThinkingLevelControl ? t('bananaOptions.defaultMinimal') : t('bananaOptions.modelManaged')}
+              {capabilities.supportsThinkingLevelControl
+                ? t(capabilities.defaultThinkingLevel === 'MEDIUM' ? 'bananaOptions.defaultMedium' : 'bananaOptions.defaultMinimal')
+                : t('bananaOptions.modelManaged')}
             </option>
-            {capabilities.supportsThinkingLevelControl && BANANA_THINKING_LEVEL_VALUES.map((thinkingLevel) => (
+            {capabilities.supportsThinkingLevelControl && capabilities.thinkingLevels.map((thinkingLevel) => (
               <option key={thinkingLevel} value={thinkingLevel}>
-                {thinkingLevel === 'MINIMAL' ? t('bananaOptions.minimal') : t('bananaOptions.high')}
+                {t(thinkingLevel === 'MINIMAL' ? 'bananaOptions.minimal' : thinkingLevel === 'MEDIUM' ? 'bananaOptions.medium' : 'bananaOptions.high')}
               </option>
             ))}
           </select>

@@ -25,9 +25,12 @@ In Electron, secrets are kept in `safeStorage` when operating-system encryption 
 | Image2 | Configured OpenAI-compatible relay | `512`–`4K` options | Default generation and mask editing |
 | Image 2.5 Flare | `gpt-image-2.5-flare`, Images API | Same requested sizes as Image2 | Fast everyday generation and transparent assets |
 | Image 2.5 Sunburst | `gpt-image-2.5-sunburst`, Images API | Same requested sizes as Image2 | Precise reference and mask editing |
+| Banana 2.1 | `gemini-nano-banana-2.1` | `1K`, `2K`, `4K` | Latest general-purpose generation and reference editing |
 | Banana 2 | `gemini-3.1-flash-image` | `512`, `1K`, `2K`, `4K` | General multi-reference work |
 | Banana 2 Lite | `gemini-3.1-flash-lite-image` | `1K` | Fast, economical drafts and batches |
 | Banana Pro | `gemini-3-pro-image` | `1K`, `2K`, `4K` | Complex design, typography, and factual visuals |
+
+Banana 2.1 supports all 14 exposed aspect ratios, Google Search grounding, and `MINIMAL` / `MEDIUM` / `HIGH` thinking levels (default `MEDIUM`). It does not support `512` output. Existing Banana 2 projects keep their original model. See the [official model documentation](https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1).
 
 Banana 2 and Banana 2 Lite support all 14 exposed aspect ratios and selectable `MINIMAL` / `HIGH` thinking levels. Banana Pro supports the 10 standard aspect ratios, manages thinking internally, and does not accept `mediaResolution`. Google Search grounding is available for Banana 2 and Banana Pro.
 

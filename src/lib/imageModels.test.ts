@@ -877,3 +877,20 @@ test('getImage2AttemptGroups uses single direct attempts without a proxy', () =>
     ['direct'],
   ]);
 });
+
+
+test('Banana 2.1 uses its own model, output sizes and thinking levels', () => {
+  assert.equal(normalizeImageModel('banana-2.1'), 'banana-2.1');
+  assert.equal(isBananaImageModel('banana-2.1'), true);
+  assert.equal(getBananaModelCapabilities('banana-2.1').apiModel, 'gemini-nano-banana-2.1');
+  assert.deepEqual(getBananaAspectRatioValues('banana-2.1'), [...BANANA_ASPECT_RATIO_VALUES]);
+  assert.deepEqual(getBananaImageSizeValues('banana-2.1'), ['1K', '2K', '4K']);
+  assert.equal(normalizeBananaImageSizeForModel('banana-2.1', '512px'), undefined);
+  assert.deepEqual(normalizeBananaOptionsForModel('banana-2.1', { thinkingLevel: 'medium' }), { thinkingLevel: 'MEDIUM' });
+  for (const model of ['banana', 'banana-lite', 'banana-pro']) {
+    assert.deepEqual(normalizeBananaOptionsForModel(model, { thinkingLevel: 'MEDIUM' }), {});
+  }
+  const request = buildBananaGenerateContentRequest({ imageModel: 'banana-2.1', prompt: 'draw', imageSize: '512' });
+  assert.deepEqual(request.config.imageConfig, { aspectRatio: '1:1', imageSize: '1K' });
+  assert.equal(request.config.thinkingConfig, undefined); // Let the model use its MEDIUM default.
+});

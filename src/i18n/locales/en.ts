@@ -229,6 +229,7 @@ export const en = {
     noReleaseNotes: 'No release notes were provided for this version.',
   },
   models: {
+    banana21: { description: 'Latest general model · 1K–4K' },
     banana: { description: 'Stable general model · 0.5K–4K' },
     bananaLite: { description: 'Fast and economical · 1K only' },
     bananaPro: { description: 'Advanced work · 1K–4K' },
@@ -310,6 +311,8 @@ export const en = {
     mediaWithReferences: 'Reference resolution is sent only when references are attached; Gemini rejects it for text-only generation.',
     mediaUnsupported: '{{model}} does not currently support reference resolution, so mediaResolution will not be sent.',
     thinkingLevel: 'Thinking level',
+    medium: 'medium Balanced quality and latency',
+    defaultMedium: 'Default / medium',
     minimal: 'minimal · lowest latency',
     high: 'high · deeper reasoning',
     defaultMinimal: 'Default / minimal',
@@ -320,6 +323,7 @@ export const en = {
     liteUnsupported: 'Not supported by Lite',
     searchOn: 'Enable Google Search',
     tips: {
+      banana21: 'Banana 2.1 supports 1K, 2K, 4K, all 14 aspect ratios, and Google Search. Thinking levels are MINIMAL / MEDIUM / HIGH, with MEDIUM as the default. 512 resolution is not supported.',
       banana: 'Banana 2 is the general-purpose choice. It supports 512, 1K, 2K, 4K, all 14 aspect ratios, Google Search, and MINIMAL / HIGH thinking levels.',
       lite: 'Banana 2 Lite is fixed at 1K. It supports all 14 aspect ratios and MINIMAL / HIGH thinking levels, but not Google Search grounding; it suits low-latency, low-cost, and batch work.',
       liteConsistency: 'Lite is not specifically optimized for multi-reference or extended iterative editing. Use Banana 2 or Pro for complex consistency tasks.',

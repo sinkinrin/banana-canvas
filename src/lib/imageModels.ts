@@ -1,10 +1,17 @@
 export const DEFAULT_IMAGE_MODEL = 'image2';
 
+export const BANANA_21_MODEL = 'gemini-nano-banana-2.1';
 export const BANANA_MODEL = 'gemini-3.1-flash-image';
 export const BANANA_LITE_MODEL = 'gemini-3.1-flash-lite-image';
 export const BANANA_PRO_MODEL = 'gemini-3-pro-image';
 
 export const IMAGE_MODELS = [
+  {
+    id: 'banana-2.1',
+    label: 'Banana 2.1',
+    descriptionKey: 'models.banana21.description',
+    provider: 'gemini',
+  },
   {
     id: 'banana',
     label: 'Banana 2',
@@ -50,7 +57,7 @@ const IMAGE25_API_MODELS = {
   'image2.5-flare': 'gpt-image-2.5-flare',
   'image2.5-sunburst': 'gpt-image-2.5-sunburst',
 } as const;
-export const BANANA_IMAGE_MODEL_IDS = ['banana', 'banana-lite', 'banana-pro'] as const;
+export const BANANA_IMAGE_MODEL_IDS = ['banana', 'banana-2.1', 'banana-lite', 'banana-pro'] as const;
 export type BananaImageModelId = (typeof BANANA_IMAGE_MODEL_IDS)[number];
 
 export type ReferenceImageInput = {
@@ -90,7 +97,7 @@ export const BANANA_IMAGE_SIZE_VALUES = ['512', '1K', '2K', '4K'] as const;
 export const BANANA_LITE_IMAGE_SIZE_VALUES = ['1K'] as const;
 export const BANANA_PRO_IMAGE_SIZE_VALUES = ['1K', '2K', '4K'] as const;
 export const BANANA_RESPONSE_MODE_VALUES = ['image', 'text-image'] as const;
-export const BANANA_THINKING_LEVEL_VALUES = ['MINIMAL', 'HIGH'] as const;
+export const BANANA_THINKING_LEVEL_VALUES = ['MINIMAL', 'MEDIUM', 'HIGH'] as const;
 export const BANANA_MEDIA_RESOLUTION_VALUES = [
   'MEDIA_RESOLUTION_LOW',
   'MEDIA_RESOLUTION_MEDIUM',
@@ -123,16 +130,30 @@ type BananaModelCapabilities = {
   aspectRatios: readonly BananaAspectRatio[];
   imageSizes: readonly BananaImageSize[];
   supportsThinkingLevelControl: boolean;
+  thinkingLevels: readonly BananaThinkingLevel[];
+  defaultThinkingLevel?: BananaThinkingLevel;
   supportsMediaResolutionControl: boolean;
   supportsSearchGrounding: boolean;
 };
 
 const BANANA_MODEL_CAPABILITIES: Record<BananaImageModelId, BananaModelCapabilities> = {
+  'banana-2.1': {
+    apiModel: BANANA_21_MODEL,
+    aspectRatios: BANANA_ASPECT_RATIO_VALUES,
+    imageSizes: ['1K', '2K', '4K'],
+    supportsThinkingLevelControl: true,
+    thinkingLevels: BANANA_THINKING_LEVEL_VALUES,
+    defaultThinkingLevel: 'MEDIUM',
+    supportsMediaResolutionControl: true,
+    supportsSearchGrounding: true,
+  },
   banana: {
     apiModel: BANANA_MODEL,
     aspectRatios: BANANA_ASPECT_RATIO_VALUES,
     imageSizes: BANANA_IMAGE_SIZE_VALUES,
     supportsThinkingLevelControl: true,
+    thinkingLevels: ['MINIMAL', 'HIGH'],
+    defaultThinkingLevel: 'MINIMAL',
     supportsMediaResolutionControl: true,
     supportsSearchGrounding: true,
   },
@@ -141,6 +162,8 @@ const BANANA_MODEL_CAPABILITIES: Record<BananaImageModelId, BananaModelCapabilit
     aspectRatios: BANANA_ASPECT_RATIO_VALUES,
     imageSizes: BANANA_LITE_IMAGE_SIZE_VALUES,
     supportsThinkingLevelControl: true,
+    thinkingLevels: ['MINIMAL', 'HIGH'],
+    defaultThinkingLevel: 'MINIMAL',
     supportsMediaResolutionControl: true,
     supportsSearchGrounding: false,
   },
@@ -149,6 +172,7 @@ const BANANA_MODEL_CAPABILITIES: Record<BananaImageModelId, BananaModelCapabilit
     aspectRatios: BANANA_STANDARD_ASPECT_RATIO_VALUES,
     imageSizes: BANANA_PRO_IMAGE_SIZE_VALUES,
     supportsThinkingLevelControl: false,
+    thinkingLevels: [],
     supportsMediaResolutionControl: false,
     supportsSearchGrounding: true,
   },
@@ -346,7 +370,9 @@ export function normalizeBananaOptionsForModel(
   const options = normalizeBananaOptions(value);
   const capabilities = getBananaModelCapabilities(imageModel);
 
-  if (!capabilities.supportsThinkingLevelControl) delete options.thinkingLevel;
+  if (options.thinkingLevel && !capabilities.thinkingLevels.includes(options.thinkingLevel)) {
+    delete options.thinkingLevel;
+  }
   if (!capabilities.supportsMediaResolutionControl) delete options.mediaResolution;
   if (!capabilities.supportsSearchGrounding) delete options.searchGrounding;
   return options;
@@ -460,6 +486,7 @@ export function extractBananaImageUrl(response: unknown): string | null {
 export function getBananaParameterTipKeys(imageModel: unknown = 'banana') {
   const normalizedModel = normalizeBananaImageModel(imageModel);
   const variantTips: Record<BananaImageModelId, string[]> = {
+    'banana-2.1': ['bananaOptions.tips.banana21'],
     banana: [
       'bananaOptions.tips.banana',
     ],

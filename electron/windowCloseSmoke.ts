@@ -35,7 +35,11 @@ export async function runWindowCloseSmoke({ window, localUrl, waitForPredicate }
     const [width, height] = window.getSize();
     if (!window.isResizable()) throw new Error('Frameless window is not resizable');
     window.setSize(width + 20, height + 20);
-    if (window.getSize()[0] !== width + 20) throw new Error('Window resize failed');
+    // Native frame conversion at fractional Windows DPI can add up to two DIP.
+    const [resizedWidth, resizedHeight] = window.getSize();
+    if (Math.abs(resizedWidth - width - 20) > 2 || Math.abs(resizedHeight - height - 20) > 2) {
+      throw new Error(`Window resize failed: expected ${width + 20}x${height + 20}, got ${resizedWidth}x${resizedHeight}`);
+    }
     window.setSize(width, height);
     // Hosted Linux uses bare Xvfb without a window manager. Native window-state
     // transitions are verified on Windows, the platform we ship installers for.

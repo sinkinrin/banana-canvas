@@ -25,6 +25,10 @@ npm run release:prepare -- v<version>
 
 `release:prepare` 会确认 tag、package、lockfile、README、Changelog 和 `latest.yml` 一致，并为安装包、blockmap 与更新元数据生成 `SHA256SUMS.txt`。
 
+按用户要求，代理不额外手动计算、比对 SHA256/SHA512，也不为此重新下载安装包。保留工具内置完整性校验与上述自动生成的清单；发布后确认资产齐全、`latest.yml` 版本正确即可，不追加人工哈希校验流程。
+
+本地 Windows 打包使用锁定版本 Electron 包自带的校验清单，命中运行时缓存后无需联网获取 `SHASUMS256.txt`。CI 和 Release 缓存 Electron 与 electron-builder 工具，缓存键按系统、架构和工具版本区分，不随应用版本变化。两个工作流使用独立缓存键，避免 CI 保存的运行时缓存阻止 Release 保存完整打包工具缓存。
+
 确认差异和产物后提交并推送：
 
 ```bash
@@ -40,7 +44,7 @@ git push origin v<version>
 1. `npm ci`、版本门禁、类型检查、Lint、测试和构建。
 2. 生产依赖安全审计。
 3. Windows NSIS 打包和已打包客户端 smoke。
-4. `latest.yml`（含当前版本更新日志与未签名提示）、blockmap、安装包与 SHA256 校验。
+4. 检查 `latest.yml`（含当前版本更新日志与未签名提示）及产物，自动生成 SHA256 清单。
 5. 上传短期 Actions artifact。
 6. 最后一步创建 GitHub Release 并一次性上传所有客户端更新资产。
 
