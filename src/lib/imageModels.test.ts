@@ -217,6 +217,7 @@ test('buildBananaGenerateContentRequest fixes image-only output and disables def
     {
       model: 'gemini-3.1-flash-image',
       contents: {
+        role: 'user',
         parts: [
           { inlineData: { data: 'base64-image', mimeType: 'image/webp' } },
           { text: '画一只香蕉机器人' },

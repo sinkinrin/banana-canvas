@@ -1,10 +1,10 @@
 import express from 'express';
 import { ImageInputError } from './imageInputError';
 import { extractReferencePrimaryImages } from './prepareReferenceImages';
-import { GoogleGenAI } from '@google/genai';
+import { createGeminiClient } from './providers/geminiClient';
+import { getGeminiConnectionError, type GeminiConnectionConfig } from '../lib/geminiProvider';
 import {
   validateGenerateImageRequest,
-  type ValidGenerateImageRequest,
 } from './requestValidation';
 import type {
   BananaAspectRatio,
@@ -21,7 +21,7 @@ export type BananaGenerateInput = {
   onMetadata?: (info: GenerationInfo) => void;
   imageModel: ImageModelId;
   prompt: string;
-  apiKey: string;
+  connection: GeminiConnectionConfig;
   aspectRatio?: BananaAspectRatio;
   imageSize?: BananaImageSize;
   images: ReferenceImageInput[];
@@ -47,7 +47,7 @@ export type GenerationProviders = {
   generateImage2Image: (input: Image2GenerateInput) => Promise<string>;
   optimizePrompt?: (input: {
     prompt: string;
-    apiKey: string;
+    connection: GeminiConnectionConfig;
     model: string;
     signal?: AbortSignal;
   }) => Promise<string>;
@@ -59,16 +59,16 @@ function createRequestId() {
 
 async function defaultOptimizePrompt({
   prompt,
-  apiKey,
+  connection,
   model,
   signal,
 }: {
   prompt: string;
-  apiKey: string;
+  connection: GeminiConnectionConfig;
   model: string;
   signal?: AbortSignal;
 }) {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = createGeminiClient(connection);
   const response = await ai.models.generateContent({
     model,
     contents: `你是一位 AI 图像生成的专家提示词工程师。
@@ -82,10 +82,6 @@ async function defaultOptimizePrompt({
 
 function sendValidationFailure(res: express.Response, error: string) {
   res.status(400).json({ error });
-}
-
-function resolveApiKey(_request: ValidGenerateImageRequest, runtimeConfig: RuntimeConfigManager) {
-  return runtimeConfig.get().geminiApiKey;
 }
 
 function createRequestAbort(req: express.Request, res: express.Response) {
@@ -131,10 +127,11 @@ export function mountGenerationRoutes(
     }
 
     const body = validation.value;
-    const apiKey = resolveApiKey(body, runtimeConfig);
-    if (body.provider === 'gemini' && !apiKey) {
+    const connection = runtimeConfig.get().geminiConnection;
+    const connectionError = getGeminiConnectionError(connection);
+    if (body.provider === 'gemini' && connectionError) {
       requestAbort.cleanup();
-      res.status(401).json({ error: '需要 API Key' });
+      res.status(401).json({ error: connectionError });
       return;
     }
 
@@ -150,7 +147,7 @@ export function mountGenerationRoutes(
         ? await providers.generateBananaImage({
             imageModel: body.imageModel,
             prompt: body.prompt,
-            apiKey: apiKey!,
+            connection,
             aspectRatio: body.aspectRatio,
             imageSize: body.imageSize,
             images: body.referenceImages,
@@ -202,15 +199,16 @@ export function mountGenerationRoutes(
         return;
       }
       const config = runtimeConfig.get();
-      const apiKey = config.geminiApiKey;
-      if (!apiKey) {
-        res.status(401).json({ error: '需要 API Key' });
+      const connection = config.geminiConnection;
+      const connectionError = getGeminiConnectionError(connection);
+      if (connectionError) {
+        res.status(401).json({ error: connectionError });
         return;
       }
 
       const optimizedPrompt = await (providers.optimizePrompt ?? defaultOptimizePrompt)({
         prompt,
-        apiKey,
+        connection,
         model: config.geminiPromptOptimizerModel,
         signal: requestAbort.signal,
       });

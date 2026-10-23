@@ -1,7 +1,7 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "A local-first AI image canvas with Image 2.5, multi-model comparisons, result details and reference editing.",
   "author": "Banana Canvas Contributors",
   "repository": {
@@ -73,7 +73,7 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.1",
     "typescript": "~5.8.2",
-    "vite": "^6.4.3"
+    "vite": "^6.4.5"
   },
   "overrides": {
     "body-parser": "^1.20.6",

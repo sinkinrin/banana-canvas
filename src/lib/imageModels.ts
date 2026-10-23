@@ -431,7 +431,7 @@ export function buildBananaGenerateContentRequest({
 
   return {
     model: capabilities.apiModel,
-    contents: { parts },
+    contents: { role: 'user', parts },
     config,
   };
 }

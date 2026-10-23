@@ -16,6 +16,13 @@ import {
 } from './runtimeConfig';
 
 const SETTINGS_ENV_KEYS = [
+  'GEMINI_PROVIDER',
+  'GEMINI_BASE_URL',
+  'VERTEX_BASE_URL',
+  'VERTEX_AUTH_MODE',
+  'VERTEX_API_KEY',
+  'VERTEX_PROJECT',
+  'VERTEX_LOCATION',
   'GEMINI_API_KEY',
   'GEMINI_PROMPT_OPTIMIZER_MODEL',
   'GEMINI_HTTPS_PROXY',
@@ -34,7 +41,7 @@ const SETTINGS_ENV_KEYS = [
 
 type SettingsEnvKey = (typeof SETTINGS_ENV_KEYS)[number];
 type SettingsEnvUpdates = Partial<Record<SettingsEnvKey, string>>;
-const SENSITIVE_SETTINGS_ENV_KEYS = ['GEMINI_API_KEY', 'IMAGE2_API_KEY'] as const;
+export const SENSITIVE_SETTINGS_ENV_KEYS = ['GEMINI_API_KEY', 'VERTEX_API_KEY', 'IMAGE2_API_KEY'] as const;
 type SensitiveSettingsEnvKey = (typeof SENSITIVE_SETTINGS_ENV_KEYS)[number];
 
 export type RuntimeSettingsSecretValues = Partial<Record<SensitiveSettingsEnvKey, string>>;
@@ -201,6 +208,21 @@ export function parseRuntimeSettingsUpdate(input: unknown): SettingsEnvUpdates {
   }
 
   if (gemini) {
+    const provider = parseEnumField(gemini, 'provider', ['ai-studio', 'vertex-ai'] as const, errors);
+    const vertexAuthMode = parseEnumField(gemini, 'vertexAuthMode', ['api-key', 'adc'] as const, errors);
+    if (provider !== undefined) updates.GEMINI_PROVIDER = provider;
+    if (vertexAuthMode !== undefined) updates.VERTEX_AUTH_MODE = vertexAuthMode;
+    for (const [field, key] of [
+      ['baseUrl', 'GEMINI_BASE_URL'], ['vertexBaseUrl', 'VERTEX_BASE_URL'],
+      ['vertexProject', 'VERTEX_PROJECT'], ['vertexLocation', 'VERTEX_LOCATION'],
+    ] as const) {
+      const value = parseStringField(gemini, field, errors, field.endsWith('Url') ? 2_048 : 256);
+      if (value !== undefined) updates[key] = value;
+    }
+    const vertexApiKey = parseStringField(gemini, 'vertexApiKey', errors, 8_192);
+    const clearVertexApiKey = parseBooleanField(gemini, 'clearVertexApiKey', errors);
+    if (clearVertexApiKey) updates.VERTEX_API_KEY = '';
+    else if (vertexApiKey) updates.VERTEX_API_KEY = vertexApiKey;
     const apiKey = parseStringField(gemini, 'apiKey', errors, 8_192);
     const clearApiKey = parseBooleanField(gemini, 'clearApiKey', errors);
     const promptOptimizerModel = parseStringField(gemini, 'promptOptimizerModel', errors, 256);
@@ -291,7 +313,14 @@ function toSnapshot(manager: RuntimeConfigManager): RuntimeSettingsSnapshot {
       missingKeys: [...config.image2.missingKeys],
     },
     gemini: {
-      apiKeyConfigured: Boolean(config.geminiApiKey),
+      provider: config.geminiConnection.provider,
+      baseUrl: config.geminiConnection.baseUrl,
+      vertexBaseUrl: config.geminiConnection.vertexBaseUrl,
+      vertexAuthMode: config.geminiConnection.vertexAuthMode,
+      vertexProject: config.geminiConnection.vertexProject,
+      vertexLocation: config.geminiConnection.vertexLocation,
+      vertexApiKeyConfigured: Boolean(config.geminiConnection.vertexApiKey),
+      apiKeyConfigured: Boolean(config.geminiConnection.apiKey),
       promptOptimizerModel: config.geminiPromptOptimizerModel,
       proxyUrl: config.geminiProxyUrl,
       proxyEnabled: config.geminiProxyEnabled,

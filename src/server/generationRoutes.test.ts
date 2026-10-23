@@ -211,14 +211,14 @@ test('optimize-prompt reads a custom model from hot-reloaded runtime config', as
 test('generation routes read Gemini API key from hot-reloaded runtime config', async () => {
   const seenKeys: string[] = [];
   const { app, runtimeConfig } = createAppWithRuntimeConfig({
-    generateBananaImage: async ({ apiKey }) => {
-      seenKeys.push(apiKey);
+    generateBananaImage: async ({ connection }) => {
+      seenKeys.push(connection.apiKey);
       return 'data:image/png;base64,banana';
     },
     generateImage2Image: async () => 'data:image/png;base64,image2',
-    optimizePrompt: async ({ apiKey }) => {
-      seenKeys.push(apiKey);
-      return apiKey;
+    optimizePrompt: async ({ connection }) => {
+      seenKeys.push(connection.apiKey);
+      return connection.apiKey;
     },
   }, { GEMINI_API_KEY: 'old-key' });
 
@@ -236,6 +236,23 @@ test('generation routes read Gemini API key from hot-reloaded runtime config', a
 
   assert.equal(second.status, 200);
   assert.deepEqual(seenKeys, ['old-key', 'new-key']);
+});
+
+test('Vertex ADC generation and optimization do not require an API key', async () => {
+  const seen: string[] = [];
+  const { app } = createAppWithRuntimeConfig({
+    generateBananaImage: async ({ connection }) => {
+      seen.push(connection.vertexAuthMode);
+      assert.equal(connection.vertexProject, 'test-project');
+      assert.equal(connection.apiKey, '');
+      return 'data:image/png;base64,banana';
+    },
+    generateImage2Image: async () => '',
+    optimizePrompt: async ({ connection }) => { seen.push(connection.vertexAuthMode); return 'optimized'; },
+  }, { GEMINI_PROVIDER: 'vertex-ai', VERTEX_AUTH_MODE: 'adc', VERTEX_PROJECT: 'test-project' });
+  assert.equal((await requestJson(app, '/api/generate-image', { prompt: 'draw', imageModel: 'banana' })).status, 200);
+  assert.equal((await requestJson(app, '/api/optimize-prompt', { prompt: 'draw' })).status, 200);
+  assert.deepEqual(seen, ['adc', 'adc']);
 });
 
 test('generation route aborts the provider when the client disconnects', async () => {

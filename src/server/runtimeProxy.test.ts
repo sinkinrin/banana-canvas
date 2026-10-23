@@ -123,6 +123,36 @@ test('Banana proxy routing leaves Image2 and local fetches on their own dispatch
   }
 });
 
+test('Vertex and custom Gemini endpoints follow hot-reloaded proxy settings', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: unknown[] = [];
+  const directFetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push((init as FetchInitWithDispatcher)?.dispatcher);
+    return new Response('{}');
+  };
+  const manager = createRuntimeConfigManager({});
+  try {
+    globalThis.fetch = directFetch;
+    for (const [env, endpoint] of [
+      [{ GEMINI_PROVIDER: 'vertex-ai' }, 'https://aiplatform.googleapis.com/v1beta1/models/test:generateContent'],
+      [{ GEMINI_PROVIDER: 'vertex-ai', VERTEX_AUTH_MODE: 'adc', VERTEX_LOCATION: 'us-central1' }, 'https://us-central1-aiplatform.googleapis.com/v1beta1/models/test:generateContent'],
+      [{ GEMINI_BASE_URL: 'https://gateway.example/google/v1beta' }, 'https://gateway.example/google/v1beta/models/test:generateContent'],
+      [{ GEMINI_PROVIDER: 'vertex-ai', VERTEX_BASE_URL: 'https://gateway.example/vertex/v1' }, 'https://gateway.example/vertex/v1/publishers/google/models/test:generateContent'],
+    ] as const) {
+      manager.reload({ GEMINI_PROXY_ENABLED: 'true', GEMINI_HTTPS_PROXY: 'http://proxy.example', ...env });
+      syncRuntimeGlobalProxy(manager, { directFetch, logger: () => {} });
+      await fetch(endpoint);
+      await fetch('https://gateway.example/v1/images/generations');
+      assert.ok(calls.at(-2));
+      assert.equal(calls.at(-1), undefined);
+    }
+  } finally {
+    manager.reload({});
+    syncRuntimeGlobalProxy(manager, { directFetch, logger: () => {} });
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('Google GenAI SDK requests use the explicitly enabled Banana proxy', async () => {
   const originalFetch = globalThis.fetch;
   const calls: Array<{ url: string; dispatcher: unknown }> = [];
@@ -148,7 +178,7 @@ test('Google GenAI SDK requests use the explicitly enabled Banana proxy', async 
     const imageUrl = await generateBananaImage({
       imageModel: 'banana',
       prompt: 'draw',
-      apiKey: 'test-key',
+      connection: createRuntimeConfigManager({ GEMINI_API_KEY: 'test-key' }).get().geminiConnection,
       images: [],
       bananaOptions: {},
     });

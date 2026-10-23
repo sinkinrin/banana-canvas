@@ -8,9 +8,9 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.11.0`
+Current version: `0.12.0`
 
-Node categories now support shared color labels, counts, and one-click navigation. Categories are saved with each project and inherited by generated results.
+Choose Google AI Studio or Vertex AI in App settings, with separate API Keys and optional custom URLs. Vertex supports Express Mode and Google Cloud ADC. See [provider configuration](docs/CONFIGURATION.md#ai-studio-and-vertex-ai).
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 
@@ -23,6 +23,7 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 - **Multi-model comparisons** — generate one image per selected model from the same prompt and references, navigate the group on the canvas, stop individual tasks, and mark your preferred result.
 - **Result information** — inspect actual dimensions/format, generation time, requested API model, and server-reported model/quality. Missing metadata is shown as unrecorded.
 - **Server model catalog** — query, refresh, and search the saved relay's standard model list in App settings.
+- **Selectable Gemini provider** — use AI Studio or Vertex AI for Banana generation and prompt optimization; keep separate URLs and credentials when switching.
 - **Multiple image models** — use Image2 by default, or choose Image 2.5 Flare, Image 2.5 Sunburst, Banana 2.1, Banana 2, Banana 2 Lite, and Banana Pro.
 - **Image 2.5 transparent assets** — generate transparent assets (PNG verified on the relay); Flare targets fast everyday creation and Sunburst prioritizes editing precision.
 - **Reference-driven iteration** — upload or paste up to four references, then reuse any result in the next step.
@@ -59,7 +60,7 @@ Image 2.5 support is available from v0.8.0. Both variants reuse the Image2 conne
 Requirements:
 
 - Node.js 22.17.1 or newer
-- An Image2/OpenAI-compatible relay; a Gemini API Key is optional for Banana models and prompt optimization
+- An Image2/OpenAI-compatible relay; AI Studio or Vertex AI credentials are optional for Banana models and prompt optimization
 
 ```bash
 npm install

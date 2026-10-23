@@ -24,6 +24,13 @@ const settings: RuntimeSettingsSnapshot = {
     missingKeys: [],
   },
   gemini: {
+    provider: 'ai-studio',
+    baseUrl: '',
+    vertexBaseUrl: '',
+    vertexAuthMode: 'api-key',
+    vertexProject: '',
+    vertexLocation: 'global',
+    vertexApiKeyConfigured: false,
     apiKeyConfigured: false,
     promptOptimizerModel: 'gemini-3.8-flash',
     proxyUrl: '',

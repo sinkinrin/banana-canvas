@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { GeminiConnectionConfig } from '../lib/geminiProvider';
 import path from 'node:path';
 import dotenv from 'dotenv';
 import {
@@ -23,6 +24,13 @@ const DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS = 60_000;
 const STARTUP_ENV_KEYS = ['PORT', 'NODE_ENV', 'BANANA_DATA_DIR'] as const;
 
 const RUNTIME_ENV_KEYS = [
+  'GEMINI_PROVIDER',
+  'GEMINI_BASE_URL',
+  'VERTEX_BASE_URL',
+  'VERTEX_AUTH_MODE',
+  'VERTEX_API_KEY',
+  'VERTEX_PROJECT',
+  'VERTEX_LOCATION',
   'GEMINI_API_KEY',
   'GEMINI_PROMPT_OPTIMIZER_MODEL',
   'GEMINI_HTTPS_PROXY',
@@ -69,7 +77,7 @@ export type RuntimeConfigLogger = (entry: RuntimeConfigLogEntry) => void;
 
 export type RuntimeConfig = {
   env: EnvLike;
-  geminiApiKey: string;
+  geminiConnection: GeminiConnectionConfig;
   geminiPromptOptimizerModel: string;
   geminiProxyUrl: string;
   geminiProxyEnabled: boolean;
@@ -239,6 +247,24 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
   validateUrlField(env, 'HTTPS_PROXY', errors);
   validateUrlField(env, 'HTTP_PROXY', errors);
   validateUrlField(env, 'GEMINI_HTTPS_PROXY', errors);
+  validateEnumField(env, 'GEMINI_PROVIDER', ['ai-studio', 'vertex-ai'] as const, errors);
+  validateEnumField(env, 'VERTEX_AUTH_MODE', ['api-key', 'adc'] as const, errors);
+  for (const key of ['GEMINI_BASE_URL', 'VERTEX_BASE_URL'] as const) {
+    validateUrlField(env, key, errors);
+    if (env[key]) {
+      try {
+        const url = new URL(env[key]);
+        if (url.username || url.password || url.search || url.hash) {
+          errors.push(`${key} must not contain credentials, query parameters or fragments`);
+        }
+      } catch { /* Reported by validateUrlField. */ }
+    }
+  }
+  for (const key of ['VERTEX_PROJECT', 'VERTEX_LOCATION'] as const) {
+    if (env[key] && !/^[a-zA-Z0-9_-]+$/.test(env[key])) {
+      errors.push(`${key} must contain only letters, digits, underscores or hyphens`);
+    }
+  }
   validateEnumField(env, 'IMAGE2_ENDPOINT_TYPE', ['chat', 'images'] as const, errors);
   validateEnumField(env, 'IMAGE2_PROXY_MODE', ['direct', 'auto', 'proxy'] as const, errors);
 
@@ -325,7 +351,16 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
     ok: true,
     config: {
       env,
-      geminiApiKey: env.GEMINI_API_KEY ?? '',
+      geminiConnection: {
+        provider: env.GEMINI_PROVIDER?.toLowerCase() === 'vertex-ai' ? 'vertex-ai' : 'ai-studio',
+        baseUrl: env.GEMINI_BASE_URL ?? '',
+        apiKey: env.GEMINI_API_KEY ?? '',
+        vertexBaseUrl: env.VERTEX_BASE_URL ?? '',
+        vertexAuthMode: env.VERTEX_AUTH_MODE?.toLowerCase() === 'adc' ? 'adc' : 'api-key',
+        vertexApiKey: env.VERTEX_API_KEY ?? '',
+        vertexProject: env.VERTEX_PROJECT ?? '',
+        vertexLocation: env.VERTEX_LOCATION ?? 'global',
+      },
       geminiPromptOptimizerModel:
         env.GEMINI_PROMPT_OPTIMIZER_MODEL ?? DEFAULT_GEMINI_PROMPT_OPTIMIZER_MODEL,
       geminiProxyUrl: env.GEMINI_HTTPS_PROXY ?? '',

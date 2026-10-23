@@ -73,7 +73,7 @@ test('desktop packaging uses a stable update filename, custom icon, and excludes
 
   assert.equal(packageJson.dependencies.vite, undefined);
   assert.match(packageJson.dependencies['electron-updater'], /^\^6\./);
-  assert.equal(packageJson.devDependencies.vite, '^6.4.3');
+  assert.equal(packageJson.devDependencies.vite, '^6.4.5');
   assert.equal(packageJson.build.npmRebuild, false);
   assert.equal(packageJson.build.win.icon, 'assets/icon.ico');
   assert.equal(packageJson.build.win.artifactName, 'banana-canvas-setup-${version}.${ext}');
@@ -89,6 +89,8 @@ test('environment template keeps secrets blank and provides the default Image2 m
   const envExample = await readFile(resolve(repoRoot, '.env.example'), 'utf8');
 
   assert.match(envExample, /^GEMINI_API_KEY=""$/m);
+  assert.match(envExample, /^VERTEX_API_KEY=""$/m);
+  assert.match(envExample, /^GEMINI_PROVIDER="ai-studio"$/m);
   assert.match(envExample, /^GEMINI_PROMPT_OPTIMIZER_MODEL="gemini-3\.8-flash"$/m);
   assert.match(envExample, /^IMAGE2_BASE_URL=""$/m);
   assert.match(envExample, /^IMAGE2_API_KEY=""$/m);

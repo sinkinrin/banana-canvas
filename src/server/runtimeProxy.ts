@@ -1,3 +1,4 @@
+import { getGeminiBaseUrl } from '../lib/geminiProvider';
 import {
   applyGlobalProxyFetch,
   getGeminiProxyAgent,
@@ -28,6 +29,7 @@ export function syncRuntimeGlobalProxy(
   const env = runtimeConfig.get().env;
   const config = runtimeConfig.get();
   const proxyUrl = config.geminiProxyEnabled ? config.geminiProxyUrl : '';
+  const endpoint = new URL(getGeminiBaseUrl(config.geminiConnection));
 
   applyGlobalProxyFetch({
     proxyUrl,
@@ -37,7 +39,9 @@ export function syncRuntimeGlobalProxy(
     shouldProxyRequest: (input) => {
       try {
         const url = new URL(input instanceof Request ? input.url : String(input));
-        return url.hostname === 'generativelanguage.googleapis.com';
+        return url.origin === endpoint.origin
+          && (url.pathname === endpoint.pathname.replace(/\/+$/, '')
+            || url.pathname.startsWith(`${endpoint.pathname.replace(/\/+$/, '')}/`));
       } catch {
         return false;
       }

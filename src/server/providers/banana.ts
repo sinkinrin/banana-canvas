@@ -1,4 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
+import { createGeminiClient } from './geminiClient';
+import type { GeminiConnectionConfig } from '../../lib/geminiProvider';
 import type { GenerationInfo } from '../../lib/generationInfo';
 import {
   buildBananaGenerateContentRequest,
@@ -40,7 +41,7 @@ export function extractBananaProviderImageUrl(response: unknown) {
 export async function generateBananaImage({
   imageModel,
   prompt,
-  apiKey,
+  connection,
   aspectRatio,
   imageSize,
   images,
@@ -50,7 +51,7 @@ export async function generateBananaImage({
 }: {
   imageModel: ImageModelId;
   prompt: string;
-  apiKey: string;
+  connection: GeminiConnectionConfig;
   aspectRatio?: unknown;
   imageSize?: unknown;
   images: ReferenceImageInput[];
@@ -58,7 +59,7 @@ export async function generateBananaImage({
   signal?: AbortSignal;
   onMetadata?: (info: GenerationInfo) => void;
 }) {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = createGeminiClient(connection);
   const request = buildBananaProviderRequest({
     imageModel,
     prompt,

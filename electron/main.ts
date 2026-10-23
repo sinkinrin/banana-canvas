@@ -27,6 +27,7 @@ import {
 } from '../src/lib/nativeAppMessages';
 import {
   removeDotEnvKeys,
+  SENSITIVE_SETTINGS_ENV_KEYS,
   type RuntimeSettingsSecretStore,
   type RuntimeSettingsSecretValues,
 } from '../src/server/runtimeSettings';
@@ -35,6 +36,7 @@ import {
   type DesktopUpdateInfo,
 } from './updateManager';
 import { createUpdatePreferencesStore } from './updatePreferences';
+import { runGeminiProviderSettingsSmoke } from './geminiProviderSmoke';
 import { runComparisonSmoke } from './comparisonSmoke';
 import { runLayoutSmoke } from './layoutSmoke';
 import { normalizeComparisonSelection } from '../src/lib/modelComparison';
@@ -321,6 +323,7 @@ function createElectronRuntimeSecretsStore(userDataDir: string): RuntimeSettings
       const parsed = JSON.parse(safeStorage.decryptString(encrypted)) as RuntimeSettingsSecretValues;
       return {
         GEMINI_API_KEY: typeof parsed.GEMINI_API_KEY === 'string' ? parsed.GEMINI_API_KEY : '',
+        VERTEX_API_KEY: typeof parsed.VERTEX_API_KEY === 'string' ? parsed.VERTEX_API_KEY : '',
         IMAGE2_API_KEY: typeof parsed.IMAGE2_API_KEY === 'string' ? parsed.IMAGE2_API_KEY : '',
       };
     },
@@ -341,7 +344,7 @@ function migrateLegacyDesktopSecrets(
   const text = fs.readFileSync(envFilePath, 'utf8');
   const legacyValues: RuntimeSettingsSecretValues = {};
 
-  for (const key of ['GEMINI_API_KEY', 'IMAGE2_API_KEY'] as const) {
+  for (const key of SENSITIVE_SETTINGS_ENV_KEYS) {
     const match = text.match(new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(.*)$`, 'm'));
     if (!match) continue;
     const rawValue = match[1].trim();
@@ -356,7 +359,7 @@ function migrateLegacyDesktopSecrets(
   if (Object.values(legacyValues).some(Boolean)) {
     secretStore.replace({ ...secretStore.get(), ...legacyValues });
   }
-  const nextText = removeDotEnvKeys(text, ['GEMINI_API_KEY', 'IMAGE2_API_KEY']);
+  const nextText = removeDotEnvKeys(text, SENSITIVE_SETTINGS_ENV_KEYS);
   if (nextText !== text) fs.writeFileSync(envFilePath, nextText, { encoding: 'utf8', mode: 0o600 });
 }
 
@@ -713,6 +716,7 @@ async function runApplicationSettingsSmokeTest(window: BrowserWindow) {
     })()`,
     'Application settings smoke Banana proxy controls were incomplete'
   );
+  await runGeminiProviderSettingsSmoke(window, waitForSmokePredicate);
 
   await window.webContents.executeJavaScript(`
     document.querySelector('[data-runtime-settings-dialog="true"] button[aria-label="关闭设置"]')?.click()
@@ -1287,6 +1291,12 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     if (isSmokeTest()) {
       console.error('[banana:smoke] failed', message);
+      if (error instanceof Error && error.cause instanceof Error) {
+        console.error('[banana:smoke] cause', {
+          code: (error.cause as NodeJS.ErrnoException).code,
+          message: error.cause.message,
+        });
+      }
       app.exit(1);
       return;
     }

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { createRuntimeConfigManager } from './runtimeConfig';
 import assert from 'node:assert/strict';
 import { createGenerateImagePayload } from '../services/gemini';
 import { createPersistedSnapshot, normalizeNodeDataWithAssets } from '../lib/canvasState';
@@ -30,7 +31,7 @@ test('Banana 2.1 routes through the SDK and retains model/options across saved r
     assert.equal(validated.value.provider, 'gemini');
     const { referenceImages, ...params } = validated.value;
     let info: GenerationInfo | undefined;
-    const imageUrl = await generateBananaImage({ ...params, images: referenceImages, apiKey: 'fixture-key', onMetadata: (value) => { info = value; } });
+    const imageUrl = await generateBananaImage({ ...params, images: referenceImages, connection: createRuntimeConfigManager({ GEMINI_API_KEY: 'fixture-key' }).get().geminiConnection, onMetadata: (value) => { info = value; } });
     assert.equal(imageUrl, 'data:image/png;base64,iVBORw0KGgo=');
     assert.equal(info?.apiModel, 'gemini-nano-banana-2.1');
     assert.equal(info?.reportedModel, 'gemini-nano-banana-2.1');

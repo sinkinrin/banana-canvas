@@ -8,9 +8,9 @@
 > [!TIP]
 > 🌐 **English: [Read the default README](README.md)**
 
-当前版本：`0.11.0`
+当前版本：`0.12.0`
 
-节点支持按颜色命名分类、数量统计和一键定位，详见[节点分类](docs/NODE_CATEGORIES.md)。
+应用设置可选择 Google AI Studio 或 Vertex AI，两套 API Key 与自定义 URL 分别保存。Vertex 支持 Express Mode 和 Google Cloud ADC；详见[服务配置](docs/CONFIGURATION.md#ai-studio-and-vertex-ai)。
 
 版本变更见 [CHANGELOG.md](CHANGELOG.md)，维护者发布流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 
@@ -23,6 +23,7 @@
 - **多模型对比**：同一提示词与参考图，每个模型生成一张；在画布直接查看整组、缩放和标记最佳方案，支持单独停止任务。
 - **结果信息卡**：查看实际尺寸、格式、耗时、请求模型和服务器回报型号/画质，缺失数据明确显示“未记录”。
 - **服务器模型列表**：在应用设置中查询、刷新和搜索已保存连接的标准模型列表。
+- **可选 Gemini 服务**：Banana 生图与提示词优化可选择 AI Studio 或 Vertex AI，切换时保留各自 URL 和凭据。
 - **多模型支持**：新节点默认使用 Image2，也可切换 Image 2.5 Flare、Image 2.5 Sunburst、Banana 2.1、Banana 2、Banana 2 Lite 和 Banana Pro。
 - **Image 2.5 透明素材**：支持直接生成透明素材，已实测透明 PNG；Flare 侧重快速日常创作，Sunburst 侧重精确编辑。
 - **参考图迭代**：上传或粘贴最多 4 张参考图，并可从任意结果继续创作。
@@ -59,7 +60,7 @@
 运行要求：
 
 - Node.js 22.17.1 或更高版本
-- 可用的 Image2/OpenAI-compatible 中转；Banana 系列和提示词优化才需要 Gemini API Key
+- 可用的 Image2/OpenAI-compatible 中转；Banana 系列和提示词优化使用 AI Studio 或 Vertex AI 凭据
 
 ```bash
 npm install

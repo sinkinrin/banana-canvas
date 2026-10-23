@@ -10,7 +10,7 @@ The settings screen manages:
 
 - Image2 Base URL, API Key, model, and endpoint type
 - Image2 proxy mode, SSE streaming, partial images, attempts, and timeout
-- Gemini API Key, prompt optimizer model, and the separate Banana/Gemini proxy
+- AI Studio / Vertex AI provider selection, separate API Keys and custom Base URLs, Vertex authentication/project/location, prompt optimizer model, and the separate Banana/Gemini proxy
 - Interface language
 - Desktop software updates
 
@@ -38,7 +38,23 @@ Image2 automatically chooses `/v1/images/generations` or `/v1/images/edits` for 
 
 The two explicit Image 2.5 options share the Image2 Base URL, Key, and network settings. They select their exact API model and always use the Images API. `IMAGE2_MODEL` and `IMAGE2_ENDPOINT_TYPE` continue to control the original Image2 option. Changing models does not migrate existing nodes. For verified relay behavior, see [Image 2.5](IMAGE25.md).
 
-Prompt optimization defaults to the production-ready `gemini-3.8-flash`. Change it in **App settings** or with `GEMINI_PROMPT_OPTIMIZER_MODEL`; the configured model must support Gemini `generateContent` for the current API Key.
+Prompt optimization defaults to the production-ready `gemini-3.8-flash`. Change it in **App settings** or with `GEMINI_PROMPT_OPTIMIZER_MODEL`; the configured model must support Gemini `generateContent` with the selected provider and credentials.
+
+## AI Studio and Vertex AI
+
+In **App settings → Models & connections → Gemini & prompt optimization**, select **Google AI Studio** or **Vertex AI**. The selection applies to all Banana models and prompt optimization. Existing settings default to AI Studio. Save to apply changes to subsequent requests; each provider keeps its own URL and Key when you switch back.
+
+- **Google AI Studio**: enter the AI Studio API Key. The default endpoint is `https://generativelanguage.googleapis.com`.
+- **Vertex AI / API Key (Express Mode)**: enter a Vertex AI Express Mode API Key. The default endpoint is `https://aiplatform.googleapis.com`; requests use `publishers/google/models/...` without project/location. An AI Studio Key is not automatically reused.
+- **Vertex AI / ADC**: enter the Google Cloud project ID and location (`global` by default, or a supported region such as `us-central1`). Enable the Vertex AI API, billing, and the account's model invocation permissions. On the machine running the app, run `gcloud auth application-default login`, or launch it with `GOOGLE_APPLICATION_CREDENTIALS` pointing to a service-account credentials file. The SDK obtains and refreshes access tokens. Credential files are not copied into app settings; changing the launching environment requires restarting the app. Standard requests include `projects/.../locations/.../publishers/google/models/...`.
+
+**Custom API Base URL** is optional for either provider. It must speak the selected provider's Gemini `generateContent` protocol, not OpenAI chat/images. Examples: `https://gateway.example/google` or `https://gateway.example/vertex/v1`. A trailing `/v1`, `/v1beta`, `/v1beta1`, or `/v1alpha` is recognized as the API version and is not duplicated. Without a version suffix, the installed SDK conventions are used: `v1beta` for AI Studio and `v1beta1` for Vertex AI. Leave blank to restore the official endpoint (including the selected Vertex region). Do not enter a full model action URL, URL credentials, query parameters, or fragments.
+
+Models keep their existing model IDs. Availability, region support, quotas, and billing depend on the selected Google service/project or gateway. Switching provider does not guarantee that every listed model is enabled there. Prompt optimization uses the same connection and its separately configurable model name.
+
+Verification on October 23, 2026: the real Vertex Express endpoint returned a 1024×1024 PNG for Banana 2 (`gemini-3.1-flash-image`) through this provider. Banana 2.1 returned HTTP 404 (model not found or project access unavailable) for the tested project; this is not evidence of availability in other projects. Banana Pro and the prompt optimizer passed token-counting probes, not image/text generation probes. ADC resource paths and bearer authentication are covered with an injected credential provider; live ADC credentials were not tested. Existing model selections are preserved without silently falling back to another model.
+
+The implementation uses the existing `@google/genai` SDK with explicit `vertexai`, Key or project/location, and `httpOptions.baseUrl`; no new SDK dependency is required. Image requests explicitly use `contents.role = "user"`, as required by Vertex. Sources: [Google Gen AI SDK](https://github.com/googleapis/js-genai), [Vertex express mode](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview), [generateContent request reference](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference), and [ADC setup](https://docs.cloud.google.com/docs/authentication/provide-credentials-adc).
 
 ## References and generation limits
 
@@ -87,7 +103,14 @@ Except for startup-only settings noted below, runtime settings are watched and h
 | `IMAGE2_PROXY_CONNECT_TIMEOUT_MS` | Proxy connection timeout, default `60000` |
 | `IMAGE2_DIRECT_CONNECT_TIMEOUT_MS` | Direct connection timeout, default `60000` |
 | `IMAGE2_DIRECT_ALLOW_H2` | Allows HTTP/2 on direct Image2 requests, default `true` |
-| `GEMINI_API_KEY` | Key for Banana models and Gemini prompt optimization |
+| `GEMINI_PROVIDER` | `ai-studio` (default) or `vertex-ai`; shared by Banana and prompt optimization |
+| `GEMINI_BASE_URL` | Optional AI Studio-compatible API root or versioned gateway prefix |
+| `GEMINI_API_KEY` | AI Studio API Key |
+| `VERTEX_AUTH_MODE` | `api-key` (Express Mode, default) or `adc` (standard Google Cloud) |
+| `VERTEX_API_KEY` | Separate Vertex AI Express Mode Key |
+| `VERTEX_PROJECT` | Project ID for standard Vertex ADC |
+| `VERTEX_LOCATION` | Standard Vertex location, default `global` |
+| `VERTEX_BASE_URL` | Optional Vertex-compatible API root or versioned gateway prefix |
 | `GEMINI_PROMPT_OPTIMIZER_MODEL` | Model used by the prompt Optimize action; default `gemini-3.8-flash` |
 | `GEMINI_HTTPS_PROXY` | Separate Banana/Gemini proxy URL |
 | `GEMINI_PROXY_ENABLED` | Explicitly enables the Banana/Gemini proxy; default `false` |
@@ -104,7 +127,7 @@ Invalid runtime changes are rejected and the last valid configuration remains ac
 Image2 and Gemini use separate network paths:
 
 - Image2 follows `IMAGE2_PROXY_MODE` and its optional dedicated proxy.
-- Banana generation and prompt optimization use `GEMINI_HTTPS_PROXY` only when `GEMINI_PROXY_ENABLED=true`.
+- Banana generation and prompt optimization use `GEMINI_HTTPS_PROXY` only when `GEMINI_PROXY_ENABLED=true`, including the selected Vertex endpoint or custom URL. ADC token acquisition is handled separately by Google Auth and follows its environment/network configuration.
 - Enabling one provider's proxy does not route the other provider through it.
 
 ## Local storage

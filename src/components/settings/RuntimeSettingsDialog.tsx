@@ -1,3 +1,4 @@
+import { GeminiProviderFields } from './GeminiProviderFields';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound, Loader2, RefreshCw, Scissors, Server, Settings, X } from 'lucide-react';
 import { useAppTranslation } from '../../i18n';
@@ -348,6 +349,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                   <p className="text-xs" style={{ color: '#96836F' }}>{t('settings.geminiDescription')}</p>
                 </div>
               </div>
+              <GeminiProviderFields form={form} settings={settings.gemini} onChange={patchForm} />
               <label className="mb-4 block space-y-1.5">
                 <span className="text-xs" style={{ color: '#B8A58D' }}>
                   {t('settings.geminiPromptOptimizerModel')}
@@ -364,9 +366,10 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                   {t('settings.geminiPromptOptimizerDescription')}
                 </span>
               </label>
+              {form.geminiProvider === 'ai-studio' && <>
               <label className="space-y-1.5">
                 <span className="flex items-center justify-between gap-2 text-xs" style={{ color: '#B8A58D' }}>
-                  <span>Gemini API Key</span>
+                  <span>AI Studio API Key</span>
                   <ConfiguredState configured={settings.gemini.apiKeyConfigured} />
                 </span>
                 <input
@@ -389,6 +392,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
                   {t('settings.clearGeminiKey')}
                 </label>
               )}
+              </>}
               <div className="mt-5 border-t pt-4" style={{ borderColor: 'rgba(242,193,78,0.1)' }}>
                 <label className="flex items-start gap-3 rounded-lg border p-3" style={{ borderColor: 'rgba(242,193,78,0.12)' }}>
                   <input
