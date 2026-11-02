@@ -1,7 +1,10 @@
+import { installConsoleLogging } from './src/server/appLog';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { startLocalServer } from './src/server/startLocalServer';
+
+installConsoleLogging();
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 

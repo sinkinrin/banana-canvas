@@ -1,3 +1,4 @@
+import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { GeminiProviderFields } from './GeminiProviderFields';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound, Loader2, RefreshCw, Scissors, Server, Settings, X } from 'lucide-react';
@@ -66,7 +67,7 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>();
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [activeTab, setActiveTab] = useState<'models' | 'cutout' | 'updates'>('models');
+  const [activeTab, setActiveTab] = useState<'models' | 'cutout' | 'updates' | 'logs'>('models');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -191,9 +192,16 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
             <RefreshCw size={15} />
             {t('settings.updatesTab')}
           </button>
+          <button type="button" data-settings-tab="logs" role="tab" aria-selected={activeTab === 'logs'}
+            onClick={() => setActiveTab('logs')} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium"
+            style={activeTab === 'logs' ? { background: 'rgba(242,193,78,0.14)', color: '#F2C14E' } : { color: '#96836F' }}>
+            {t('logs.title')}
+          </button>
         </nav>
 
-        {activeTab === 'updates' ? (
+        {activeTab === 'logs' ? (
+          <DiagnosticsPanel />
+        ) : activeTab === 'updates' ? (
           <SoftwareUpdatePanel />
         ) : activeTab === 'cutout' ? (
           <CutoutSettingsPanel />

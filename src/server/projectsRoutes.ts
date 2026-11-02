@@ -1,3 +1,4 @@
+import { appLog } from './appLog';
 import express from 'express';
 import type { LocalProjectStore } from '../lib/localProjectStore';
 
@@ -59,6 +60,7 @@ export function mountProjectRoutes(app: express.Express, projectStore: LocalProj
     try {
       const name = typeof req.body?.name === 'string' ? req.body.name : '未命名项目';
       const project = await projectStore.createProject(name, req.body?.snapshot);
+      appLog('info', 'projects', 'Project created', { projectId: project.id });
       res.json({ project });
     } catch (error) {
       sendProjectRouteError(res, error);
@@ -69,6 +71,7 @@ export function mountProjectRoutes(app: express.Express, projectStore: LocalProj
     try {
       const projects = Array.isArray(req.body?.projects) ? req.body.projects : [];
       await projectStore.importProjects(projects);
+      appLog('info', 'projects', 'Projects imported', { count: projects.length });
       res.json({ ok: true });
     } catch (error) {
       sendProjectRouteError(res, error);
@@ -112,6 +115,7 @@ export function mountProjectRoutes(app: express.Express, projectStore: LocalProj
       }
 
       await projectStore.saveProjectAsset(req.params.projectId, asset);
+      appLog('debug', 'projects', 'Project asset saved', { projectId: req.params.projectId });
       res.json({ ok: true });
     } catch (error) {
       sendProjectRouteError(res, error);
@@ -121,6 +125,7 @@ export function mountProjectRoutes(app: express.Express, projectStore: LocalProj
   app.put('/api/projects/:projectId', async (req, res) => {
     try {
       await projectStore.saveProjectSnapshot(req.params.projectId, req.body);
+      appLog('info', 'projects', 'Project saved', { projectId: req.params.projectId });
       res.json({ ok: true });
     } catch (error) {
       sendProjectRouteError(res, error);
@@ -144,6 +149,7 @@ export function mountProjectRoutes(app: express.Express, projectStore: LocalProj
   app.delete('/api/projects/:projectId', async (req, res) => {
     try {
       await projectStore.deleteProject(req.params.projectId);
+      appLog('info', 'projects', 'Project deleted', { projectId: req.params.projectId });
       res.json({ ok: true });
     } catch (error) {
       sendProjectRouteError(res, error);

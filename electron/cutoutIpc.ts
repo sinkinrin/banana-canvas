@@ -1,3 +1,4 @@
+import { appLog } from '../src/server/appLog';
 import path from 'node:path';
 import { app, ipcMain, net, utilityProcess, type BrowserWindow, type UtilityProcess } from 'electron';
 import { CUTOUT_INPUT_SIZE, getCutoutModel, type CutoutRequest } from '../src/lib/cutoutModels';
@@ -26,7 +27,10 @@ export function registerCutoutIpc(getWindow: () => BrowserWindow | null, getRoot
   function handle(name: string, callback: (...args: any[]) => unknown) {
     ipcMain.handle(`banana:cutout:${name}`, (event, ...args) => {
       if (event.sender !== getWindow()?.webContents) throw new Error('INVALID_SENDER');
-      return callback(...args);
+      return Promise.resolve().then(() => callback(...args)).catch((error) => {
+        if (name !== 'state' && name !== 'run') appLog('error', 'cutout', `Operation failed: ${name}`, error);
+        throw error;
+      });
     });
   }
   handle('state', state);
@@ -36,6 +40,7 @@ export function registerCutoutIpc(getWindow: () => BrowserWindow | null, getRoot
   handle('remove', async (id: unknown) => {
     if (active) throw new Error('BUSY');
     await getStore().remove(id);
+    appLog('info', 'cutout', 'Downloaded model removed', { model: id, selectedModel: (await state()).selectedModelId });
     return state();
   });
   handle('cancel', (id: unknown) => { if (active && active.requestId === id) active.cancel(); });
@@ -43,11 +48,14 @@ export function registerCutoutIpc(getWindow: () => BrowserWindow | null, getRoot
     if (active) throw new Error('BUSY');
     if (!request || typeof request.requestId !== 'string' || request.requestId.length > 80 || !(request.input instanceof Float32Array) || request.input.length !== 3 * CUTOUT_INPUT_SIZE ** 2) throw new Error('INVALID_IMAGE');
     getCutoutModel(request.modelId);
+    const startedAt = Date.now();
+    appLog('info', 'cutout', 'Background removal started', { model: request.modelId }, request.requestId);
     return new Promise<Uint8Array>((resolve, reject) => {
       let settled = false;
       const finish = (error?: string, alpha?: Uint8Array) => {
         if (settled) return;
         settled = true;
+        appLog(error && error !== 'CANCELLED' ? 'error' : 'info', 'cutout', error === 'CANCELLED' ? 'Background removal cancelled' : error ? 'Background removal failed' : 'Background removal completed', { error, elapsedMs: Date.now() - startedAt }, request.requestId);
         clearTimeout(timeout);
         active?.worker?.kill();
         active = undefined;

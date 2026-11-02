@@ -1,3 +1,4 @@
+import { appLog } from '../src/server/appLog';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -57,7 +58,9 @@ export class CutoutModelStore {
     const file = path.join(this.directory, 'preferences.json');
     await fs.writeFile(file + '.tmp', JSON.stringify({ selectedModelId: model.id }));
     await fs.rename(file + '.tmp', file);
+    const previous = this.selected;
     this.selected = model.id;
+    if (previous !== model.id) appLog('info', 'cutout', 'Background removal model changed', { previous, current: model.id });
     this.changed();
     return this.getState();
   }
@@ -68,6 +71,7 @@ export class CutoutModelStore {
     if (this.downloading) throw new Error('DOWNLOAD_BUSY');
     const controller = new AbortController();
     this.downloading = controller;
+    appLog('info', 'cutout', 'Model download started', { model: model.id });
     this.progress = { modelId: model.id, received: 0, total: model.bytes };
     this.changed();
     const file = this.modelPath(model);
@@ -95,7 +99,9 @@ export class CutoutModelStore {
       if (controller.signal.aborted) throw new Error('CANCELLED');
       if (received !== model.bytes || hash.digest('hex') !== model.sha256) throw new Error('MODEL_CORRUPT');
       await fs.rename(partial, file);
+      appLog('info', 'cutout', 'Model download completed', { model: model.id });
     } catch (error) {
+      appLog(controller.signal.aborted ? 'info' : 'error', 'cutout', controller.signal.aborted ? 'Model download cancelled' : 'Model download failed', { model: model.id, error });
       await fs.rm(partial, { force: true });
       if (controller.signal.aborted) throw new Error('CANCELLED');
       throw error;

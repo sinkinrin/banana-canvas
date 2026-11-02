@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.12.0`
+Current version: `0.13.0`
 
 Choose Google AI Studio or Vertex AI in App settings, with separate API Keys and optional custom URLs. Vertex supports Express Mode and Google Cloud ADC. See [provider configuration](docs/CONFIGURATION.md#ai-studio-and-vertex-ai).
 
@@ -140,3 +140,9 @@ npm run check
 `npm install` is the initial dependency setup step. `npm run check` validates the existing checkout and does not run `npm install` for you.
 
 For the full command list and desktop smoke tests, see [Development](docs/DEVELOPMENT.md).
+
+### Logs and diagnostics
+
+The desktop app includes Settings → Logs & diagnostics with live logs, level/module filters, request-ID search, pause/resume, retained history, copy and export. Normal recording is enabled by default. Debug adds detail immediately and persists across restarts; `香蕉画图.exe --debug` also enables it. Display filters and pausing do not change recording.
+
+Logs live in the user-data `logs` directory (Windows default: `%APPDATA%\banana-canvas\logs`), with five files of up to 10 MB each. Export includes all retained logs and a version/runtime summary. Credential changes record only set/replace/clear actions; full prompts, images and authentication values are excluded. Logs can be retrieved from this directory when the window fails to open. Native crashes before JavaScript starts may not produce an application log.

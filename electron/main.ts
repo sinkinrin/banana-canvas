@@ -1,3 +1,6 @@
+import { runDiagnosticsSmoke } from './diagnosticsSmoke';
+import { initializeDiagnostics } from './diagnostics';
+import { appLog } from '../src/server/appLog';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -177,7 +180,9 @@ ipcMain.handle(UPDATE_INSTALL_CHANNEL, async (event) => {
 ipcMain.handle(UPDATE_SET_AUTOMATIC_CHANNEL, async (event, enabled: unknown) => {
   assertApplicationWindowSender(event, 'Update preference');
   if (typeof enabled !== 'boolean') throw new Error('Automatic update preference must be a boolean');
+  const previous = getUpdatePreferencesStore().get().automaticUpdatesEnabled;
   getUpdatePreferencesStore().replace({ automaticUpdatesEnabled: enabled });
+  if (previous !== enabled) appLog('info', 'settings', 'Automatic updates preference changed', { previous, current: enabled });
   startDesktopUpdates();
   return updateManager
     ? updateManager.setAutomaticUpdatesEnabled(enabled)
@@ -191,7 +196,9 @@ function isSmokeTest() {
 ipcMain.handle(UPDATE_SET_STARTUP_CHECK_CHANNEL, async (event, enabled: unknown) => {
   assertApplicationWindowSender(event, 'Startup update preference');
   if (typeof enabled !== 'boolean') throw new Error('Startup update preference must be a boolean');
+  const previous = getUpdatePreferencesStore().get().checkOnStartupEnabled;
   getUpdatePreferencesStore().replace({ checkOnStartupEnabled: enabled });
+  if (previous !== enabled) appLog('info', 'settings', 'Startup update check preference changed', { previous, current: enabled });
   startDesktopUpdates();
   return updateManager ? updateManager.setCheckOnStartupEnabled(enabled) : getDesktopUpdateState();
 });
@@ -207,21 +214,14 @@ function configureSmokeUserDataDir() {
 
 configureSmokeUserDataDir();
 
+
 const logger: RuntimeConfigLogger = ({ level, message }) => {
-  const prefix = `[banana:${level}]`;
-  if (level === 'error') {
-    console.error(prefix, message);
-    return;
-  }
-  if (level === 'warn') {
-    console.warn(prefix, message);
-    return;
-  }
-  console.info(prefix, message);
+  appLog(level, message.startsWith('[update]') ? 'updates' : 'settings', message);
 };
 
 async function prepareForUpdateInstall() {
   await projectSaveBridge?.flush();
+  appLog('info', 'updates', 'Installing downloaded update');
   isQuitting = true;
   updateManager?.stop();
 }
@@ -1154,6 +1154,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   await runLayoutSmoke({ window, localUrl, imageUrl: nativeImage.createFromDataURL(createSmokeJpegDataUrl()).resize({ width: 640, height: 480 }).toDataURL(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runReferencePreviewSmokeTest(localUrl, window);
   await runReferenceImageSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+  await runDiagnosticsSmoke(window, waitForSmokePredicate);
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, QuickDraw and cutout probes passed');
 }
 
@@ -1194,6 +1195,7 @@ async function ensureLocalServer() {
 
   try {
     serverHandle = await serverStartPromise;
+    appLog('info', 'startup', 'Local server ready', { port: serverHandle.port });
     return serverHandle;
   } finally {
     serverStartPromise = null;
@@ -1220,6 +1222,11 @@ async function createMainWindow() {
       sandbox: true,
       preload: path.join(__dirname, 'preload.cjs'),
     },
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => appLog('error', 'renderer', 'Renderer exited', details));
+  mainWindow.webContents.on('unresponsive', () => appLog('warn', 'renderer', 'Renderer unresponsive'));
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
+    if (isMainFrame) appLog('error', 'renderer', 'Window load failed', { code, description });
   });
   mainWindow.removeMenu();
   observeWindowState(mainWindow);
@@ -1250,6 +1257,7 @@ async function createMainWindow() {
 
   configureExternalNavigation(mainWindow, localServer.url);
   mainWindow.once('ready-to-show', () => {
+    appLog('info', 'startup', 'Window ready');
     if (!isSmokeTest()) mainWindow?.show();
   });
   mainWindow.on('closed', () => {
@@ -1262,6 +1270,9 @@ async function createMainWindow() {
   if (isSmokeTest()) {
     if (process.env.BANANA_SMOKE_RESTART !== '1') await runSmokeTest(localServer.url, mainWindow);
     else {
+      const logState = await mainWindow.webContents.executeJavaScript('bananaDesktop.diagnostics.state()');
+      const priorLogs = await mainWindow.webContents.executeJavaScript("bananaDesktop.diagnostics.query({session:'all',search:'smoke-visible-debug'})");
+      if (logState.mode !== 'debug' || !priorLogs.entries.length) throw new Error('Debug mode/history did not survive restart');
       const persisted = await mainWindow.webContents.executeJavaScript(`bananaDesktop.comparison.get()`);
       if (persisted?.aspectRatio !== '16:9' || persisted?.imageSize !== '2K' || persisted?.models?.join(',') !== 'image2.5-flare,image2.5-sunburst') throw new Error('Comparison preferences did not survive desktop restart');
       console.info('[banana:smoke] comparison models, ratio and resolution survived desktop restart on a new local port');
@@ -1271,6 +1282,7 @@ async function createMainWindow() {
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (hasSingleInstanceLock) initializeDiagnostics(() => mainWindow);
 
 if (!hasSingleInstanceLock) {
   app.quit();

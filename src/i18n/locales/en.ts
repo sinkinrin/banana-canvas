@@ -1,4 +1,13 @@
 export const en = {
+  logs: {
+    title: 'Logs & diagnostics', mode: 'Recording mode', normal: 'Normal', folder: 'Open log folder', export: 'Export diagnostics', exported: 'Diagnostic logs exported.',
+    hint: 'Normal logs include key operations and errors. Debug adds detail from the moment it is enabled and stays enabled after restart. Keys, prompts and images are not recorded. Files rotate at 10 MB, retaining up to 5 files.',
+    desktopOnly: 'Diagnostic logs are available in the desktop app.', failed: 'The log operation failed. Please try again.', writeFailed: 'Logs could not be written. Check available disk space and directory permissions.',
+    session: 'Session', current: 'This session', history: 'All retained sessions', level: 'Level', allLevels: 'All levels', module: 'Module', allModules: 'All modules', search: 'Search logs or request ID',
+    pause: 'Pause display', resume: 'Follow latest', paused: 'Display paused; logging continues', live: 'Following latest logs', count: '{{count}} entries shown (up to 2,000 in history)',
+    older: 'Load older entries', pauseForHistory: 'Pause display to load older entries', empty: 'No matching logs.', copy: 'Copy entry', copyId: 'Copy request ID',
+    modules: { settings: 'Configuration & operations', startup: 'Startup', shutdown: 'Shutdown', generation: 'Generation', gemini: 'Gemini', image2: 'Image2', optimizer: 'Prompt optimization', projects: 'Projects', prompts: 'Prompt library', updates: 'Updates', cutout: 'Background removal', renderer: 'Interface', main: 'Main process' },
+  },
   categories: { title: 'Categories', assign: 'Node category', unassigned: 'Unassigned', color: 'Category {{index}}', name: 'Category name', hint: 'Choose a color to assign. Name an assigned category; all nodes of that color share its name.', all: 'Locate all', locate: 'Locate category', custom: 'Customized' },
   window: { minimize: 'Minimize window', maximize: 'Maximize window', restore: 'Restore window', close: 'Close window' },
   comparison: {

@@ -1,3 +1,4 @@
+import { appLog } from '../appLog';
 import { lookup } from 'node:dns/promises';
 import { parseImageInputError } from '../imageInputError';
 import { BlockList } from 'node:net';
@@ -408,7 +409,7 @@ async function runImage2Attempt({
   timeout.unref?.();
   const startedAt = Date.now();
 
-  console.info(
+  console.debug(
     `[image2:${requestId}] attempt=${attemptNumber}/${totalAttempts} channel=${attempt.label} timeoutMs=${timeoutMs}`
   );
 
@@ -422,7 +423,7 @@ async function runImage2Attempt({
       getDirectDispatcher: () => getImage2DirectAgent(env),
     });
     const elapsedMs = Date.now() - startedAt;
-    console.info(
+    console.debug(
       `[image2:${requestId}] attempt=${attemptNumber}/${totalAttempts} channel=${attempt.label} status=${response.status} ok=${response.ok} ms=${elapsedMs}`
     );
 
@@ -431,7 +432,6 @@ async function runImage2Attempt({
     const responseText = new TextDecoder().decode(
       await readBodyWithLimit(response, MAX_IMAGE2_RESPONSE_BYTES)
     );
-    const bodyPreview = retryable ? previewResponseBody(responseText) : '';
     return {
       type: 'response',
       attempt: attemptNumber,
@@ -440,7 +440,7 @@ async function runImage2Attempt({
       responseText,
       retryable,
       failureSummary: retryable
-        ? `${attemptNumber}:${attempt.label} HTTP ${response.status}${bodyPreview ? ` ${bodyPreview}` : ''}`
+        ? `${attemptNumber}:${attempt.label} HTTP ${response.status}`
         : undefined,
     };
   } catch (error) {
@@ -803,7 +803,7 @@ export async function generateImage2Image({
 
   const requestPrompt = maskImage ? createImage2MaskEditPrompt(prompt) : prompt;
 
-  console.info(
+  console.debug(
     `[image2:${requestId}] sending ${image2Config.endpointType} request baseUrl=${image2Config.baseUrl} url=${endpoint} model=${image2Config.model} refs=${images.length} mask=${Boolean(maskImage)} promptChars=${requestPrompt.length} stream=${streamImages} partialImages=${partialImages} options=${JSON.stringify(normalizedImage2Options)}`
   );
 
@@ -874,13 +874,13 @@ export async function generateImage2Image({
   );
   signal?.throwIfAborted();
   const responseJson = tryParseJson(responseText);
-  console.info(`[image2:${requestId}] relay status=${response.status} ok=${response.ok}`);
+  console.debug(`[image2:${requestId}] relay status=${response.status} ok=${response.ok}`);
 
   if (!response.ok) {
     const imageError = parseImageInputError(responseJson);
     if (imageError) throw imageError;
-    const message = extractErrorMessage(responseJson) || responseText || 'image2 图像生成失败';
-    console.error(`[image2:${requestId}] relay error body=${previewResponseBody(responseText)}`);
+    const message = extractErrorMessage(responseJson) || 'image2 图像生成失败';
+    appLog('error', 'image2', 'Upstream HTTP request failed', { status: response.status }, requestId);
     throw new Error(`image2 请求失败 (${response.status}): ${message}`);
   }
 
@@ -888,7 +888,7 @@ export async function generateImage2Image({
     ? extractImage2ImageUrlFromSse(responseText) || extractImage2ImageUrl(responseJson)
     : extractImage2ImageUrl(responseJson);
   if (!imageUrl) {
-    console.error(`[image2:${requestId}] no image in response body=${previewResponseBody(responseText)}`);
+    appLog('error', 'image2', 'No image in upstream response', { status: response.status }, requestId);
     throw new Error('image2 响应中未找到图像数据。');
   }
 
@@ -898,7 +898,7 @@ export async function generateImage2Image({
     new URL(image2Config.baseUrl).origin,
     signal
   );
-  console.info(`[image2:${requestId}] image extracted type=${normalizedImageUrl.startsWith('data:image/') ? 'data-url' : 'url'}`);
+  console.debug(`[image2:${requestId}] image extracted type=${normalizedImageUrl.startsWith('data:image/') ? 'data-url' : 'url'}`);
   const finalEvent = streamImages
     ? parseImage2SseEvents(responseText).reverse().find((event) => typeof event.type === 'string' && event.type.endsWith('.completed'))
     : undefined;

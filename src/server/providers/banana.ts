@@ -1,3 +1,4 @@
+import { appLog } from '../appLog';
 import { createGeminiClient } from './geminiClient';
 import type { GeminiConnectionConfig } from '../../lib/geminiProvider';
 import type { GenerationInfo } from '../../lib/generationInfo';
@@ -39,6 +40,7 @@ export function extractBananaProviderImageUrl(response: unknown) {
 }
 
 export async function generateBananaImage({
+  requestId,
   imageModel,
   prompt,
   connection,
@@ -49,6 +51,7 @@ export async function generateBananaImage({
   signal,
   onMetadata,
 }: {
+  requestId?: string;
   imageModel: ImageModelId;
   prompt: string;
   connection: GeminiConnectionConfig;
@@ -73,12 +76,19 @@ export async function generateBananaImage({
     abortSignal: signal,
   };
 
+  appLog('debug', 'gemini', 'Sending generation request', { model: request.model, provider: connection.provider,
+    baseUrl: connection.provider === 'vertex-ai' ? connection.vertexBaseUrl : connection.baseUrl, refs: images.length }, requestId);
   const response = await ai.models.generateContent(request as any);
+  const summary = { model: response.modelVersion, candidates: response.candidates?.map((candidate) => ({
+    finishReason: candidate.finishReason, parts: candidate.content?.parts?.map((part) => part.inlineData ? 'image' : part.text ? 'text' : 'other'),
+  })), blockReason: response.promptFeedback?.blockReason, usage: response.usageMetadata };
+  appLog('debug', 'gemini', 'Generation response received', summary, requestId);
   const imageUrl = extractBananaProviderImageUrl(response);
   onMetadata?.({ apiModel: request.model, reportedModel: response.modelVersion,
     requestedSize: String(imageSize ?? 'auto'),
     inputTokens: response.usageMetadata?.promptTokenCount, outputTokens: response.usageMetadata?.candidatesTokenCount });
   if (imageUrl) return imageUrl;
 
+  appLog('warn', 'gemini', 'No image in generation response', summary, requestId);
   throw new Error('响应中未找到图像数据。');
 }

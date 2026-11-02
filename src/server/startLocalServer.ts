@@ -1,3 +1,4 @@
+import { rememberLogSecrets } from './appLog';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -88,6 +89,7 @@ export async function startLocalServer({
   logger = defaultLogger,
   runtimeSecrets,
 }: StartLocalServerOptions = {}): Promise<LocalServerHandle> {
+  rememberLogSecrets({ ...env, ...(runtimeSecrets?.get() ?? {}) });
   const resolvedRootDir = path.resolve(rootDir);
   const resolvedEnvFilePath = path.resolve(envFilePath ?? path.join(resolvedRootDir, '.env'));
   const configuredHost = loadRuntimeEnvFile(
@@ -117,6 +119,7 @@ export async function startLocalServer({
     ...(runtimeSecrets?.get() ?? {}),
   });
   const loadedInitialEnv = loadEffectiveEnv();
+  rememberLogSecrets(loadedInitialEnv);
   const initialRecovery = repairInvalidEnvFile
     ? recoverInvalidRuntimeEnv(loadedInitialEnv)
     : { env: loadedInitialEnv, errors: [], invalidKeys: [] };

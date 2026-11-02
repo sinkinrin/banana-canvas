@@ -1,3 +1,4 @@
+import { appLog, rememberLogSecrets } from './appLog';
 import fs from 'node:fs';
 import { listServerModels, ModelListError } from './serverModels';
 import path from 'node:path';
@@ -354,6 +355,7 @@ export function createRuntimeSettingsStore({
     listModels: (signal) => listServerModels(manager.get(), signal),
     update: (input) => {
       const updates = parseRuntimeSettingsUpdate(input as RuntimeSettingsUpdate);
+      rememberLogSecrets(updates);
       const previousExists = fs.existsSync(resolvedEnvFilePath);
       const previousText = previousExists ? fs.readFileSync(resolvedEnvFilePath, 'utf8') : '';
       const previousSecrets = secretStore?.get() ?? {};
@@ -448,6 +450,7 @@ export function mountRuntimeSettingsRoutes(
       res.json(store.update(req.body));
     } catch (error) {
       if (error instanceof RuntimeSettingsValidationError) {
+        appLog('warn', 'settings', 'Settings save rejected', { reason: error.message });
         res.status(400).json({ error: error.message, errors: error.errors });
         return;
       }

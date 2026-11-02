@@ -1,6 +1,15 @@
 import { en, type LocaleResource } from './en';
 
 export const zhCN: LocaleResource<typeof en> = {
+  logs: {
+    title: '日志与诊断', mode: '记录模式', normal: '正常', folder: '打开日志目录', export: '导出诊断日志', exported: '诊断日志已导出。',
+    hint: '正常模式记录关键操作和异常；Debug 从开启后增加详细记录，重启后仍保留。不会记录 Key、提示词和图片。单文件 10 MB，最多保留 5 个文件。',
+    desktopOnly: '日志与诊断功能在桌面客户端中可用。', failed: '日志操作失败，请重试。', writeFailed: '日志无法写入，请检查磁盘空间和目录权限。',
+    session: '运行记录', current: '本次运行', history: '全部保留的历史', level: '日志级别', allLevels: '所有级别', module: '模块', allModules: '所有模块', search: '搜索日志内容或请求 ID',
+    pause: '暂停显示', resume: '跟随最新', paused: '已暂停显示，后台仍在记录', live: '正在跟随最新日志', count: '已显示 {{count}} 条（历史最多显示 2,000 条）',
+    older: '加载更早的日志', pauseForHistory: '暂停显示后可加载更早日志', empty: '没有匹配的日志。', copy: '复制此条', copyId: '复制请求 ID',
+    modules: { settings: '配置与操作', startup: '启动', shutdown: '退出', generation: '生图', gemini: 'Gemini', image2: 'Image2', optimizer: '提示词优化', projects: '项目', prompts: '提示词库', updates: '软件更新', cutout: '抠图', renderer: '界面', main: '主进程' },
+  },
   categories: { title: '节点分类', assign: '节点分类', unassigned: '未分类', color: '分类 {{index}}', name: '分类名称', hint: '点击颜色归类。归类后可命名，同色节点共用名称；修改后自动保存。', all: '定位全部', locate: '定位分类', custom: '已自定义' },
   window: { minimize: '最小化窗口', maximize: '最大化窗口', restore: '还原窗口', close: '关闭窗口' },
   comparison: {

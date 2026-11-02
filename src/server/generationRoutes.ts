@@ -1,3 +1,4 @@
+import { appLog, protectLogText } from './appLog';
 import express from 'express';
 import { ImageInputError } from './imageInputError';
 import { extractReferencePrimaryImages } from './prepareReferenceImages';
@@ -18,6 +19,7 @@ import { getRuntimeConfig, type RuntimeConfigManager } from './runtimeConfig';
 import { normalizeGenerationInfo, type GenerationInfo } from '../lib/generationInfo';
 
 export type BananaGenerateInput = {
+  requestId?: string;
   onMetadata?: (info: GenerationInfo) => void;
   imageModel: ImageModelId;
   prompt: string;
@@ -118,10 +120,13 @@ export function mountGenerationRoutes(
 ) {
   app.post('/api/generate-image', async (req, res) => {
     const requestId = createRequestId();
+    const startedAt = Date.now();
+    res.setHeader('X-Request-ID', requestId);
     const requestAbort = createRequestAbort(req, res);
     const validation = validateGenerateImageRequest(req.body);
     if (!validation.ok) {
       requestAbort.cleanup();
+      appLog('warn', 'generation', 'Request validation rejected', { reason: validation.error }, requestId);
       sendValidationFailure(res, validation.error);
       return;
     }
@@ -131,20 +136,23 @@ export function mountGenerationRoutes(
     const connectionError = getGeminiConnectionError(connection);
     if (body.provider === 'gemini' && connectionError) {
       requestAbort.cleanup();
+      appLog('warn', 'generation', 'Connection configuration missing', undefined, requestId);
       res.status(401).json({ error: connectionError });
       return;
     }
 
+    const releasePrivateText = protectLogText(body.prompt);
     try {
       body.referenceImages = extractReferencePrimaryImages(body.referenceImages);
       console.info(
         `[generate-image:${requestId}] model=${body.imageModel} provider=${body.provider} refs=${body.referenceImages.length} promptChars=${body.prompt.length}`
       );
-      const startedAt = Date.now();
+      appLog('debug', 'generation', 'Generation parameters', { aspectRatio: body.aspectRatio, imageSize: body.imageSize, bananaOptions: body.bananaOptions, image2Options: body.image2Options }, requestId);
       let generationInfo: GenerationInfo = {};
       const onMetadata = (info: GenerationInfo) => { generationInfo = normalizeGenerationInfo(info) ?? {}; };
       const imageUrl = body.provider === 'gemini'
         ? await providers.generateBananaImage({
+            requestId,
             imageModel: body.imageModel,
             prompt: body.prompt,
             connection,
@@ -169,13 +177,14 @@ export function mountGenerationRoutes(
           });
 
       if (canWriteResponse(res, requestAbort.signal)) {
+        appLog('info', 'generation', 'Generation completed', { model: body.imageModel, elapsedMs: Date.now() - startedAt }, requestId);
         res.json({ imageUrl, imageModel: body.imageModel,
           ...(req.body?.includeGenerationInfo === true ? { generationInfo: { ...generationInfo, elapsedMs: Date.now() - startedAt } } : {}),
         });
       }
     } catch (error) {
       if (!requestAbort.signal.aborted) {
-        console.error(`[generate-image:${requestId}] failed:`, error);
+        appLog('error', 'generation', 'Generation failed', { error, elapsedMs: Date.now() - startedAt }, requestId);
       }
       if (canWriteResponse(res, requestAbort.signal)) {
         if (error instanceof ImageInputError) {
@@ -186,18 +195,25 @@ export function mountGenerationRoutes(
         }
       }
     } finally {
+      releasePrivateText();
+      if (requestAbort.signal.aborted) appLog('info', 'generation', 'Generation cancelled', { elapsedMs: Date.now() - startedAt }, requestId);
       requestAbort.cleanup();
     }
   });
 
   app.post('/api/optimize-prompt', async (req, res) => {
+    const requestId = createRequestId();
+    const startedAt = Date.now();
+    res.setHeader('X-Request-ID', requestId);
     const requestAbort = createRequestAbort(req, res);
+    let releasePrivateText = () => {};
     try {
       const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
       if (!prompt.trim() || prompt.length > 20_000) {
         res.status(400).json({ error: 'prompt must contain 1 to 20000 characters' });
         return;
       }
+      releasePrivateText = protectLogText(prompt);
       const config = runtimeConfig.get();
       const connection = config.geminiConnection;
       const connectionError = getGeminiConnectionError(connection);
@@ -206,19 +222,25 @@ export function mountGenerationRoutes(
         return;
       }
 
+      appLog('info', 'optimizer', 'Prompt optimization started', { model: config.geminiPromptOptimizerModel, provider: connection.provider, promptChars: prompt.length }, requestId);
       const optimizedPrompt = await (providers.optimizePrompt ?? defaultOptimizePrompt)({
         prompt,
         connection,
         model: config.geminiPromptOptimizerModel,
         signal: requestAbort.signal,
       });
-      if (canWriteResponse(res, requestAbort.signal)) res.json({ optimizedPrompt });
+      if (canWriteResponse(res, requestAbort.signal)) {
+        appLog('info', 'optimizer', 'Prompt optimization completed', { elapsedMs: Date.now() - startedAt }, requestId);
+        res.json({ optimizedPrompt });
+      }
     } catch (error) {
-      if (!requestAbort.signal.aborted) console.error('Error optimizing prompt:', error);
+      if (!requestAbort.signal.aborted) appLog('error', 'optimizer', 'Prompt optimization failed', { error, elapsedMs: Date.now() - startedAt }, requestId);
       if (canWriteResponse(res, requestAbort.signal)) {
         res.status(500).json({ error: '提示词优化失败' });
       }
     } finally {
+      releasePrivateText();
+      if (requestAbort.signal.aborted) appLog('info', 'optimizer', 'Prompt optimization cancelled', { elapsedMs: Date.now() - startedAt }, requestId);
       requestAbort.cleanup();
     }
   });

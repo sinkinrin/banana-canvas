@@ -1,3 +1,4 @@
+import type { DiagnosticsBridge } from '../src/lib/diagnostics';
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopUpdateState } from '../src/lib/desktopUpdates';
 import type { DesktopWindowBridge, DesktopWindowState } from '../src/lib/desktopWindow';
@@ -23,6 +24,14 @@ const updateSubscriptions = new Map<string, (_event: Electron.IpcRendererEvent, 
 let nextUpdateSubscriptionId = 0;
 
 contextBridge.exposeInMainWorld('bananaDesktop', Object.freeze({
+  diagnostics: Object.freeze({
+    state: () => ipcRenderer.invoke('banana:logs:state'),
+    setMode: (mode) => ipcRenderer.invoke('banana:logs:mode', mode),
+    query: (query) => ipcRenderer.invoke('banana:logs:query', query),
+    openFolder: () => ipcRenderer.invoke('banana:logs:folder'),
+    exportLogs: () => ipcRenderer.invoke('banana:logs:export'),
+    report: (entry) => ipcRenderer.send('banana:logs:report', entry),
+  } satisfies DiagnosticsBridge),
   comparison: Object.freeze({
     get: () => ipcRenderer.invoke('banana:comparison:get'),
     set: (selection: unknown) => ipcRenderer.invoke('banana:comparison:set', selection),

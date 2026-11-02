@@ -1,3 +1,4 @@
+import { appLog, rememberLogSecrets } from './appLog';
 import fs from 'node:fs';
 import type { GeminiConnectionConfig } from '../lib/geminiProvider';
 import path from 'node:path';
@@ -452,10 +453,32 @@ function preserveStartupConfig(previous: RuntimeConfig, next: RuntimeConfig): Ru
   };
 }
 
+function auditRuntimeValues(config: RuntimeConfig): Record<string, unknown> {
+  return {
+    ...Object.fromEntries(RUNTIME_ENV_KEYS.map((key) => [key, config.env[key] ?? ''])),
+    GEMINI_PROVIDER: config.geminiConnection.provider, GEMINI_API_KEY: config.geminiConnection.apiKey,
+    GEMINI_BASE_URL: config.geminiConnection.baseUrl, VERTEX_BASE_URL: config.geminiConnection.vertexBaseUrl,
+    VERTEX_API_KEY: config.geminiConnection.vertexApiKey, VERTEX_AUTH_MODE: config.geminiConnection.vertexAuthMode,
+    VERTEX_PROJECT: config.geminiConnection.vertexProject, VERTEX_LOCATION: config.geminiConnection.vertexLocation,
+    GEMINI_PROMPT_OPTIMIZER_MODEL: config.geminiPromptOptimizerModel,
+    GEMINI_HTTPS_PROXY: config.geminiProxyUrl, GEMINI_PROXY_ENABLED: config.geminiProxyEnabled,
+    IMAGE2_BASE_URL: config.image2.baseUrl, IMAGE2_API_KEY: config.image2.apiKey, IMAGE2_MODEL: config.image2.model,
+    IMAGE2_ENDPOINT_TYPE: config.image2.endpointType, IMAGE2_HTTPS_PROXY: config.image2.proxyUrl,
+    IMAGE2_PROXY_MODE: config.image2.proxyMode, IMAGE2_STREAM: config.image2.stream,
+    IMAGE2_PARTIAL_IMAGES: config.image2.partialImages, IMAGE2_MAX_ATTEMPTS: config.image2.maxAttempts,
+    IMAGE2_REQUEST_TIMEOUT_MS: config.image2.requestTimeoutMs, IMAGE2_RETRY_DELAY_MS: config.image2.retryDelayMs,
+    IMAGE2_PROXY_CONNECT_TIMEOUT_MS: config.image2.proxyConnectTimeoutMs,
+    IMAGE2_DIRECT_CONNECT_TIMEOUT_MS: config.image2.directConnectTimeoutMs, IMAGE2_DIRECT_ALLOW_H2: config.image2.directAllowH2,
+    IMAGE2_HEDGE_ENABLED: config.image2.hedgeEnabled,
+    NODE_ENV: config.startup.nodeEnv, PORT: config.startup.port, BANANA_DATA_DIR: config.startup.dataDir,
+  };
+}
+
 export function createRuntimeConfigManager(
   initialEnv: EnvLike,
   { logger = defaultLogger }: { logger?: RuntimeConfigLogger } = {}
 ): RuntimeConfigManager {
+  rememberLogSecrets(initialEnv);
   const initial = validateRuntimeEnv(initialEnv);
   if (!initial.ok) {
     throw new Error(`Invalid runtime env: ${initial.errors.join('; ')}`);
@@ -466,6 +489,7 @@ export function createRuntimeConfigManager(
   return {
     get: () => current,
     reload: (env: EnvLike) => {
+      rememberLogSecrets(env);
       const next = validateRuntimeEnv(env);
       if (!next.ok) {
         logger({
@@ -475,10 +499,26 @@ export function createRuntimeConfigManager(
         return { ok: false, errors: next.errors, config: current };
       }
 
+      const previous = current;
       const changedStartupKeys = getChangedStartupKeys(current, next.config);
       current = changedStartupKeys.length > 0
         ? preserveStartupConfig(current, next.config)
         : next.config;
+
+      const beforeValues = auditRuntimeValues(previous);
+      const afterValues = auditRuntimeValues(current);
+      for (const key of RUNTIME_ENV_KEYS) {
+        const before = beforeValues[key];
+        const after = afterValues[key];
+        if (before === after) continue;
+        if (/KEY|TOKEN|PASSWORD|SECRET/.test(key)) {
+          appLog('info', 'settings', 'Credential changed', { setting: key,
+            action: !after ? 'cleared' : !before ? 'set' : 'replaced', result: 'applied' });
+        } else {
+          appLog('info', 'settings', 'Runtime setting changed', { setting: key, previous: before, current: after,
+            result: changedStartupKeys.includes(key as typeof STARTUP_ENV_KEYS[number]) ? 'restart-required' : 'applied' });
+        }
+      }
 
       if (changedStartupKeys.length > 0) {
         logger({

@@ -1,7 +1,7 @@
 {
   "name": "banana-canvas",
   "private": true,
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "A local-first AI image canvas with Image 2.5, multi-model comparisons, result details and reference editing.",
   "author": "Banana Canvas Contributors",
   "repository": {
@@ -50,7 +50,7 @@
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.13",
     "tailwind-merge": "^3.6.0",
-    "undici": "^7.29.0",
+    "undici": "^7.30.1",
     "uuid": "^14.0.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.14"
@@ -65,7 +65,7 @@
     "@typescript-eslint/parser": "^8.65.0",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.5.4",
-    "electron": "^42.7.0",
+    "electron": "^42.11.18",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.5",

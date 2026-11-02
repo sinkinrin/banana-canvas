@@ -8,7 +8,7 @@
 > [!TIP]
 > 🌐 **English: [Read the default README](README.md)**
 
-当前版本：`0.12.0`
+当前版本：`0.13.0`
 
 应用设置可选择 Google AI Studio 或 Vertex AI，两套 API Key 与自定义 URL 分别保存。Vertex 支持 Express Mode 和 Google Cloud ADC；详见[服务配置](docs/CONFIGURATION.md#ai-studio-and-vertex-ai)。
 
@@ -140,3 +140,9 @@ npm run check
 `npm install` 是首次安装依赖的步骤；`npm run check` 只验证当前依赖和代码，不会替你执行 `npm install`。
 
 完整脚本列表和桌面端 smoke 测试见 [Development](docs/DEVELOPMENT.md)。
+
+### 日志与诊断
+
+桌面客户端在“设置 → 日志与诊断”中提供实时查看、级别/模块筛选、请求 ID 搜索、暂停显示、历史分页、复制及导出功能。正常模式默认开启；Debug 增加过程记录，切换立即生效且重启后保留，也可用 `香蕉画图.exe --debug` 开启。显示筛选不会改变记录级别，暂停显示不会停止后台记录。
+
+日志保存在用户数据目录的 `logs` 子目录（Windows 默认 `%APPDATA%\banana-canvas\logs`），每个文件最多 10 MB、保留 5 个文件。导出包含所有保留的日志及版本/运行时摘要。Key 只记录设置、更换或清除动作；不保存完整提示词、图片内容或认证信息。启动失败时也可以直接从该目录取日志。应用无法启动前的原生崩溃不保证有 JavaScript 日志。
