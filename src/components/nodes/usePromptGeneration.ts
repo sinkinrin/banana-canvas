@@ -1,3 +1,4 @@
+import { isOfficialImageModel, type OfficialImageOptions } from '../../lib/officialImages';
 import { useEffect, useRef, useState } from 'react';
 import { generateImageWithInfo as generateImage, type GenerateImageParams } from '../../services/gemini';
 import { asGenerationResult, type GenerationResult } from '../../lib/generationInfo';
@@ -40,6 +41,7 @@ export function buildImagePlaceholderData({
   imageSize,
   bananaOptions,
   image2Options,
+  officialImageOptions,
   createdAt,
   referenceData,
 }: {
@@ -50,6 +52,7 @@ export function buildImagePlaceholderData({
   imageSize: GenerateImageParams['imageSize'];
   bananaOptions: BananaOptions | undefined;
   image2Options: Image2Options | undefined;
+  officialImageOptions?: OfficialImageOptions;
   createdAt: string;
   referenceData: Partial<AppNode['data']>;
 }): AppNode['data'] {
@@ -60,6 +63,7 @@ export function buildImagePlaceholderData({
     imageSize,
     bananaOptions: isBananaImageModel(imageModel) ? bananaOptions : undefined,
     image2Options: isImage2Model(imageModel) ? image2Options : undefined,
+    ...(isOfficialImageModel(imageModel) ? { officialImageOptions: officialImageOptions } : {}),
     isLoading: true,
     error: undefined,
     createdAt,
@@ -87,6 +91,7 @@ export type PromptGenerationRunInput = {
   imageSize: GenerateImageParams['imageSize'];
   bananaOptions?: BananaOptions;
   image2Options?: Image2Options;
+  officialImageOptions?: OfficialImageOptions;
   batchCount: number;
   referenceImageIds: string[];
   referenceImages: InlineImageData[];
@@ -159,7 +164,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
         const comparisonModels = normalizeComparisonModels(input.comparisonModels);
         const isComparison = comparisonModels.length >= 2 && Boolean(input.comparisonGroupId);
         const models = isComparison ? comparisonModels : Array<ImageModelId>(batchCount).fill(input.imageModel);
-        deps.onTaskCountChange?.(models.length);
+        deps.onTaskCountChange?.(models.reduce((count, model) => count + (isOfficialImageModel(model) ? input.officialImageOptions?.n ?? 1 : 1), 0));
         const createdAt = deps.now();
 
         for (let index = 0; index < models.length; index += 1) {
@@ -175,6 +180,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
               imageSize: input.imageSize,
               bananaOptions: input.bananaOptions,
               image2Options: input.image2Options,
+              officialImageOptions: input.officialImageOptions,
               createdAt,
               referenceData,
             }), ...(isComparison ? { comparisonGroupId: input.comparisonGroupId } : {}) }
@@ -203,6 +209,8 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 imageSize: input.imageSize,
                 bananaOptions: isBananaImageModel(model) ? input.bananaOptions : undefined,
                 image2Options: isImage2Model(model) ? input.image2Options : undefined,
+                ...(isOfficialImageModel(model) ? { officialImageOptions: input.officialImageOptions } : {}),
+                onPreview: preview => { if (!taskController.signal.aborted && preview.index === 0) deps.updateNodeData(nodeId, { previewImageUrl: preview.imageUrl }); },
                 referenceImages: toReferencePayload(input.referenceImages),
                 signal: taskController.signal,
               }));
@@ -222,10 +230,22 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
                 imageSize: input.imageSize,
                 bananaOptions: isBananaImageModel(model) ? input.bananaOptions : undefined,
                 image2Options: isImage2Model(model) ? input.image2Options : undefined,
+                ...(isOfficialImageModel(model) ? { officialImageOptions: input.officialImageOptions } : {}),
+                previewImageUrl: undefined,
                 isLoading: false,
                 error: undefined,
               });
-              generatedCount += 1;
+              const extraIds: string[] = [];
+              for (const [extraIndex, extraUrl] of (result.images ?? []).slice(1).entries()) {
+                extraIds.push(deps.addNode('imageNode', { x: baseX + (isComparison ? index : extraIndex + 1) * 580, y: baseY + (isComparison ? extraIndex + 1 : index) * 430 }, {
+                  ...buildImagePlaceholderData({ prompt, imageModel: model, imageModelLabel: getImageModelConfig(model).label,
+                    aspectRatio: input.aspectRatio, imageSize: input.imageSize, bananaOptions: input.bananaOptions,
+                    image2Options: input.image2Options, officialImageOptions: input.officialImageOptions, createdAt, referenceData }),
+                  imageUrl: extraUrl, generationInfo, isLoading: false,
+                }));
+              }
+              if (extraIds.length) deps.setEdges(buildPromptGenerationEdges(input.nodeId, extraIds));
+              generatedCount += 1 + extraIds.length;
               deps.onGeneratedCountChange?.(generatedCount);
               return imageUrl;
             } catch (error) {
@@ -238,6 +258,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
               deps.updateNodeData(nodeId, {
                 isLoading: false,
                 error: errorMessage,
+                previewImageUrl: undefined,
               });
               throw error;
             } finally {

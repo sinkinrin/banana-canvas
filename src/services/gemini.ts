@@ -1,3 +1,5 @@
+import { isOfficialImageModel, type OfficialImageOptions } from '../lib/officialImages';
+import { readServerSentEvents } from '../lib/sse';
 
 import {
   isBananaImageModel,
@@ -12,7 +14,7 @@ import {
   type ImageModelId,
 } from '../lib/imageModels';
 import i18n, { getCurrentLanguage } from '../i18n';
-import { normalizeGenerationInfo, type GenerationResult } from '../lib/generationInfo';
+import { normalizeGenerationInfo, type GenerationResult, type ImagePreview } from '../lib/generationInfo';
 import { prepareReferenceImages } from '../lib/prepareReferenceImages';
 
 export interface GenerateImageParams {
@@ -23,24 +25,28 @@ export interface GenerateImageParams {
   bananaOptions?: BananaOptions;
   image2Options?: Image2Options;
   referenceImages?: Array<{ data: string; mimeType: string; }>;
+  officialImageOptions?: OfficialImageOptions;
+  onPreview?: (preview: ImagePreview) => void;
+  markupImage?: { data: string; mimeType: 'image/png' };
   maskImage?: { data: string; mimeType: 'image/png' };
   signal?: AbortSignal;
 }
 
-export type GenerateImagePayload = Omit<GenerateImageParams, 'signal' | 'imageModel'> & {
+export type GenerateImagePayload = Omit<GenerateImageParams, 'signal' | 'onPreview' | 'imageModel'> & {
   imageModel: ImageModelId;
 };
 
 export function getGenerateImageTimeoutMs(imageModel?: ImageModelId) {
   const normalizedModel = normalizeImageModel(imageModel);
+  if (isOfficialImageModel(normalizedModel)) return 900000;
   return isImage2Model(normalizedModel) || normalizedModel === 'banana-pro' ? 300000 : 60000;
 }
 
 export function createGenerateImagePayload(
   params: GenerateImageParams
 ): GenerateImagePayload {
-  const { signal, imageModel, bananaOptions, image2Options, ...restParams } = params;
-  void signal;
+  const { signal, onPreview, imageModel, bananaOptions, image2Options, ...restParams } = params;
+  void signal; void onPreview;
   const normalizedModel = normalizeImageModel(imageModel);
   const normalizedBananaOptions = isBananaImageModel(normalizedModel)
     ? normalizeBananaOptionsForModel(normalizedModel, bananaOptions)
@@ -81,7 +87,7 @@ async function requestImage(params: GenerateImageParams, includeGenerationInfo =
   try {
     const payload = createGenerateImagePayload(params);
     if (payload.referenceImages?.length) {
-      payload.referenceImages = await prepareReferenceImages(payload.referenceImages, signal);
+      payload.referenceImages = await prepareReferenceImages(payload.referenceImages, signal, undefined, payload.imageModel);
     }
     signal.throwIfAborted();
     const response = await fetch('/api/generate-image', {
@@ -89,6 +95,7 @@ async function requestImage(params: GenerateImageParams, includeGenerationInfo =
       headers: {
         'Content-Type': 'application/json',
         'Accept-Language': getCurrentLanguage(),
+        ...(isOfficialImageModel(payload.imageModel) ? { Accept: 'text/event-stream' } : {}),
       },
       signal,
       body: JSON.stringify({ ...payload, ...(includeGenerationInfo ? { includeGenerationInfo: true } : {}) }),
@@ -105,6 +112,8 @@ async function requestImage(params: GenerateImageParams, includeGenerationInfo =
             : i18n.t('errors.referencesRejected');
         } else if (response.status === 401) {
           errorMessage = i18n.t('errors.apiKeyRequired');
+        } else if (isOfficialImageModel(params.imageModel) && json.error) {
+          errorMessage = `${json.error}${json.requestId ? ` (${json.requestId})` : ''}`;
         } else if (json.requestId) {
           errorMessage = i18n.t('errors.generationFailedWithRequestId', { requestId: json.requestId });
         } else if (response.status < 500 && json.error) {
@@ -116,9 +125,20 @@ async function requestImage(params: GenerateImageParams, includeGenerationInfo =
       throw new Error(errorMessage);
     }
 
-    const data = await response.json();
+    let data: GenerationResult;
+    if (response.headers?.get('content-type')?.includes('text/event-stream')) {
+      if (!response.body) throw new Error('Empty image stream');
+      let completed: GenerationResult | undefined;
+      await readServerSentEvents(response.body, event => {
+        if (event.type === 'image.error') throw new Error(String(event.error ?? 'Image generation failed'));
+        if (event.type === 'image.partial' && typeof event.imageUrl === 'string') params.onPreview?.(event as unknown as ImagePreview);
+        if (event.type === 'image.completed' && typeof event.imageUrl === 'string') completed = event as unknown as GenerationResult;
+      }, signal);
+      if (!completed) throw new Error('Image stream ended without a completed result');
+      data = completed;
+    } else data = await response.json();
     signal.throwIfAborted();
-    return { imageUrl: data.imageUrl, generationInfo: normalizeGenerationInfo(data.generationInfo) };
+    return { imageUrl: data.imageUrl, ...(data.images ? { images: data.images } : {}), generationInfo: normalizeGenerationInfo(data.generationInfo) };
   } catch (error) {
     clearTimeout(timeoutId);
     console.error("Error generating image:", error);

@@ -1,3 +1,4 @@
+import { isOfficialImageModel, type OfficialImageOptions } from '../../lib/officialImages';
 import { useEffect, useRef, useState } from 'react';
 import {
   createReferenceImagePayload,
@@ -44,6 +45,7 @@ export function buildImageRerunParams(
     imageSize: data.imageSize || '1K',
     bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
     image2Options: isImage2Model(imageModel) ? data.image2Options : undefined,
+    ...(isOfficialImageModel(imageModel) ? { officialImageOptions: data.officialImageOptions } : {}),
     referenceImages: getRerunReferenceImages(data, assets),
     signal,
   };
@@ -53,11 +55,13 @@ export function buildReferenceNodeData({
   imageModel,
   bananaOptions,
   image2Options,
+  officialImageOptions,
   referencePayload,
 }: {
   imageModel: AppNode['data']['imageModel'];
   bananaOptions: AppNode['data']['bananaOptions'];
   image2Options: AppNode['data']['image2Options'];
+  officialImageOptions?: OfficialImageOptions;
   referencePayload: Partial<AppNode['data']>;
 }): AppNode['data'] {
   const normalizedModel = normalizeImageModel(imageModel);
@@ -67,6 +71,7 @@ export function buildReferenceNodeData({
     imageModel: normalizedModel,
     bananaOptions: isBananaImageModel(normalizedModel) ? bananaOptions : undefined,
     image2Options: isImage2Model(normalizedModel) ? image2Options : undefined,
+    ...(isOfficialImageModel(normalizedModel) ? { officialImageOptions: officialImageOptions } : {}),
     ...referencePayload,
   };
 }

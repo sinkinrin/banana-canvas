@@ -1,3 +1,4 @@
+import { OFFICIAL_IMAGES_ENV_KEYS } from './officialImageConfig';
 import { appLog, rememberLogSecrets } from './appLog';
 import fs from 'node:fs';
 import { listServerModels, ModelListError } from './serverModels';
@@ -17,6 +18,7 @@ import {
 } from './runtimeConfig';
 
 const SETTINGS_ENV_KEYS = [
+  ...OFFICIAL_IMAGES_ENV_KEYS,
   'GEMINI_PROVIDER',
   'GEMINI_BASE_URL',
   'VERTEX_BASE_URL',
@@ -42,7 +44,7 @@ const SETTINGS_ENV_KEYS = [
 
 type SettingsEnvKey = (typeof SETTINGS_ENV_KEYS)[number];
 type SettingsEnvUpdates = Partial<Record<SettingsEnvKey, string>>;
-export const SENSITIVE_SETTINGS_ENV_KEYS = ['GEMINI_API_KEY', 'VERTEX_API_KEY', 'IMAGE2_API_KEY'] as const;
+export const SENSITIVE_SETTINGS_ENV_KEYS = ['GEMINI_API_KEY', 'VERTEX_API_KEY', 'IMAGE2_API_KEY', 'OPENAI_IMAGES_API_KEY'] as const;
 type SensitiveSettingsEnvKey = (typeof SENSITIVE_SETTINGS_ENV_KEYS)[number];
 
 export type RuntimeSettingsSecretValues = Partial<Record<SensitiveSettingsEnvKey, string>>;
@@ -62,7 +64,7 @@ export class RuntimeSettingsValidationError extends Error {
 export type RuntimeSettingsStore = {
   get: () => RuntimeSettingsSnapshot;
   update: (input: unknown) => RuntimeSettingsSnapshot;
-  listModels?: (signal?: AbortSignal) => Promise<import('./serverModels').ServerModel[]>;
+  listModels?: (signal?: AbortSignal, provider?: 'official' | 'legacy') => Promise<import('./serverModels').ServerModel[]>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -158,6 +160,27 @@ export function parseRuntimeSettingsUpdate(input: unknown): SettingsEnvUpdates {
     : isRecord(input.gemini)
       ? input.gemini
       : (errors.push('gemini must be an object'), undefined);
+
+  if (input.officialImages !== undefined) {
+    if (!isRecord(input.officialImages)) errors.push('officialImages must be an object');
+    else {
+      const official = input.officialImages;
+      for (const [field, key] of [['baseUrl', 'OPENAI_IMAGES_BASE_URL'], ['proxyUrl', 'OPENAI_IMAGES_HTTPS_PROXY'], ['organization', 'OPENAI_IMAGES_ORGANIZATION'], ['project', 'OPENAI_IMAGES_PROJECT']] as const) {
+        const value = parseStringField(official, field, errors, 2048);
+        if (field.endsWith('Url')) validateHttpUrlField(value, `officialImages.${field}`, errors);
+        if (value !== undefined) updates[key] = value;
+      }
+      const apiKey = parseStringField(official, 'apiKey', errors, 8192);
+      if (parseBooleanField(official, 'clearApiKey', errors)) updates.OPENAI_IMAGES_API_KEY = '';
+      else if (apiKey) updates.OPENAI_IMAGES_API_KEY = apiKey;
+      for (const [field, key] of [['proxyEnabled', 'OPENAI_IMAGES_PROXY_ENABLED'], ['stream', 'OPENAI_IMAGES_STREAM']] as const) {
+        const value = parseBooleanField(official, field, errors);
+        if (value !== undefined) updates[key] = String(value);
+      }
+      const timeout = parseIntegerField(official, 'requestTimeoutMs', 1000, 900000, errors);
+      if (timeout !== undefined) updates.OPENAI_IMAGES_REQUEST_TIMEOUT_MS = String(timeout);
+    }
+  }
 
   if (image2) {
     const baseUrl = parseStringField(image2, 'baseUrl', errors, 2_048);
@@ -299,6 +322,7 @@ function toSnapshot(manager: RuntimeConfigManager): RuntimeSettingsSnapshot {
 
   return {
     autoLoad: true,
+    officialImages: { baseUrl: config.officialImages.baseUrl, proxyUrl: config.officialImages.proxyUrl, proxyEnabled: config.officialImages.proxyEnabled, stream: config.officialImages.stream, requestTimeoutMs: config.officialImages.requestTimeoutMs, organization: config.officialImages.organization, project: config.officialImages.project, apiKeyConfigured: Boolean(config.officialImages.apiKey) },
     image2: {
       baseUrl: config.image2.baseUrl,
       apiKeyConfigured: Boolean(config.image2.apiKey),
@@ -352,7 +376,7 @@ export function createRuntimeSettingsStore({
 
   return {
     get: () => toSnapshot(manager),
-    listModels: (signal) => listServerModels(manager.get(), signal),
+    listModels: (signal, provider) => listServerModels(manager.get(), signal, provider),
     update: (input) => {
       const updates = parseRuntimeSettingsUpdate(input as RuntimeSettingsUpdate);
       rememberLogSecrets(updates);
@@ -435,7 +459,7 @@ export function mountRuntimeSettingsRoutes(
     res.once('close', abort);
     try {
       if (!store.listModels) throw new ModelListError('MODEL_LIST_UNAVAILABLE');
-      const models = await store.listModels(controller.signal);
+      const models = await store.listModels(controller.signal, req.query.provider === 'official' ? 'official' : 'legacy');
       if (!controller.signal.aborted) res.json({ models });
     } catch (error) {
       if (!controller.signal.aborted) res.status(502).json({

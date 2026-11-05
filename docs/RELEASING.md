@@ -44,9 +44,10 @@ git push origin v<version>
 1. `npm ci`、版本门禁、类型检查、Lint、测试和构建。
 2. 生产依赖安全审计。
 3. Windows NSIS 打包和已打包客户端 smoke。
-4. 检查 `latest.yml`（含当前版本更新日志与未签名提示）及产物，自动生成 SHA256 清单。
-5. 上传短期 Actions artifact。
-6. 最后一步创建 GitHub Release 并一次性上传所有客户端更新资产。
+4. 在隔离 Windows runner 安装 v0.13.0，运行旧客户端生成数据，再以新 NSIS 安装包覆盖相同目录；核对旧凭据、项目草稿、偏好与新官方通道。
+5. 检查 `latest.yml`（含当前版本更新日志与未签名提示）及产物，自动生成 SHA256 清单。
+6. 上传短期 Actions artifact。
+7. 最后一步创建 GitHub Release 并一次性上传所有客户端更新资产。
 
 Release 在所有验证完成前不会出现，避免客户端读到只有安装包、没有更新元数据的不完整版本。
 

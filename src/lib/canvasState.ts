@@ -1,3 +1,5 @@
+import { normalizeOfficialImageOptions, type OfficialImageOptions } from './officialImages';
+import { getImageInputLimits } from './imageInputLimits';
 import type { Edge, Node } from '@xyflow/react';
 import type { Snapshot as QuickdrawSnapshot } from '@quickdrawjs/react';
 import type { CutoutModelId } from './cutoutModels';
@@ -49,6 +51,8 @@ export type CanvasNodeData = {
   imageSize?: BananaImageSize | '512px';
   bananaOptions?: BananaOptions;
   image2Options?: Image2Options;
+  officialImageOptions?: OfficialImageOptions;
+  previewImageUrl?: string;
   batchCount?: number;
   referenceImageIds?: string[] | null;
   imageAssetId?: string;
@@ -233,6 +237,7 @@ function sanitizeNodeDataForSnapshot(data: CanvasNodeData): CanvasNodeData {
     imageSize: data.imageSize,
     bananaOptions: Object.keys(bananaOptions).length > 0 ? bananaOptions : undefined,
     image2Options: Object.keys(image2Options).length > 0 ? image2Options : undefined,
+    officialImageOptions: data.officialImageOptions ? normalizeOfficialImageOptions(data.officialImageOptions) : undefined,
     batchCount: data.batchCount,
     referenceImageIds: data.referenceImageIds,
     imageAssetId: data.imageAssetId,
@@ -343,7 +348,8 @@ export function normalizeNodeDataWithAssets(
 ): { data: CanvasNodeData; assets: Record<string, CanvasImageAsset> } {
   let assets = existingAssets;
   const nextData: CanvasNodeData = { ...data };
-  const nextReferenceImageIds = [...(nextData.referenceImageIds ?? [])].slice(0, 4);
+  const referenceLimit = getImageInputLimits(nextData.imageModel).count;
+  const nextReferenceImageIds = [...(nextData.referenceImageIds ?? [])].slice(0, referenceLimit);
   const ensureMutableAssets = () => {
     if (assets === existingAssets) {
       assets = { ...existingAssets };
@@ -360,12 +366,12 @@ export function normalizeNodeDataWithAssets(
   if (nextData.referenceImages?.length) {
     nextReferenceImageIds.push(
       ...nextData.referenceImages
-        .slice(0, Math.max(0, 4 - nextReferenceImageIds.length))
+        .slice(0, Math.max(0, referenceLimit - nextReferenceImageIds.length))
         .map((image) => storeAsset(image))
     );
   }
 
-  if (nextData.referenceImage && nextReferenceImageIds.length < 4) {
+  if (nextData.referenceImage && nextReferenceImageIds.length < referenceLimit) {
     nextReferenceImageIds.push(storeAsset(nextData.referenceImage));
   }
 

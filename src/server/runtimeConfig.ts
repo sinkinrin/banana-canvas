@@ -1,3 +1,4 @@
+import { createOfficialImageConnection, OFFICIAL_IMAGES_ENV_KEYS, type OfficialImageConnection } from './officialImageConfig';
 import { appLog, rememberLogSecrets } from './appLog';
 import fs from 'node:fs';
 import type { GeminiConnectionConfig } from '../lib/geminiProvider';
@@ -25,6 +26,7 @@ const DEFAULT_IMAGE2_PROXY_CONNECT_TIMEOUT_MS = 60_000;
 const STARTUP_ENV_KEYS = ['PORT', 'NODE_ENV', 'BANANA_DATA_DIR'] as const;
 
 const RUNTIME_ENV_KEYS = [
+  ...OFFICIAL_IMAGES_ENV_KEYS,
   'GEMINI_PROVIDER',
   'GEMINI_BASE_URL',
   'VERTEX_BASE_URL',
@@ -78,6 +80,7 @@ export type RuntimeConfigLogger = (entry: RuntimeConfigLogEntry) => void;
 
 export type RuntimeConfig = {
   env: EnvLike;
+  officialImages: OfficialImageConnection;
   geminiConnection: GeminiConnectionConfig;
   geminiPromptOptimizerModel: string;
   geminiProxyUrl: string;
@@ -242,6 +245,22 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
   const env = normalizeRelevantEnv(envInput);
   const errors: string[] = [];
 
+  validateUrlField(env, 'OPENAI_IMAGES_BASE_URL', errors);
+  validateUrlField(env, 'OPENAI_IMAGES_HTTPS_PROXY', errors);
+  const officialProxyEnabled = parseBooleanField(env, 'OPENAI_IMAGES_PROXY_ENABLED', false, errors);
+  parseBooleanField(env, 'OPENAI_IMAGES_STREAM', true, errors);
+  parseIntegerField({ env, key: 'OPENAI_IMAGES_REQUEST_TIMEOUT_MS', fallback: 600000, min: 1000, max: 900000, errors });
+  if (officialProxyEnabled && !env.OPENAI_IMAGES_HTTPS_PROXY) errors.push('OPENAI_IMAGES_HTTPS_PROXY is required when proxy is enabled');
+  if (env.OPENAI_IMAGES_BASE_URL) {
+    try {
+      const url = new URL(env.OPENAI_IMAGES_BASE_URL);
+      if (url.username || url.password || url.search || url.hash) errors.push('OPENAI_IMAGES_BASE_URL must not contain credentials, query parameters or fragments');
+      if (/\/(images\/(generations|edits)|responses|chat\/completions)\/?$/.test(url.pathname)) errors.push('OPENAI_IMAGES_BASE_URL must be an API base URL, not an endpoint');
+    } catch { /* Reported above. */ }
+  }
+  for (const key of ['OPENAI_IMAGES_ORGANIZATION', 'OPENAI_IMAGES_PROJECT'] as const) {
+    if (env[key] && /[\r\n]/.test(env[key])) errors.push(`${key} must be a single line`);
+  }
   validateUrlField(env, 'IMAGE2_BASE_URL', errors);
   validateUrlField(env, 'IMAGE2_CHAT_COMPLETIONS_URL', errors);
   validateUrlField(env, 'IMAGE2_HTTPS_PROXY', errors);
@@ -352,6 +371,7 @@ function validateRuntimeEnv(envInput: EnvLike): ValidationSuccess | ValidationFa
     ok: true,
     config: {
       env,
+      officialImages: createOfficialImageConnection(env),
       geminiConnection: {
         provider: env.GEMINI_PROVIDER?.toLowerCase() === 'vertex-ai' ? 'vertex-ai' : 'ai-studio',
         baseUrl: env.GEMINI_BASE_URL ?? '',
@@ -456,6 +476,10 @@ function preserveStartupConfig(previous: RuntimeConfig, next: RuntimeConfig): Ru
 function auditRuntimeValues(config: RuntimeConfig): Record<string, unknown> {
   return {
     ...Object.fromEntries(RUNTIME_ENV_KEYS.map((key) => [key, config.env[key] ?? ''])),
+    OPENAI_IMAGES_BASE_URL: config.officialImages.baseUrl, OPENAI_IMAGES_API_KEY: config.officialImages.apiKey,
+    OPENAI_IMAGES_HTTPS_PROXY: config.officialImages.proxyUrl, OPENAI_IMAGES_PROXY_ENABLED: config.officialImages.proxyEnabled,
+    OPENAI_IMAGES_STREAM: config.officialImages.stream, OPENAI_IMAGES_REQUEST_TIMEOUT_MS: config.officialImages.requestTimeoutMs,
+    OPENAI_IMAGES_ORGANIZATION: config.officialImages.organization, OPENAI_IMAGES_PROJECT: config.officialImages.project,
     GEMINI_PROVIDER: config.geminiConnection.provider, GEMINI_API_KEY: config.geminiConnection.apiKey,
     GEMINI_BASE_URL: config.geminiConnection.baseUrl, VERTEX_BASE_URL: config.geminiConnection.vertexBaseUrl,
     VERTEX_API_KEY: config.geminiConnection.vertexApiKey, VERTEX_AUTH_MODE: config.geminiConnection.vertexAuthMode,

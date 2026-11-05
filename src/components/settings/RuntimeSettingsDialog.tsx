@@ -1,3 +1,4 @@
+import { OfficialImagesFields } from './OfficialImagesFields';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { GeminiProviderFields } from './GeminiProviderFields';
 import { useEffect, useState } from 'react';
@@ -211,11 +212,12 @@ export function RuntimeSettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <div className="min-h-0 space-y-6 overflow-y-auto p-6" data-settings-body="true">
+            <OfficialImagesFields value={form.officialImages} settings={settings.officialImages} onChange={officialImages => patchForm({ officialImages })} />
             <section className="rounded-xl border p-5" style={{ background: '#18150F', borderColor: 'rgba(242,193,78,0.14)' }}>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Server size={18} style={{ color: '#F2C14E' }} />
-                  <h3 className="font-semibold">{t('settings.image2Default')}</h3>
+                  <h3 className="font-semibold">{t('settings.image2Default')} · {t('officialImages.legacyProvider')}</h3>
                 </div>
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs" style={{ background: settings.image2.ready ? 'rgba(124,203,138,0.12)' : 'rgba(217,123,58,0.12)', color: settings.image2.ready ? '#7CCB8A' : '#D97B3A' }}>
                   {settings.image2.ready && <CheckCircle2 size={13} />}

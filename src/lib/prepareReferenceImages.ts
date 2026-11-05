@@ -1,6 +1,6 @@
 import type { ReferenceImageInput } from './imageModels';
 import { base64ToBytes, bytesToBase64, inspectReferenceImage } from './referenceImageFormat';
-import { MAX_REFERENCE_IMAGE_BYTES, MAX_TOTAL_INPUT_IMAGE_BYTES, decodedBase64ByteLength } from './imageInputLimits';
+import { decodedBase64ByteLength, getImageInputLimits } from './imageInputLimits';
 import i18n from '../i18n';
 
 export async function convertReferenceToPng(bytes: Uint8Array, mimeType: string, signal?: AbortSignal) {
@@ -29,20 +29,22 @@ export async function prepareReferenceImages(
   images: ReferenceImageInput[],
   signal?: AbortSignal,
   convert = convertReferenceToPng,
+  imageModel?: unknown,
 ): Promise<ReferenceImageInput[]> {
+  const limits = getImageInputLimits(imageModel);
   const prepared: ReferenceImageInput[] = [];
   let total = 0;
   for (const [index, image] of images.entries()) {
     signal?.throwIfAborted();
     const originalSize = decodedBase64ByteLength(image.data);
-    if (!originalSize || originalSize > MAX_REFERENCE_IMAGE_BYTES) {
+    if (!originalSize || originalSize > limits.single) {
       throw new Error(i18n.t('errors.referenceSize', { index: index + 1 }));
     }
     let output: ReferenceImageInput;
     try {
       const bytes = base64ToBytes(image.data);
       const format = inspectReferenceImage(bytes);
-      output = format.convert
+      output = format.convert || (limits.count === 16 && format.mimeType === 'image/gif')
         ? await convert(format.bytes, format.mimeType, signal)
         : { data: format.bytes === bytes ? image.data : bytesToBase64(format.bytes), mimeType: format.mimeType };
     } catch {
@@ -51,11 +53,11 @@ export async function prepareReferenceImages(
     }
     signal?.throwIfAborted();
     const size = decodedBase64ByteLength(output.data);
-    if (!size || size > MAX_REFERENCE_IMAGE_BYTES) {
+    if (!size || size > limits.single) {
       throw new Error(i18n.t('errors.referenceConvertedSize', { index: index + 1 }));
     }
     total += size;
-    if (total > MAX_TOTAL_INPUT_IMAGE_BYTES) throw new Error(i18n.t('errors.referenceTotalSize'));
+    if (total > limits.total) throw new Error(i18n.t('errors.referenceTotalSize'));
     prepared.push(output);
   }
   return prepared;

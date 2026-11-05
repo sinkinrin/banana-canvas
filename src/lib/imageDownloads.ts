@@ -1,5 +1,6 @@
 const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
   'image/gif': 'gif',
+  'image/svg+xml': 'svg',
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
@@ -11,6 +12,7 @@ const IMAGE_EXTENSION_ALIASES: Record<string, string> = {
   png: 'png',
   webp: 'webp',
   gif: 'gif',
+  svg: 'svg',
 };
 
 function inferImageExtension(imageUrl?: string): string {

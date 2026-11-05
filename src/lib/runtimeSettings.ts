@@ -1,8 +1,15 @@
 import type { GeminiProviderSettings } from './geminiProvider';
 import type { Image2ProxyMode } from './imageModels';
 
+export type OfficialImagesSettings = {
+  baseUrl: string; apiKeyConfigured: boolean; proxyUrl: string; proxyEnabled: boolean;
+  stream: boolean; requestTimeoutMs: number; organization: string; project: string;
+};
+export type OfficialImagesSettingsUpdate = Partial<Omit<OfficialImagesSettings, 'apiKeyConfigured'>> & { apiKey?: string; clearApiKey?: boolean };
+
 export type RuntimeSettingsSnapshot = {
   autoLoad: true;
+  officialImages?: OfficialImagesSettings;
   image2: {
     baseUrl: string;
     apiKeyConfigured: boolean;
@@ -27,6 +34,7 @@ export type RuntimeSettingsSnapshot = {
 };
 
 export type RuntimeSettingsUpdate = {
+  officialImages?: OfficialImagesSettingsUpdate;
   image2?: {
     baseUrl?: string;
     apiKey?: string;
@@ -52,6 +60,7 @@ export type RuntimeSettingsUpdate = {
 };
 
 export type RuntimeSettingsForm = {
+  officialImages: OfficialImagesSettingsUpdate & { baseUrl: string; apiKey: string; clearApiKey: boolean; proxyUrl: string; proxyEnabled: boolean; stream: boolean; requestTimeoutMs: number; organization: string; project: string };
   image2BaseUrl: string;
   image2ApiKey: string;
   clearImage2ApiKey: boolean;
@@ -80,6 +89,7 @@ export type RuntimeSettingsForm = {
 
 export function createRuntimeSettingsForm(settings: RuntimeSettingsSnapshot): RuntimeSettingsForm {
   return {
+    officialImages: { baseUrl: 'https://api.openai.com/v1', proxyUrl: '', proxyEnabled: false, stream: true, requestTimeoutMs: 600000, organization: '', project: '', ...settings.officialImages, apiKey: '', clearApiKey: false },
     image2BaseUrl: settings.image2.baseUrl,
     image2ApiKey: '',
     clearImage2ApiKey: false,
@@ -109,6 +119,7 @@ export function createRuntimeSettingsForm(settings: RuntimeSettingsSnapshot): Ru
 
 export function createRuntimeSettingsUpdate(form: RuntimeSettingsForm): RuntimeSettingsUpdate {
   return {
+    officialImages: { ...form.officialImages, apiKey: form.officialImages.apiKey.trim() || undefined },
     image2: {
       baseUrl: form.image2BaseUrl.trim(),
       ...(form.image2ApiKey.trim() ? { apiKey: form.image2ApiKey.trim() } : {}),

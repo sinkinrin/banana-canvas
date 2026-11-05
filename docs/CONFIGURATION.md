@@ -65,6 +65,12 @@ The implementation uses the existing `@google/genai` SDK with explicit `vertexai
 - Sketches are exported as fixed-aspect PNGs with a 2048-pixel long edge; their editable QuickDraw snapshot stays in the project.
 - Batch count options are `1`, `2`, and `4`. Multiple outputs are implemented as multiple generation requests.
 
+## Official OpenAI Images provider
+
+Use the independent **OpenAI Images API (full capability)** connection in App settings. Its model entries include Image2, Image 2.5 and Image 2.6 Flare/Sunburst and keep separate credentials and proxy routing from CPA. See [official image capabilities, configuration and live verification](OPENAI_IMAGES.md). The limits and Image2 options below apply to the legacy CPA / Banana routes unless stated otherwise.
+
+Official inputs allow 16 references and 32000 prompt characters. Local reference uploads allow 50 MiB per image. PNG/JPEG/WebP, appropriate quality tiers, complexity, mask/markup edits, incremental previews, batched results, SVG and GIF have model-specific controls. SVG/GIF retain their original files across project saves. Set `OPENAI_IMAGES_HTTPS_PROXY` and `OPENAI_IMAGES_PROXY_ENABLED=true` for strict proxy routing without direct fallback.
+
 ## Image2 options
 
 The UI exposes the relay options that are currently used by the application:

@@ -58,6 +58,11 @@ jobs:
           BANANA_SKIP_CUTOUT_INFERENCE: '1'
         run: npm run smoke:electron:packaged
 
+      - name: Verify installer upgrade from v0.13.0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/installer-upgrade-smoke.mjs v0.13.0
+
       - name: Verify release assets and generate checksums
         shell: bash
         run: npm run release:prepare -- "$GITHUB_REF_NAME"

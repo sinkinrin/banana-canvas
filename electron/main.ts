@@ -1,3 +1,4 @@
+import { runOfficialImagesSmoke } from './officialImagesSmoke';
 import { runDiagnosticsSmoke } from './diagnosticsSmoke';
 import { initializeDiagnostics } from './diagnostics';
 import { appLog } from '../src/server/appLog';
@@ -325,6 +326,7 @@ function createElectronRuntimeSecretsStore(userDataDir: string): RuntimeSettings
         GEMINI_API_KEY: typeof parsed.GEMINI_API_KEY === 'string' ? parsed.GEMINI_API_KEY : '',
         VERTEX_API_KEY: typeof parsed.VERTEX_API_KEY === 'string' ? parsed.VERTEX_API_KEY : '',
         IMAGE2_API_KEY: typeof parsed.IMAGE2_API_KEY === 'string' ? parsed.IMAGE2_API_KEY : '',
+        OPENAI_IMAGES_API_KEY: typeof parsed.OPENAI_IMAGES_API_KEY === 'string' ? parsed.OPENAI_IMAGES_API_KEY : '',
       };
     },
     replace: (values) => {
@@ -1154,6 +1156,7 @@ async function runSmokeTest(localUrl: string, window: BrowserWindow) {
   await runLayoutSmoke({ window, localUrl, imageUrl: nativeImage.createFromDataURL(createSmokeJpegDataUrl()).resize({ width: 640, height: 480 }).toDataURL(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runReferencePreviewSmokeTest(localUrl, window);
   await runReferenceImageSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+  await runOfficialImagesSmoke({ window, localUrl, imageUrl: createSmokeJpegDataUrl(), userDataDir: app.getPath('userData'), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
   await runDiagnosticsSmoke(window, waitForSmokePredicate);
   console.info('[banana:smoke] page, settings/update UI, prompt library, image actions, Banana models, QuickDraw and cutout probes passed');
 }
@@ -1275,7 +1278,16 @@ async function createMainWindow() {
       if (logState.mode !== 'debug' || !priorLogs.entries.length) throw new Error('Debug mode/history did not survive restart');
       const persisted = await mainWindow.webContents.executeJavaScript(`bananaDesktop.comparison.get()`);
       if (persisted?.aspectRatio !== '16:9' || persisted?.imageSize !== '2K' || persisted?.models?.join(',') !== 'image2.5-flare,image2.5-sunburst') throw new Error('Comparison preferences did not survive desktop restart');
-      console.info('[banana:smoke] comparison models, ratio and resolution survived desktop restart on a new local port');
+      const restoredSettings = await (await fetch(`${localServer.url}/api/runtime-settings`)).json() as { officialImages?: { apiKeyConfigured?: boolean; proxyEnabled?: boolean }; image2?: { apiKeyConfigured?: boolean; baseUrl?: string; model?: string } };
+      if (process.env.BANANA_SMOKE_UPGRADE_FROM === '0.13.0') {
+        if (app.getVersion() !== process.env.BANANA_SMOKE_EXPECT_VERSION) throw new Error('The installed application version did not change');
+        if (!restoredSettings.image2?.apiKeyConfigured || restoredSettings.officialImages?.apiKeyConfigured) throw new Error('Old credentials were lost or unexpectedly migrated to the official provider');
+        await runOfficialImagesSmoke({ window: mainWindow, localUrl: localServer.url, imageUrl: createSmokeJpegDataUrl(), userDataDir: app.getPath('userData'), flush: async () => { await projectSaveBridge?.flush(); }, waitForPredicate: waitForSmokePredicate });
+        const after = await (await fetch(`${localServer.url}/api/runtime-settings`)).json() as typeof restoredSettings;
+        if (!after.image2?.apiKeyConfigured || after.image2.baseUrl !== restoredSettings.image2.baseUrl || after.image2.model !== restoredSettings.image2.model) throw new Error('Configuring the official provider overwrote the legacy connection');
+        console.info('[banana:smoke] upgrade retained old encrypted credentials and preferences; official provider is independent');
+      } else if (!restoredSettings.officialImages?.apiKeyConfigured || !restoredSettings.officialImages.proxyEnabled) throw new Error('Official credentials or proxy did not survive desktop restart');
+      console.info('[banana:smoke] comparison preferences and encrypted credentials survived desktop restart on a new local port');
     }
     await runWindowCloseSmoke({ window: mainWindow, localUrl: localServer.url, waitForPredicate: waitForSmokePredicate });
   }

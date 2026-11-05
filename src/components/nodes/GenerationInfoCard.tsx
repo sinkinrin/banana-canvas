@@ -28,6 +28,7 @@ export function GenerationInfoCard({ imageUrl, info }: { imageUrl: string; info?
     <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
       {rows.map(([label, value]) => <div key={label} className="contents"><dt>{label}</dt><dd className="break-all text-right select-text">{value}</dd></div>)}
     </dl>
+    {(info?.usage || info?.svgUsage) && <details className="mt-2"><summary>{t('officialImages.usage')}</summary><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-[10px]">{JSON.stringify({ usage: info.usage, svg_usage: info.svgUsage, request_id: info.upstreamRequestId }, null, 2)}</pre></details>}
     <p className="mt-2 text-[10px] text-[#96836F]">{t('generationInfo.hint')}</p>
   </details>;
 }

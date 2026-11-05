@@ -4,6 +4,7 @@ import { useStore, type AppNode } from '../../store';
 import i18n from '../../i18n';
 import { base64ToBytes, inspectReferenceImage } from '../../lib/referenceImageFormat';
 import {
+  getImageInputLimits,
   decodedBase64ByteLength,
   formatMebibytes,
   MAX_REFERENCE_IMAGE_BYTES,
@@ -70,29 +71,30 @@ export function selectImageFiles(
     .slice(0, remainingSlots);
 }
 
-export function getReferenceImageFileSizeError(file: Pick<File, 'name' | 'size'>) {
-  if (!Number.isFinite(file.size) || file.size <= MAX_REFERENCE_IMAGE_BYTES) return null;
+export function getReferenceImageFileSizeError(file: Pick<File, 'name' | 'size'>, maxBytes = MAX_REFERENCE_IMAGE_BYTES) {
+  if (!Number.isFinite(file.size) || file.size <= maxBytes) return null;
   return i18n.t('promptNode.errors.referenceFileTooLarge', {
     name: file.name,
     size: formatMebibytes(file.size),
-    limit: formatMebibytes(MAX_REFERENCE_IMAGE_BYTES),
+    limit: formatMebibytes(maxBytes),
   });
 }
 
 export function getReferenceImageTotalSizeError(
   file: Pick<File, 'name' | 'size'>,
-  currentBytes: number
+  currentBytes: number,
+  maxBytes = MAX_TOTAL_INPUT_IMAGE_BYTES,
 ) {
   if (
     !Number.isFinite(file.size) ||
-    currentBytes + file.size <= MAX_TOTAL_INPUT_IMAGE_BYTES
+    currentBytes + file.size <= maxBytes
   ) {
     return null;
   }
   return i18n.t('promptNode.errors.referenceTotalTooLarge', {
     name: file.name,
     size: formatMebibytes(currentBytes + file.size),
-    limit: formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES),
+    limit: formatMebibytes(maxBytes),
   });
 }
 
@@ -201,6 +203,7 @@ export function createReferenceImageController({
   const usesReferenceImageIds = data.referenceImageIds !== null && data.referenceImageIds !== undefined;
   const hasPendingReferenceHydration = !assetsHydrated && rawReferenceImageIds.length > 0;
 
+  const inputLimits = () => getImageInputLimits((getCurrent?.()?.data ?? fallbackData).imageModel);
   let fallbackData = data;
   const currentReferences = () => {
     const current = getCurrent ? getCurrent() : { data: fallbackData, assets, assetsHydrated };
@@ -216,9 +219,9 @@ export function createReferenceImageController({
   };
   const appendReferenceImage = (nextImage: InlineImageData, name = '') => {
     const current = currentReferences();
-    if (!current || current.images.length >= 4) return;
+    if (!current || current.images.length >= inputLimits().count) return;
     const sizeError = getReferenceImageTotalSizeError(
-      { name, size: decodedBase64ByteLength(nextImage.data) ?? 0 }, getReferenceImagesByteLength(current.images)
+      { name, size: decodedBase64ByteLength(nextImage.data) ?? 0 }, getReferenceImagesByteLength(current.images), inputLimits().total
     );
     if (sizeError) { onReadError(sizeError); return; }
     commit({
@@ -240,12 +243,12 @@ export function createReferenceImageController({
   const readAndAppendFiles = async (files: File[]) => {
     const current = currentReferences();
     if (!current) return;
-    const selectedFiles = selectImageFiles(files, { currentCount: current.images.length });
+    const selectedFiles = selectImageFiles(files, { currentCount: current.images.length, maxCount: inputLimits().count });
     for (const file of selectedFiles) {
       const latest = currentReferences();
-      if (!latest || latest.images.length >= 4) return;
-      const sizeError = getReferenceImageFileSizeError(file)
-        ?? getReferenceImageTotalSizeError(file, getReferenceImagesByteLength(latest.images));
+      if (!latest || latest.images.length >= inputLimits().count) return;
+      const sizeError = getReferenceImageFileSizeError(file, inputLimits().single)
+        ?? getReferenceImageTotalSizeError(file, getReferenceImagesByteLength(latest.images), inputLimits().total);
       if (sizeError) { onReadError(sizeError); continue; }
       try {
         const nextImage = await readImageFile(file);

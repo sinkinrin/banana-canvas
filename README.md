@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.13.0`
+Current version: `0.14.0`
 
 Choose Google AI Studio or Vertex AI in App settings, with separate API Keys and optional custom URLs. Vertex supports Express Mode and Google Cloud ADC. See [provider configuration](docs/CONFIGURATION.md#ai-studio-and-vertex-ai).
 
@@ -18,6 +18,8 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 
 ## Highlights
 
+- **Official OpenAI Images provider** — independent credentials and proxy routing, Image 2.6 Flare/Sunburst, full quality controls, complexity, markup edits, live previews, SVG/GIF and original-file persistence. [Configuration and verification](docs/OPENAI_IMAGES.md).
+
 - **Frameless desktop window** — a matching draggable title area with minimize, maximize/restore, and close controls; closing waits for project saves and fully exits the app.
 - **Visual generation workflow** — build and rearrange prompt-to-image flows with React Flow.
 - **Multi-model comparisons** — generate one image per selected model from the same prompt and references, navigate the group on the canvas, stop individual tasks, and mark your preferred result.
@@ -26,7 +28,7 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 - **Selectable Gemini provider** — use AI Studio or Vertex AI for Banana generation and prompt optimization; keep separate URLs and credentials when switching.
 - **Multiple image models** — use Image2 by default, or choose Image 2.5 Flare, Image 2.5 Sunburst, Banana 2.1, Banana 2, Banana 2 Lite, and Banana Pro.
 - **Image 2.5 transparent assets** — generate transparent assets (PNG verified on the relay); Flare targets fast everyday creation and Sunburst prioritizes editing precision.
-- **Reference-driven iteration** — upload or paste up to four references, then reuse any result in the next step.
+- **Reference-driven iteration** — upload or paste up to 16 references on the official OpenAI route (four on legacy routes), then reuse any result in the next step.
 - **Composition sketches** — draw subject positions, actions, arrows, and framing before generating.
 - **Mask editing** — paint the area to change and compare the Image2 result with the original.
 - **Offline background removal** — the desktop app includes IS-Net INT8; download and select optional models in settings. See [Background removal](docs/CUTOUT.md).
@@ -34,7 +36,7 @@ Banana Canvas turns image generation into a visual workflow. Arrange prompt and 
 - **Local-first projects** — persist canvases, relationships, and image assets on your own machine.
 - **English and Simplified Chinese UI** — follow the system language on first launch and remember manual changes.
 
-Image 2.5 support is available from v0.8.0. Both variants reuse the Image2 connection and are selected per creation node. Reference edits, mask edits, reruns, and saved projects retain the chosen variant. The tested relay reported `low` / `medium` instead of the requested `xhigh` / `max`, so these new tiers remain disabled. See [Image 2.5 capabilities and backend verification](docs/IMAGE25.md) for tested behavior and limits.
+On the legacy CPA route, Image 2.5 support is available from v0.8.0. Both variants reuse the Image2 connection and are selected per creation node. Reference edits, mask edits, reruns, and saved projects retain the chosen variant. The tested relay reported `low` / `medium` instead of the requested `xhigh` / `max`, so these new tiers remain disabled. See [Image 2.5 capabilities and backend verification](docs/IMAGE25.md) for tested behavior and limits.
 
 ## Preview
 
@@ -60,7 +62,7 @@ Image 2.5 support is available from v0.8.0. Both variants reuse the Image2 conne
 Requirements:
 
 - Node.js 22.17.1 or newer
-- An Image2/OpenAI-compatible relay; AI Studio or Vertex AI credentials are optional for Banana models and prompt optimization
+- An OpenAI API account or Image2/OpenAI-compatible relay; AI Studio or Vertex AI credentials are optional for Banana models and prompt optimization
 
 ```bash
 npm install

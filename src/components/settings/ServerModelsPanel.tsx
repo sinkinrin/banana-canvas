@@ -3,7 +3,7 @@ import { useAppTranslation } from '../../i18n';
 
 type ServerModel = { id: string; ownedBy?: string };
 
-export function ServerModelsPanel({ connection }: { connection: string }) {
+export function ServerModelsPanel({ connection, provider = 'legacy' }: { connection: string; provider?: 'official' | 'legacy' }) {
   const { t } = useAppTranslation();
   const [models, setModels] = useState<ServerModel[]>();
   const [query, setQuery] = useState('');
@@ -13,13 +13,13 @@ export function ServerModelsPanel({ connection }: { connection: string }) {
   useEffect(() => {
     setModels(undefined); setError(''); setLoading(false);
     return () => request.current?.abort();
-  }, [connection]);
+  }, [connection, provider]);
   const load = async () => {
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
     setLoading(true); setError('');
     try {
-      const response = await fetch('/api/runtime-settings/models', { signal: controller.signal });
+      const response = await fetch(`/api/runtime-settings/models${provider === 'official' ? '?provider=official' : ''}`,  { signal: controller.signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.upstreamStatus
         ? t('modelCatalog.httpError', { status: data.upstreamStatus }) : t(`modelCatalog.${data.code ?? 'MODEL_LIST_UNAVAILABLE'}`));
@@ -36,7 +36,7 @@ export function ServerModelsPanel({ connection }: { connection: string }) {
         {loading ? t('common.loading') : t(models ? 'modelCatalog.refresh' : 'modelCatalog.load')}
       </button>
     </div>
-    <p className="text-xs text-[#96836F]">{t('modelCatalog.hint')}</p>
+    <p className="text-xs text-[#96836F]">{t(provider === 'official' ? 'officialImages.catalogHint' : 'modelCatalog.hint')}</p>
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
     {models && <>
       <input aria-label={t('modelCatalog.search')} placeholder={t('modelCatalog.search')} value={query} onChange={event => setQuery(event.target.value)} className="w-full rounded border border-[#F2C14E]/20 bg-[#141210] p-2 text-xs" />

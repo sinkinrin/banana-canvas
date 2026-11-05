@@ -1,3 +1,4 @@
+import { isOfficialImageModel } from '../../lib/officialImages';
 import {
   BANANA_ASPECT_RATIO_VALUES,
   getBananaAspectRatioValues,
@@ -13,6 +14,7 @@ export const IMAGE2_ASPECT_RATIO_VALUES = ['1:1', '4:3', '16:9', '3:4', '9:16'] 
 
 export function getPromptAspectRatioOptions(imageModel: ImageModelId): BananaAspectRatio[] {
   const normalizedModel = normalizeImageModel(imageModel);
+  if (isOfficialImageModel(normalizedModel)) return BANANA_ASPECT_RATIO_VALUES.filter(ratio => { const [w, h] = ratio.split(':').map(Number); return w / h >= 1 / 3 && w / h <= 3; });
   if (isImage2Model(normalizedModel)) return [...IMAGE2_ASPECT_RATIO_VALUES];
   if (isBananaImageModel(normalizedModel)) {
     return [...getBananaAspectRatioValues(normalizedModel)];
@@ -29,6 +31,6 @@ export function getEffectivePromptAspectRatio(
   return options.includes(normalizedRatio) ? normalizedRatio : '1:1';
 }
 
-export function getImage2MaskEditAspectRatio(value: unknown): BananaAspectRatio {
-  return getEffectivePromptAspectRatio('image2', value);
+export function getImage2MaskEditAspectRatio(value: unknown, imageModel: ImageModelId = 'image2'): BananaAspectRatio {
+  return getEffectivePromptAspectRatio(imageModel, value);
 }

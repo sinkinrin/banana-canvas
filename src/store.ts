@@ -1,3 +1,4 @@
+import { getImageInputLimits } from './lib/imageInputLimits';
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import {
@@ -205,6 +206,7 @@ export const useStore = create<AppState>()(
             referenceImageIds: currentNode.data.referenceImageIds ?? [],
             previousSketchAssetId: currentNode.data.sketch?.referenceImageAssetId,
             nextSketchAssetId: sketchAsset.id,
+            maxCount: getImageInputLimits(currentNode.data.imageModel).count,
           });
           if (!nextReferenceImageIds) {
             return { ok: false, error: i18n.t('sketch.referenceLimit') };

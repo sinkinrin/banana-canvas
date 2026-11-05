@@ -1,3 +1,4 @@
+import { isOfficialImageModel, type OfficialImageModelId } from './officialImages';
 export const DEFAULT_IMAGE_MODEL = 'image2';
 
 export const BANANA_21_MODEL = 'gemini-nano-banana-2.1';
@@ -32,22 +33,27 @@ export const IMAGE_MODELS = [
   },
   {
     id: 'image2',
-    label: 'Image2',
+    label: 'Image2（残血版）',
     descriptionKey: 'models.image2.description',
     provider: 'openai-chat',
   },
   {
     id: 'image2.5-flare',
-    label: 'Image 2.5 Flare',
+    label: 'Image 2.5 Flare（残血版）',
     descriptionKey: 'models.image25Flare.description',
     provider: 'openai-chat',
   },
   {
     id: 'image2.5-sunburst',
-    label: 'Image 2.5 Sunburst',
+    label: 'Image 2.5 Sunburst（残血版）',
     descriptionKey: 'models.image25Sunburst.description',
     provider: 'openai-chat',
   },
+  { id: 'openai-image2', label: 'Image2（满血版）', descriptionKey: 'officialImages.description', provider: 'openai-images' },
+  { id: 'openai-image2.5-flare', label: 'Image 2.5 Flare（满血版）', descriptionKey: 'officialImages.description', provider: 'openai-images' },
+  { id: 'openai-image2.5-sunburst', label: 'Image 2.5 Sunburst（满血版）', descriptionKey: 'officialImages.description', provider: 'openai-images' },
+  { id: 'openai-image2.6-flare', label: 'Image 2.6 Flare（满血版）', descriptionKey: 'officialImages.description', provider: 'openai-images' },
+  { id: 'openai-image2.6-sunburst', label: 'Image 2.6 Sunburst（满血版）', descriptionKey: 'officialImages.description', provider: 'openai-images' },
 ] as const;
 
 export type ImageModelId = (typeof IMAGE_MODELS)[number]['id'];
@@ -589,7 +595,8 @@ export function isImage25Model(value: unknown): boolean {
   );
 }
 
-export function getImage2MaskModel(imageModel: unknown): Image2ModelId {
+export function getImage2MaskModel(imageModel: unknown): Image2ModelId | OfficialImageModelId {
+  if (isOfficialImageModel(imageModel)) return imageModel;
   return isImage2Model(imageModel) ? imageModel : 'image2';
 }
 

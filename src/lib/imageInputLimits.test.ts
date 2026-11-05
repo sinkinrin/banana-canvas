@@ -13,8 +13,9 @@ import {
 test('image input limits preserve headroom for base64 JSON requests', () => {
   assert.equal(MAX_REFERENCE_IMAGE_BYTES, 16 * MEBIBYTE_BYTES);
   assert.equal(MAX_TOTAL_INPUT_IMAGE_BYTES, 40 * MEBIBYTE_BYTES);
-  assert.equal(MAX_JSON_REQUEST_BODY_BYTES, 64 * MEBIBYTE_BYTES);
+  assert.equal(MAX_JSON_REQUEST_BODY_BYTES, 72 * MEBIBYTE_BYTES);
   assert.ok(MAX_TOTAL_INPUT_IMAGE_BYTES * 4 / 3 < MAX_JSON_REQUEST_BODY_BYTES);
+  assert.ok(50 * MEBIBYTE_BYTES * 4 / 3 < MAX_JSON_REQUEST_BODY_BYTES, 'Official 50 MiB assets must fit the project upload body');
 });
 
 test('decodedBase64ByteLength validates padded and unpadded base64 without decoding it', () => {

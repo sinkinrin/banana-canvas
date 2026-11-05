@@ -1,3 +1,5 @@
+import { isOfficialImageModel } from '../../lib/officialImages';
+import { OfficialImageOptionsPanel } from './OfficialImageOptionsPanel';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
@@ -27,7 +29,7 @@ import { NodeCategory } from './NodeCategory';
 import { inheritNodeCategory } from '../../lib/nodeCategories';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { useReferenceImages } from './useReferenceImages';
-import { buildPromptMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
+import { buildPromptMaskGenerationPayload, useMaskGeneration, officialOptionsForEdit } from './useMaskGeneration';
 import { usePromptGeneration } from './usePromptGeneration';
 import { SketchEditorModal } from '../sketch/SketchEditorModal';
 import type { SketchSavePayload } from '../sketch/sketchGeometry';
@@ -41,8 +43,7 @@ import { ImageViewer } from '../ImageViewer';
 import { ReferenceImageThumbnail } from './ReferenceImageThumbnail';
 import {
   formatMebibytes,
-  MAX_REFERENCE_IMAGE_BYTES,
-  MAX_TOTAL_INPUT_IMAGE_BYTES,
+  getImageInputLimits,
 } from '../../lib/imageInputLimits';
 
 const aspectRatioLabelKeys: Record<BananaAspectRatio, string> = {
@@ -111,19 +112,21 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const imageModel = normalizeImageModel(data.imageModel);
   const imageSize = isBananaImageModel(imageModel)
     ? normalizeBananaImageSizeForModel(imageModel, data.imageSize) ?? '1K'
-    : normalizeBananaImageSize(data.imageSize) ?? '1K';
+    : isOfficialImageModel(imageModel) && data.imageSize === '512' ? '1K' : normalizeBananaImageSize(data.imageSize) ?? '1K';
   const imageSizeOptions = isBananaImageModel(imageModel)
     ? getBananaImageSizeValues(imageModel)
-    : BANANA_IMAGE_SIZE_VALUES;
+    : isOfficialImageModel(imageModel) ? BANANA_IMAGE_SIZE_VALUES.filter(size => size !== '512') : BANANA_IMAGE_SIZE_VALUES;
   const aspectRatio = getEffectivePromptAspectRatio(imageModel, data.aspectRatio);
   const aspectRatioOptions = getPromptAspectRatioOptions(imageModel);
   const imageModelLabel = IMAGE_MODELS.find((model) => model.id === imageModel)?.label ?? 'Image2';
   const referenceImageLimitHint = t('promptNode.referenceLimitHint', {
-    single: formatMebibytes(MAX_REFERENCE_IMAGE_BYTES),
-    total: formatMebibytes(MAX_TOTAL_INPUT_IMAGE_BYTES),
+    single: formatMebibytes(getImageInputLimits(imageModel).single),
+    total: formatMebibytes(getImageInputLimits(imageModel).total),
   });
   const bananaOptions = data.bananaOptions;
   const image2Options = data.image2Options;
+  const officialImageOptions = data.officialImageOptions;
+  const referenceLimit = getImageInputLimits(imageModel).count;
   const sketchReferenceIsAttached = Boolean(
     data.sketch?.referenceImageAssetId &&
     referenceImageIds.includes(data.sketch.referenceImageAssetId)
@@ -161,13 +164,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     removeReferenceImage(index);
   };
 
-  const handleMaskGenerate = async ({ prompt: maskPrompt, maskImage, sourceImage }: MaskGeneratePayload) => {
+  const handleMaskGenerate = async ({ prompt: maskPrompt, maskImage, sourceImage, editMode }: MaskGeneratePayload) => {
     if (!maskEditorSource) return;
+    const editOptions = officialOptionsForEdit(officialImageOptions);
 
     const baseX = nodePosition ? nodePosition.x + 400 : 0;
     const baseY = nodePosition ? nodePosition.y : 0;
     const createdAt = new Date().toISOString();
-    const maskEditAspectRatio = getImage2MaskEditAspectRatio(data.aspectRatio);
+    const maskEditAspectRatio = getImage2MaskEditAspectRatio(data.aspectRatio, isOfficialImageModel(imageModel) ? imageModel : 'image2');
     const placeholderNodeId = addNode(
       'imageNode',
       { x: baseX, y: baseY },
@@ -178,6 +182,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
+        officialImageOptions: editOptions,
         isLoading: true,
         error: undefined,
         createdAt,
@@ -201,10 +206,12 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         maskImage,
         sourceImage,
         sourceIndex: maskEditorSource.index,
+        editMode,
         referenceImages,
         aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
+        officialImageOptions: editOptions,
       }), placeholderNodeId);
 
       updateNodeData(placeholderNodeId, {
@@ -215,6 +222,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
         aspectRatio: maskEditAspectRatio,
         imageSize,
         image2Options,
+        officialImageOptions: editOptions,
         sourceImage,
         sourcePrompt: maskPrompt,
         generationMode: 'mask-edit',
@@ -255,6 +263,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       imageSize,
       bananaOptions,
       image2Options,
+      officialImageOptions,
       batchCount,
       referenceImageIds,
       referenceImages,
@@ -273,7 +282,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     setShowComparisonSetup(false);
     void runGeneration({ prompt, imageModel, imageModelLabel, ...selection,
       comparisonModels: selection.models, comparisonGroupId: groupId,
-      bananaOptions, image2Options, batchCount: 1, referenceImageIds, referenceImages, hasPendingReferenceHydration });
+      bananaOptions, image2Options, officialImageOptions, batchCount: 1, referenceImageIds, referenceImages, hasPendingReferenceHydration });
   };
 
   return (
@@ -366,14 +375,14 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               type="button"
               data-sketch-action="open"
               onClick={() => setIsSketchEditorOpen(true)}
-              disabled={!data.sketch && referenceImages.length >= 4}
+              disabled={!data.sketch && referenceImages.length >= referenceLimit}
               className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               style={{ border: '1px solid rgba(91,155,213,0.28)', background: 'rgba(91,155,213,0.09)', color: '#8FC1EA' }}
               title={data.sketch
                 ? sketchReferenceIsAttached
                   ? t('promptNode.editAttachedSketch')
                   : t('promptNode.editDetachedSketch')
-                : referenceImages.length >= 4
+                : referenceImages.length >= referenceLimit
                   ? t('promptNode.referenceLimitReached')
                   : t('promptNode.sketchHint')}
             >
@@ -402,7 +411,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                     />
                   ))}
                 </div>
-                {referenceImages.length < 4 && (
+                {referenceImages.length < referenceLimit && (
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -420,7 +429,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                     ) : (
                       <>
                         <Upload size={12} />
-                        {t('promptNode.addMore', { count: referenceImages.length })}
+                        {isOfficialImageModel(imageModel) ? t('officialImages.referenceLimit', { count: referenceImages.length, max: 16 }) : t('promptNode.addMore', { count: referenceImages.length })}
                       </>
                     )}
                   </button>
@@ -457,7 +466,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               onChange={handleImageUpload}
             />
             <p className="mt-1 text-center text-[10px]" style={{ color: '#5C4E3E' }}>
-              {referenceImageLimitHint}
+              {isOfficialImageModel(imageModel) ? `${t('officialImages.referenceLimit', { count: referenceImages.length, max: 16 })} · ${formatMebibytes(getImageInputLimits(imageModel).single)}` : referenceImageLimitHint}
               <br />{t('promptNode.referenceCompatibilityHint')}
             </p>
           </div>
@@ -473,6 +482,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
           <button
             type="button"
+            data-generate-image="true"
             onClick={() => handleGenerate()}
             disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration}
             className="nodrag nopan nowheel w-full py-3 px-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
@@ -524,12 +534,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                   value={imageModel}
                   onChange={(e) => {
                     const nextModel = e.target.value as ImageModelId;
+                    if (referenceImages.length > getImageInputLimits(nextModel).count) { updateNodeData(id, { error: t('officialImages.removeReferences', { max: getImageInputLimits(nextModel).count }) }); return; }
                     updateNodeData(id, {
                       imageModel: nextModel,
                       aspectRatio: getEffectivePromptAspectRatio(nextModel, data.aspectRatio),
                       imageSize: isBananaImageModel(nextModel)
                         ? normalizeBananaImageSizeForModel(nextModel, data.imageSize) ?? '1K'
-                        : normalizeBananaImageSize(data.imageSize) ?? '1K',
+                        : isOfficialImageModel(nextModel) && data.imageSize === '512' ? '1K' : normalizeBananaImageSize(data.imageSize) ?? '1K',
                     });
                   }}
                   className="nowheel w-full p-2 rounded-lg text-sm outline-none"
@@ -619,6 +630,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
                 />
               )}
 
+              {isOfficialImageModel(imageModel) && <OfficialImageOptionsPanel imageModel={imageModel} value={officialImageOptions} referenceCount={referenceImages.length} onChange={next => updateNodeData(id, { officialImageOptions: next })} />}
               {isImage2Model(imageModel) && (
                 <Image2OptionsPanel
                   imageModel={imageModel}
@@ -648,6 +660,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
       )}
       {maskEditorSource && (
         <MaskEditorModal
+          allowMarkup={isOfficialImageModel(imageModel) && imageModel !== 'openai-image2'}
           title={t('promptNode.maskEditTitle')}
           sourceImage={maskEditorSource.image}
           onClose={() => setMaskEditorSource(null)}

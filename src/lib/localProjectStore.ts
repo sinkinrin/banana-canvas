@@ -42,7 +42,7 @@ type ProjectImportEntry = {
 const MAX_PROJECT_NODES = 10_000;
 const MAX_PROJECT_EDGES = 20_000;
 const MAX_PROJECT_ASSETS = 10_000;
-const MAX_PROJECT_ASSET_BYTES = 32 * 1024 * 1024;
+const MAX_PROJECT_ASSET_BYTES = 50 * 1024 * 1024;
 
 export type LocalProjectStore = {
   loadProjectIndex: () => Promise<ProjectMeta[]>;
@@ -88,6 +88,7 @@ function assetExtension(mimeType: string) {
   if (mimeType === 'image/png') return 'png';
   if (mimeType === 'image/webp') return 'webp';
   if (mimeType === 'image/gif') return 'gif';
+  if (mimeType === 'image/svg+xml') return 'svg';
   const subtype = mimeType.match(/^image\/([a-z0-9.+-]+)$/i)?.[1];
   return subtype ? subtype.replace(/[^A-Za-z0-9_-]/g, '') || 'img' : 'img';
 }
@@ -96,6 +97,7 @@ function mimeTypeFromFileName(fileName: string) {
   const ext = extname(fileName).slice(1).toLowerCase();
   if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
   if (ext === 'png') return 'image/png';
+  if (ext === 'svg') return 'image/svg+xml';
   if (ext === 'webp') return 'image/webp';
   if (ext === 'gif') return 'image/gif';
   if (['avif', 'heic', 'heif'].includes(ext)) return `image/${ext}`;
@@ -166,7 +168,7 @@ function validateCanvasAsset(asset: unknown, expectedId?: string): asserts asset
     typeof asset.mimeType !== 'string' ||
     typeof asset.data !== 'string' ||
     (expectedId !== undefined && asset.id !== expectedId) ||
-    !['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif'].includes(asset.mimeType.toLowerCase()) ||
+    !['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif', 'image/svg+xml'].includes(asset.mimeType.toLowerCase()) ||
     !/^[A-Za-z0-9+/]+={0,2}$/.test(asset.data) ||
     Buffer.from(asset.data, 'base64').byteLength > MAX_PROJECT_ASSET_BYTES
   ) {

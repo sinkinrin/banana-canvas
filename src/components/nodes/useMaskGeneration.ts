@@ -1,3 +1,4 @@
+import { isOfficialImageModel, type OfficialImageOptions } from '../../lib/officialImages';
 import { useEffect, useRef } from 'react';
 import { useStore } from '../../store';
 import { generateImageWithInfo as generateImage, type GenerateImageParams } from '../../services/gemini';
@@ -5,6 +6,17 @@ import type { InlineImageData } from '../../lib/canvasState';
 import { getImage2MaskModel, type ImageModelId, type Image2Options } from '../../lib/imageModels';
 import type { MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { registerGenerationTask } from '../../lib/generationTasks';
+
+export function officialOptionsForEdit(value?: OfficialImageOptions): OfficialImageOptions | undefined {
+  if (!value) return value;
+  const options = { ...value };
+  delete options.mask; delete options.markup;
+  if (options.outputFormat === 'svg' || options.outputFormat === 'gif') {
+    options.outputFormat = 'png'; delete options.svgModel; delete options.svgReasoning;
+    delete options.frameCount; delete options.frameDurationMs;
+  }
+  return options;
+}
 
 type MaskImage = MaskGeneratePayload['maskImage'];
 
@@ -22,6 +34,8 @@ export function buildPromptMaskGenerationPayload({
   aspectRatio,
   imageSize,
   image2Options,
+  officialImageOptions,
+  editMode,
 }: {
   imageModel?: ImageModelId;
   maskPrompt: string;
@@ -32,11 +46,13 @@ export function buildPromptMaskGenerationPayload({
   aspectRatio: GenerateImageParams['aspectRatio'];
   imageSize: GenerateImageParams['imageSize'];
   image2Options: Image2Options | undefined;
+  officialImageOptions?: OfficialImageOptions;
+  editMode?: 'mask' | 'markup';
 }): GenerateImageParams {
   const editReferences = [
     sourceImage,
     ...referenceImages.filter((_, index) => index !== sourceIndex),
-  ].slice(0, 4);
+  ].slice(0, isOfficialImageModel(imageModel) ? 16 : 4);
 
   return {
     prompt: maskPrompt,
@@ -45,7 +61,8 @@ export function buildPromptMaskGenerationPayload({
     imageSize,
     image2Options,
     referenceImages: editReferences.map(toReferencePayload),
-    maskImage,
+    ...(isOfficialImageModel(imageModel) && editMode === 'markup' ? { markupImage: maskImage } : { maskImage }),
+    ...(isOfficialImageModel(imageModel) ? { officialImageOptions: officialOptionsForEdit(officialImageOptions) } : {}),
   };
 }
 
@@ -57,6 +74,8 @@ export function buildImageMaskGenerationPayload({
   aspectRatio,
   imageSize,
   image2Options,
+  officialImageOptions,
+  editMode,
 }: {
   imageModel?: ImageModelId;
   maskPrompt: string;
@@ -65,6 +84,8 @@ export function buildImageMaskGenerationPayload({
   aspectRatio: GenerateImageParams['aspectRatio'];
   imageSize: GenerateImageParams['imageSize'];
   image2Options: Image2Options | undefined;
+  officialImageOptions?: OfficialImageOptions;
+  editMode?: 'mask' | 'markup';
 }): GenerateImageParams {
   return {
     prompt: maskPrompt,
@@ -73,7 +94,8 @@ export function buildImageMaskGenerationPayload({
     imageSize,
     image2Options,
     referenceImages: [toReferencePayload(sourceImage)],
-    maskImage,
+    ...(isOfficialImageModel(imageModel) && editMode === 'markup' ? { markupImage: maskImage } : { maskImage }),
+    ...(isOfficialImageModel(imageModel) ? { officialImageOptions: officialOptionsForEdit(officialImageOptions) } : {}),
   };
 }
 
@@ -92,10 +114,17 @@ export function createMaskGenerationRunner(sourceNodeId: string, generate = gene
           !state.nodes.some((node) => node.id === resultNodeId)) controller.abort();
       });
       try {
-        const result = await generate({ ...input, signal: controller.signal });
+        const result = await generate({ ...input, signal: controller.signal,
+          onPreview: preview => { if (!controller.signal.aborted) useStore.getState().updateNodeData(resultNodeId, { previewImageUrl: preview.imageUrl }); } });
         controller.signal.throwIfAborted();
+        const state = useStore.getState();
+        const node = state.nodes.find(item => item.id === resultNodeId);
+        if (node) for (const [index, imageUrl] of (result.images ?? []).slice(1).entries()) {
+          state.addNode('imageNode', { x: node.position.x + (index + 1) * 580, y: node.position.y }, { ...node.data, imageUrl, generationInfo: result.generationInfo, isLoading: false, previewImageUrl: undefined });
+        }
         return result;
       } finally {
+        useStore.getState().updateNodeData(resultNodeId, { previewImageUrl: undefined });
         unregister();
         unsubscribe();
         controllers.delete(controller);

@@ -8,7 +8,9 @@
 > [!TIP]
 > 🌐 **English: [Read the default README](README.md)**
 
-当前版本：`0.13.0`
+当前版本：`0.14.0`
+
+新增独立的 **OpenAI 官方格式（满血版）** 通道，支持 2.6 Flare/Sunburst、完整质量档位、复杂度、批注编辑、实时预览和 SVG/GIF 原文件保存。[配置与实测](docs/OPENAI_IMAGES.md)。
 
 应用设置可选择 Google AI Studio 或 Vertex AI，两套 API Key 与自定义 URL 分别保存。Vertex 支持 Express Mode 和 Google Cloud ADC；详见[服务配置](docs/CONFIGURATION.md#ai-studio-and-vertex-ai)。
 
@@ -26,7 +28,7 @@
 - **可选 Gemini 服务**：Banana 生图与提示词优化可选择 AI Studio 或 Vertex AI，切换时保留各自 URL 和凭据。
 - **多模型支持**：新节点默认使用 Image2，也可切换 Image 2.5 Flare、Image 2.5 Sunburst、Banana 2.1、Banana 2、Banana 2 Lite 和 Banana Pro。
 - **Image 2.5 透明素材**：支持直接生成透明素材，已实测透明 PNG；Flare 侧重快速日常创作，Sunburst 侧重精确编辑。
-- **参考图迭代**：上传或粘贴最多 4 张参考图，并可从任意结果继续创作。
+- **参考图迭代**：官方通道最多 16 张参考图，旧通道最多 4 张，并可从任意结果继续创作。
 - **构图草图**：生成前先画人物位置、动作、箭头和画面关系，草图会作为参考图发送。
 - **蒙版局部编辑**：涂抹需要修改的区域，使用 Image2 生成并对比原图与新图。
 - **离线智能抠图**：桌面版内置 IS-Net INT8，可在设置里下载和切换其他模型。详见[智能抠图说明](docs/CUTOUT.md)。
@@ -34,7 +36,7 @@
 - **本地优先项目**：画布、节点关系与图片资产都保存在自己的设备上。
 - **中英文界面**：首次启动跟随系统语言，手动切换后会记住选择。
 
-从 v0.8.0 起支持 Image 2.5。两款模型共用 Image2 连接，在每个创作节点中选择；参考图、蒙版编辑、重新生成和项目保存会保留所选型号。实测中转对 `xhigh` / `max` 请求回报 `low` / `medium`，因此暂未开放这两档。完整实测结果与限制见 [Image 2.5 说明](docs/IMAGE25.md)。
+旧 CPA 通道从 v0.8.0 起支持 Image 2.5。两款模型共用 Image2 连接，在每个创作节点中选择；参考图、蒙版编辑、重新生成和项目保存会保留所选型号。实测中转对 `xhigh` / `max` 请求回报 `low` / `medium`，因此暂未开放这两档。完整实测结果与限制见 [Image 2.5 说明](docs/IMAGE25.md)。
 
 ## 界面预览
 

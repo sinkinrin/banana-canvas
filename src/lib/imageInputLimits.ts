@@ -1,8 +1,9 @@
+import { isOfficialImageModel, OFFICIAL_MAX_IMAGE_BYTES, OFFICIAL_MAX_TOTAL_IMAGE_BYTES } from './officialImages';
 export const MEBIBYTE_BYTES = 1024 * 1024;
 
 export const MAX_REFERENCE_IMAGE_BYTES = 16 * MEBIBYTE_BYTES;
 export const MAX_TOTAL_INPUT_IMAGE_BYTES = 40 * MEBIBYTE_BYTES;
-export const MAX_JSON_REQUEST_BODY_BYTES = 64 * MEBIBYTE_BYTES;
+export const MAX_JSON_REQUEST_BODY_BYTES = 72 * MEBIBYTE_BYTES;
 
 export function formatMebibytes(bytes: number) {
   const mebibytes = bytes / MEBIBYTE_BYTES;
@@ -20,4 +21,11 @@ export function decodedBase64ByteLength(value: string): number | null {
 
   const byteLength = Math.floor(value.length * 3 / 4) - padding;
   return byteLength > 0 ? byteLength : null;
+}
+
+export const MAX_OFFICIAL_JSON_REQUEST_BODY_BYTES = Math.ceil(OFFICIAL_MAX_TOTAL_IMAGE_BYTES * 4 / 3) + 64 * MEBIBYTE_BYTES;
+export function getImageInputLimits(model: unknown) {
+  return isOfficialImageModel(model)
+    ? { count: 16, single: OFFICIAL_MAX_IMAGE_BYTES, total: OFFICIAL_MAX_TOTAL_IMAGE_BYTES }
+    : { count: 4, single: MAX_REFERENCE_IMAGE_BYTES, total: MAX_TOTAL_INPUT_IMAGE_BYTES };
 }

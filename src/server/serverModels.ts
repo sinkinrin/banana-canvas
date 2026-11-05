@@ -1,3 +1,4 @@
+import { getOfficialImageDispatcher } from './providers/openaiImages';
 import { fetch } from 'undici';
 import type { RuntimeConfig } from './runtimeConfig';
 import { getImage2DirectAgent, getProxyAgent } from './proxy';
@@ -21,8 +22,10 @@ export function parseServerModels(value: unknown): ServerModel[] {
   return [...models.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export async function listServerModels(config: RuntimeConfig, signal?: AbortSignal) {
-  const { image2, env } = config;
+export async function listServerModels(config: RuntimeConfig, signal?: AbortSignal, provider: 'official' | 'legacy' = 'legacy') {
+  const { env } = config;
+  const official = provider === 'official' ? config.officialImages : undefined;
+  const image2 = official ? { ...official, missingKeys: official.apiKey ? [] : ['OPENAI_IMAGES_API_KEY'], proxyMode: official.proxyEnabled ? 'proxy' : 'direct' } : config.image2;
   if (image2.missingKeys.length) throw new ModelListError('MODEL_CONNECTION_MISSING');
   const timeout = AbortSignal.timeout(20_000);
   const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -30,9 +33,9 @@ export async function listServerModels(config: RuntimeConfig, signal?: AbortSign
   for (const [index, channel] of channels.entries()) {
     try {
       const response = await fetch(`${image2.baseUrl}/models`, {
-        method: 'GET', headers: { Authorization: `Bearer ${image2.apiKey}`, Accept: 'application/json' },
+        method: 'GET', headers: { Authorization: `Bearer ${image2.apiKey}`, Accept: 'application/json', ...(official?.organization ? { 'OpenAI-Organization': official.organization } : {}), ...(official?.project ? { 'OpenAI-Project': official.project } : {}) },
         redirect: 'error', signal: requestSignal,
-        dispatcher: channel === 'proxy' ? getProxyAgent(image2.proxyUrl, env) : getImage2DirectAgent(env),
+        dispatcher: official ? getOfficialImageDispatcher(official) : channel === 'proxy' ? getProxyAgent(image2.proxyUrl, env) : getImage2DirectAgent(env),
       });
       if (!response.ok) {
         await response.body?.cancel();

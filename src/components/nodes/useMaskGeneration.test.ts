@@ -93,3 +93,10 @@ test('mask tasks abort on deletion, project switching, and component exit', asyn
     await assert.rejects(result, { name: 'AbortError' });
   }
 });
+
+test('official markup edits keep the native model, independent layer and raster-compatible settings', () => {
+  const result = buildImageMaskGenerationPayload({ imageModel: 'openai-image2.6-sunburst', maskPrompt: 'change the circled item', maskImage, sourceImage,
+    image2Options: undefined, officialImageOptions: { quality: 'max', outputFormat: 'svg', svgModel: 'author', svgReasoning: 'high' }, editMode: 'markup', aspectRatio: '16:9', imageSize: '2K' });
+  assert.equal(result.imageModel, 'openai-image2.6-sunburst'); assert.equal(result.maskImage, undefined); assert.deepEqual(result.markupImage, maskImage);
+  assert.deepEqual(result.officialImageOptions, { quality: 'max', outputFormat: 'png' });
+});

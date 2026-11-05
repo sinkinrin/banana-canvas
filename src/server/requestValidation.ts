@@ -1,3 +1,4 @@
+import { isOfficialImageModel, normalizeOfficialImageOptions, validateOfficialImageOptions, type OfficialImageOptions } from '../lib/officialImages';
 import {
   getImageModelConfig,
   isBananaImageModel,
@@ -17,6 +18,7 @@ import {
   type ReferenceImageInput,
 } from '../lib/imageModels';
 import {
+  getImageInputLimits,
   decodedBase64ByteLength,
   formatMebibytes,
   MAX_REFERENCE_IMAGE_BYTES,
@@ -31,6 +33,8 @@ export type GenerateImageRequestBody = {
   referenceImages?: unknown;
   referenceImage?: unknown;
   maskImage?: unknown;
+  markupImage?: unknown;
+  officialImageOptions?: unknown;
   bananaOptions?: unknown;
   image2Options?: unknown;
 };
@@ -43,6 +47,8 @@ export type ValidGenerateImageRequest = {
   imageSize?: BananaImageSize;
   referenceImages: ReferenceImageInput[];
   maskImage?: ReferenceImageInput;
+  markupImage?: ReferenceImageInput;
+  officialImageOptions?: OfficialImageOptions;
   bananaOptions: BananaOptions;
   image2Options: Image2Options;
 };
@@ -72,7 +78,7 @@ function getImageDisplayLabel(label: string) {
   return label;
 }
 
-function validateImage(value: unknown, label: string): ValidationResult<{
+function validateImage(value: unknown, label: string, maxBytes = MAX_IMAGE_BYTES): ValidationResult<{
   image: ReferenceImageInput;
   byteLength: number;
 }> {
@@ -86,10 +92,10 @@ function validateImage(value: unknown, label: string): ValidationResult<{
   if (byteLength === null) {
     return { ok: false, error: `${label}.data must be non-empty base64` };
   }
-  if (byteLength > MAX_IMAGE_BYTES) {
+  if (byteLength > maxBytes) {
     return {
       ok: false,
-      error: `${getImageDisplayLabel(label)}大小为 ${formatMebibytes(byteLength)}，超过单张 ${formatMebibytes(MAX_IMAGE_BYTES)} 限制`,
+      error: `${getImageDisplayLabel(label)}大小为 ${formatMebibytes(byteLength)}，超过单张 ${formatMebibytes(maxBytes)} 限制`,
     };
   }
 
@@ -102,10 +108,11 @@ function validateImage(value: unknown, label: string): ValidationResult<{
   };
 }
 
-function collectEffectiveReferences(body: GenerateImageRequestBody): ValidationResult<{
+function collectEffectiveReferences(body: GenerateImageRequestBody, model?: ImageModelId): ValidationResult<{
   images: ReferenceImageInput[];
   byteLength: number;
 }> {
+  const limits = getImageInputLimits(model);
   const rawReferences = body.referenceImages !== undefined
     ? body.referenceImages
     : body.referenceImage !== undefined
@@ -116,23 +123,23 @@ function collectEffectiveReferences(body: GenerateImageRequestBody): ValidationR
     return { ok: false, error: 'referenceImages must be an array' };
   }
 
-  if (rawReferences.length > 4) {
-    return { ok: false, error: 'referenceImages must contain at most 4 images' };
+  if (rawReferences.length > limits.count) {
+    return { ok: false, error: `referenceImages must contain at most ${limits.count} images` };
   }
 
   const references: ReferenceImageInput[] = [];
   let byteLength = 0;
   for (const [index, rawReference] of rawReferences.entries()) {
-    const result = validateImage(rawReference, `referenceImages[${index}]`);
+    const result = validateImage(rawReference, `referenceImages[${index}]`, limits.single);
     if (!result.ok) return result;
     references.push(result.value.image);
     byteLength += result.value.byteLength;
   }
 
-  if (byteLength > MAX_TOTAL_IMAGE_BYTES) {
+  if (byteLength > limits.total) {
     return {
       ok: false,
-      error: `参考图合计大小为 ${formatMebibytes(byteLength)}，超过 ${formatMebibytes(MAX_TOTAL_IMAGE_BYTES)} 总限制`,
+      error: `参考图合计大小为 ${formatMebibytes(byteLength)}，超过 ${formatMebibytes(limits.total)} 总限制`,
     };
   }
 
@@ -142,37 +149,56 @@ function collectEffectiveReferences(body: GenerateImageRequestBody): ValidationR
 export function validateGenerateImageRequest(body: unknown): ValidationResult<ValidGenerateImageRequest> {
   const requestBody: GenerateImageRequestBody = isRecord(body) ? body : {};
 
+  const imageModel = normalizeImageModel(requestBody.imageModel);
+  const official = isOfficialImageModel(imageModel);
+  const promptLimit = official ? 32000 : MAX_PROMPT_CHARACTERS;
+  const limits = getImageInputLimits(imageModel);
+
   if (requestBody.prompt !== undefined && typeof requestBody.prompt !== 'string') {
     return { ok: false, error: 'prompt must be a string' };
   }
-  if (typeof requestBody.prompt === 'string' && requestBody.prompt.length > MAX_PROMPT_CHARACTERS) {
-    return { ok: false, error: `prompt must be at most ${MAX_PROMPT_CHARACTERS} characters` };
+  if (typeof requestBody.prompt === 'string' && requestBody.prompt.length > promptLimit) {
+    return { ok: false, error: `prompt must be at most ${promptLimit} characters` };
   }
 
-  const imageModel = normalizeImageModel(requestBody.imageModel);
   const modelConfig = getImageModelConfig(imageModel);
   const isBananaModel = isBananaImageModel(imageModel);
-  const references = collectEffectiveReferences(requestBody);
+  const references = collectEffectiveReferences(requestBody, imageModel);
   if (!references.ok) return references;
 
   let maskImage: ReferenceImageInput | undefined;
   if (requestBody.maskImage !== undefined) {
-    if (modelConfig.provider !== 'openai-chat') {
+    if (modelConfig.provider !== 'openai-chat' && !official) {
       return { ok: false, error: 'maskImage is only supported for Image2 requests' };
     }
 
-    const maskResult = validateImage(requestBody.maskImage, 'maskImage');
+    const maskResult = validateImage(requestBody.maskImage, 'maskImage', limits.single);
     if (!maskResult.ok) return maskResult;
     if (maskResult.value.image.mimeType !== 'image/png') {
       return { ok: false, error: 'maskImage must be an image/png payload' };
     }
-    if (references.value.byteLength + maskResult.value.byteLength > MAX_TOTAL_IMAGE_BYTES) {
+    if (references.value.byteLength + maskResult.value.byteLength > limits.total) {
       return {
         ok: false,
-        error: `参考图与蒙版合计大小超过 ${formatMebibytes(MAX_TOTAL_IMAGE_BYTES)} 总限制`,
+        error: `参考图与蒙版合计大小超过 ${formatMebibytes(limits.total)} 总限制`,
       };
     }
     maskImage = maskResult.value.image;
+  }
+
+  let markupImage: ReferenceImageInput | undefined;
+  if (requestBody.markupImage !== undefined) {
+    if (!official) return { ok: false, error: 'Markup requires an official image provider' };
+    const markup = validateImage(requestBody.markupImage, 'markupImage', limits.single);
+    if (!markup.ok) return markup;
+    if (markup.value.image.mimeType !== 'image/png') return { ok: false, error: 'Markup must be a transparent PNG' };
+    markupImage = markup.value.image;
+  }
+  if (official) {
+    if (!requestBody.prompt?.trim()) return { ok: false, error: 'prompt must not be empty' };
+    const error = validateOfficialImageOptions(requestBody.officialImageOptions, imageModel, references.value.images.length, Boolean(maskImage), Boolean(markupImage));
+    if (error) return { ok: false, error };
+    if (references.value.images.some(image => image.mimeType === 'image/gif')) return { ok: false, error: 'Official edits require PNG, JPEG or WebP input' };
   }
 
   return {
@@ -189,6 +215,7 @@ export function validateGenerateImageRequest(body: unknown): ValidationResult<Va
         : normalizeBananaImageSize(requestBody.imageSize),
       referenceImages: references.value.images,
       maskImage,
+      ...(official ? { markupImage, officialImageOptions: normalizeOfficialImageOptions(requestBody.officialImageOptions) } : {}),
       bananaOptions: isBananaModel
         ? normalizeBananaOptionsForModel(imageModel, requestBody.bananaOptions)
         : {},

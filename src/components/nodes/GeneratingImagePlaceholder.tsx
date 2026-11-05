@@ -4,6 +4,7 @@ import { useAppTranslation } from '../../i18n';
 
 type GeneratingImagePlaceholderProps = {
   modelLabel: string;
+  previewImageUrl?: string;
   title: string;
   prompt?: string;
   createdAt?: string;
@@ -57,6 +58,7 @@ function getAvatarText(modelLabel: string) {
 
 export function GeneratingImagePlaceholder({
   modelLabel,
+  previewImageUrl,
   title,
   prompt,
   createdAt,
@@ -103,11 +105,12 @@ export function GeneratingImagePlaceholder({
         aria-label={statusLabel}
         style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.12)' }}
       >
+        {previewImageUrl && <img src={previewImageUrl} alt={statusLabel} className="absolute inset-0 h-full w-full object-contain" />}
         <div className="absolute inset-0 opacity-70" style={{ background: 'radial-gradient(circle at 50% 42%, rgba(242,193,78,0.18), transparent 34%), linear-gradient(135deg, rgba(242,193,78,0.05), rgba(217,123,58,0.03))' }} />
         <div className="absolute h-56 w-56 animate-spin rounded-full opacity-70 [animation-duration:3.5s]" style={{ background: 'conic-gradient(from 0deg, transparent, rgba(242,193,78,0.55), transparent 42%)' }} />
-        <div className="absolute h-44 w-44 rounded-full" style={{ background: '#141210' }} />
+        <div className={`absolute h-44 w-44 rounded-full ${previewImageUrl ? 'hidden' : ''}`} style={{ background: '#141210' }} />
         <div className="absolute inset-x-8 top-16 h-px animate-pulse" style={{ background: 'linear-gradient(90deg, transparent, rgba(242,193,78,0.65), transparent)' }} />
-        <div className="relative flex h-24 w-28 items-center justify-center rounded-2xl border text-[#F2C14E] shadow-[0_0_36px_rgba(242,193,78,0.18)]" style={{ background: 'rgba(29,26,20,0.82)', borderColor: 'rgba(242,193,78,0.28)' }}>
+        <div className={`relative flex h-24 w-28 ${previewImageUrl ? 'opacity-20' : ''} items-center justify-center rounded-2xl border text-[#F2C14E] shadow-[0_0_36px_rgba(242,193,78,0.18)]`} style={{ background: 'rgba(29,26,20,0.82)', borderColor: 'rgba(242,193,78,0.28)' }}>
           <ImageIcon size={48} strokeWidth={1.6} />
         </div>
         {!error && (

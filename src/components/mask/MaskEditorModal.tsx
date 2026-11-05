@@ -8,11 +8,13 @@ import { createOpenAiEditMaskPixels } from '../../lib/maskExport';
 
 export type MaskGeneratePayload = {
   prompt: string;
+  editMode?: 'mask' | 'markup';
   maskImage: { data: string; mimeType: 'image/png' };
   sourceImage: InlineImageData;
 };
 
 type MaskEditorModalProps = {
+  allowMarkup?: boolean;
   title: string;
   sourceImage: InlineImageData;
   initialPrompt?: string;
@@ -55,6 +57,7 @@ function dataUrlToInlinePng(dataUrl: string): InlineImageData {
 
 export function MaskEditorModal({
   title,
+  allowMarkup = false,
   sourceImage,
   initialPrompt = '',
   onClose,
@@ -67,6 +70,7 @@ export function MaskEditorModal({
   const drawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
+  const [editMode, setEditMode] = useState<'mask' | 'markup'>('mask');
   const [prompt, setPrompt] = useState(initialPrompt);
   const [tool, setTool] = useState<MaskTool>('brush');
   const [brushSize, setBrushSize] = useState(36);
@@ -222,7 +226,8 @@ export function MaskEditorModal({
     try {
       await onGenerate({
         prompt: prompt.trim(),
-        maskImage: exportMask(),
+        editMode,
+        maskImage: editMode === 'markup' && canvasRef.current ? dataUrlToImageInput(canvasRef.current.toDataURL('image/png')) : exportMask(),
         sourceImage: exportSourceImage(),
       });
     } catch (error) {
@@ -268,7 +273,7 @@ export function MaskEditorModal({
           <div>
             <h2 className="text-lg font-bold" style={{ color: '#EEE4CE' }}>{title}</h2>
             <p className="mt-1 text-xs" style={{ color: '#96836F' }}>
-              {t('mask.description')}
+              {t(editMode === 'markup' ? 'officialImages.markupDescription' : 'mask.description')}
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-xl p-2 text-red-300 hover:bg-red-900/30" title={t('common.close')}>
@@ -301,6 +306,7 @@ export function MaskEditorModal({
 
           <aside className="flex min-h-0 flex-col rounded-2xl border p-4" style={{ background: '#141210', borderColor: 'rgba(242,193,78,0.12)' }}>
             <div className="min-h-0 space-y-4 overflow-y-auto">
+            {allowMarkup && <select aria-label="Edit mode" className="w-full rounded bg-[#1D1A14] p-2 text-sm text-[#EEE4CE]" value={editMode} onChange={event => setEditMode(event.target.value as 'mask' | 'markup')}><option value="mask">{t('officialImages.maskMode')}</option><option value="markup">{t('officialImages.markupMode')}</option></select>}
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"

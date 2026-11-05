@@ -1,3 +1,4 @@
+import { isOfficialImageModel } from '../../lib/officialImages';
 import { Handle, Position, NodeProps, useReactFlow } from '@xyflow/react';
 import { Download, Maximize2, Trash2, Copy, Check, RefreshCw, Wand2, GitCompare, CircleAlert, Scissors, Loader2 } from 'lucide-react';
 import React, { useState } from 'react';
@@ -30,7 +31,7 @@ import { inheritNodeCategory } from '../../lib/nodeCategories';
 import { cancelGenerationTask } from '../../lib/generationTasks';
 import { MaskEditorModal, type MaskGeneratePayload } from '../mask/MaskEditorModal';
 import { MaskCompareModal } from '../mask/MaskCompareModal';
-import { buildImageMaskGenerationPayload, useMaskGeneration } from './useMaskGeneration';
+import { buildImageMaskGenerationPayload, useMaskGeneration, officialOptionsForEdit } from './useMaskGeneration';
 import {
   buildDownloadFileName,
   buildImageRerunParams,
@@ -153,7 +154,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     setRerunSucceeded(false);
 
     try {
-      const { imageUrl: newUrl, generationInfo } = await generateImageAction(params);
+      const { imageUrl: newUrl, images: resultImages, generationInfo } = await generateImageAction({ ...params, onPreview: preview => { if (!controller.signal.aborted) updateNodeData(id, { previewImageUrl: preview.imageUrl }); } });
       // Only update if not aborted
       if (!controller.signal.aborted) {
         updateNodeData(id, {
@@ -164,7 +165,11 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
           imageModel,
           bananaOptions: isBananaImageModel(imageModel) ? data.bananaOptions : undefined,
           image2Options: isImage2Model(imageModel) ? data.image2Options : undefined,
+          officialImageOptions: isOfficialImageModel(imageModel) ? data.officialImageOptions : undefined,
+          previewImageUrl: undefined,
         });
+        const currentNode = useStore.getState().nodes.find(node => node.id === id);
+        if (currentNode) for (const [index, url] of (resultImages ?? []).slice(1).entries()) addNode('imageNode', { x: currentNode.position.x + (index + 1) * 580, y: currentNode.position.y }, { ...data, imageUrl: url, imageAssetId: undefined, generationInfo, isLoading: false, previewImageUrl: undefined });
         setRerunSucceeded(true);
         setTimeout(() => setRerunSucceeded(false), 2_000);
       }
@@ -174,6 +179,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         setRerunError(err instanceof Error ? err.message : t('imageNode.rerunFailed'));
       }
     } finally {
+      updateNodeData(id, { previewImageUrl: undefined });
       rerunAbortRef.current = null;
       setIsRegenerating(false);
     }
@@ -206,6 +212,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         imageModel,
         bananaOptions: data.bananaOptions,
         image2Options: data.image2Options,
+        officialImageOptions: data.officialImageOptions,
         referencePayload,
       }) }
     );
@@ -223,7 +230,8 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
     createReferenceNode();
   };
 
-  const handleMaskGenerate = async ({ prompt: maskPrompt, maskImage, sourceImage }: MaskGeneratePayload) => {
+  const handleMaskGenerate = async ({ prompt: maskPrompt, maskImage, sourceImage, editMode }: MaskGeneratePayload) => {
+    const editOptions = officialOptionsForEdit(data.officialImageOptions);
     const thisNode = useStore.getState().nodes.find((n) => n.id === id);
     const pos = thisNode?.position || { x: 0, y: 0 };
     const createdAt = new Date().toISOString();
@@ -237,6 +245,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
         image2Options: data.image2Options,
+        officialImageOptions: editOptions,
         sourceImage,
         sourcePrompt: maskPrompt,
         generationMode: 'mask-edit',
@@ -261,11 +270,13 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       const { imageUrl: url, generationInfo } = await generateMaskImage(buildImageMaskGenerationPayload({
         imageModel,
         maskPrompt,
+        editMode,
         maskImage,
         sourceImage,
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
         image2Options: data.image2Options,
+        officialImageOptions: editOptions,
       }), placeholderNodeId);
 
       updateNodeData(placeholderNodeId, {
@@ -276,6 +287,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
         aspectRatio: data.aspectRatio || '1:1',
         imageSize: data.imageSize || '1K',
         image2Options: data.image2Options,
+        officialImageOptions: editOptions,
         sourceImage,
         sourcePrompt: maskPrompt,
         generationMode: 'mask-edit',
@@ -310,6 +322,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       <div className="relative group">
         <Handle type="target" position={Position.Left} className="w-3 h-3 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: '#9B70D0', borderColor: '#ffffff'}} />
         <GeneratingImagePlaceholder
+          previewImageUrl={data.previewImageUrl}
           modelLabel={imageModelLabel}
           title={generationTitle}
           prompt={data.prompt}
@@ -347,11 +360,11 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
 
       <NodeCategory nodeId={id} />
 
-      <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{ background: '#141210', ...(isCutout || data.image2Options?.background === 'transparent' ? CHECKERBOARD_STYLE : {}), borderRadius: '10px', overflow: 'hidden' }}>
+      <div className="relative min-w-[256px] min-h-[256px] flex items-center justify-center cursor-zoom-in" style={{ background: '#141210', ...(isCutout || data.image2Options?.background === 'transparent' || data.officialImageOptions?.background === 'transparent' ? CHECKERBOARD_STYLE : {}), borderRadius: '10px', overflow: 'hidden' }}>
         {imageUrl ? (
           <>
             <img
-              src={imageUrl}
+              src={isRegenerating && data.previewImageUrl ? data.previewImageUrl : imageUrl}
               alt={data.prompt || t('imageNode.generatedAlt')}
               className="max-w-[512px] max-h-[512px] object-contain"
             />
@@ -509,6 +522,7 @@ export function ImageNode({ id, data }: NodeProps<AppNode>) {
       </AnimatePresence>
       {showMaskEditor && imageUrl && getInlineImage() && (
         <MaskEditorModal
+          allowMarkup={isOfficialImageModel(imageModel) && imageModel !== 'openai-image2'}
           title={t('imageNode.maskEditGenerated')}
           sourceImage={getInlineImage()!}
           initialPrompt={data.sourcePrompt || data.prompt || ''}
