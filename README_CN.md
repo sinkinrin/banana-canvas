@@ -8,7 +8,7 @@
 > [!TIP]
 > 🌐 **English: [Read the default README](README.md)**
 
-当前版本：`0.14.0`
+当前版本：`0.14.1`
 
 新增独立的 **OpenAI 官方格式（满血版）** 通道，支持 2.6 Flare/Sunburst、完整质量档位、复杂度、批注编辑、实时预览和 SVG/GIF 原文件保存。[配置与实测](docs/OPENAI_IMAGES.md)。
 

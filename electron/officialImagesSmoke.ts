@@ -15,7 +15,7 @@ export async function runOfficialImagesSmoke({ window, localUrl, imageUrl, userD
   ], edges: [], assets: {} } }) });
   const created = await createdResponse.json() as { project?: { id: string } };
   if (!createdResponse.ok || !created.project) throw new Error('Official smoke project creation failed');
-  const projectUrl = `${localUrl}/projects/${created.project.id}`;
+  const projectUrl = `${localUrl}/projects/${created.project.id}?lng=zh-CN`;
   await window.loadURL(projectUrl);
   await wait(window, `document.querySelector('[data-image-node-id="official-svg"] img')?.naturalWidth === 64 && document.querySelector('[data-image-node-id="official-gif"] img')?.naturalWidth === 1`, 'SVG/GIF image display failed');
   await window.webContents.executeJavaScript(`document.querySelector('[data-app-settings-entry]').click()`);

@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > 🇨🇳 **简体中文：[阅读中文 README](README_CN.md)**
 
-Current version: `0.14.0`
+Current version: `0.14.1`
 
 Choose Google AI Studio or Vertex AI in App settings, with separate API Keys and optional custom URLs. Vertex supports Express Mode and Google Cloud ADC. See [provider configuration](docs/CONFIGURATION.md#ai-studio-and-vertex-ai).
 
