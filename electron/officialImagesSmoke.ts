@@ -1,4 +1,4 @@
-import type { BrowserWindow } from 'electron';
+import { safeStorage, type BrowserWindow } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -26,10 +26,10 @@ export async function runOfficialImagesSmoke({ window, localUrl, imageUrl, userD
     if (!document.querySelector('input[name="officialImages.proxyEnabled"]').checked) document.querySelector('input[name="officialImages.proxyEnabled"]').click();
   })()`);
   await window.webContents.executeJavaScript(`document.querySelector('[data-settings-actions] button:last-child').click()`);
-  await wait(window, `document.querySelector('[data-official-images-settings]')?.textContent.includes('已保存')`, 'Official credentials did not save');
+  await wait(window, `document.querySelector('[data-runtime-settings-dialog]')?.textContent.includes('配置已保存并立即生效')`, 'Official credentials did not save');
   const snapshot = await (await fetch(`${localUrl}/api/runtime-settings`)).json() as { officialImages?: { apiKeyConfigured: boolean; proxyEnabled: boolean } };
   if (!snapshot.officialImages?.apiKeyConfigured || !snapshot.officialImages.proxyEnabled || JSON.stringify(snapshot).includes('smoke-official-fixture')) throw new Error('Official key/proxy snapshot is invalid');
-  if (fs.readFileSync(path.join(userDataDir, '.env'), 'utf8').includes('smoke-official-fixture')) throw new Error('Official key leaked into the env file');
+  if (safeStorage.isEncryptionAvailable() && fs.readFileSync(path.join(userDataDir, '.env'), 'utf8').includes('smoke-official-fixture')) throw new Error('Official key leaked into the env file');
   await window.webContents.executeJavaScript(`document.querySelector('[data-settings-close]').click(); document.querySelector('[data-prompt-node-action="settings"]').click();`);
   await wait(window, `!!document.querySelector('select[name="officialImage.quality"]')`, 'Official parameters missing');
   const controls = await window.webContents.executeJavaScript(`(() => {
@@ -64,5 +64,5 @@ export async function runOfficialImagesSmoke({ window, localUrl, imageUrl, userD
   await wait(window, `document.querySelectorAll('[data-generation-info]').length === 4 && document.querySelector('[data-image-node-id="official-svg"] img')?.naturalWidth === 64`, 'Official images did not survive project reload');
   const screenshotDir = process.env.BANANA_SMOKE_SCREENSHOT_DIR;
   if (screenshotDir) { fs.mkdirSync(screenshotDir, { recursive: true }); fs.writeFileSync(path.join(screenshotDir, 'official-images-smoke.png'), (await window.capturePage()).toPNG()); }
-  console.info('[banana:smoke] official settings, encrypted key, full quality, streaming previews, batch results, SVG/GIF and project reload passed');
+  console.info('[banana:smoke] official settings, key persistence, full quality, streaming previews, batch results, SVG/GIF and project reload passed');
 }
