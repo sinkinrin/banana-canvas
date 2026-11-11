@@ -1,10 +1,11 @@
+import { getPromptImageCount, promptImageCountPatch } from './promptImageCount';
 import { isOfficialImageModel } from '../../lib/officialImages';
 import { OfficialImageOptionsPanel } from './OfficialImageOptionsPanel';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useStore, type AppNode } from '../../store';
 import { useEffect, useState } from 'react';
 import { useAppTranslation } from '../../i18n';
-import { BookOpen, Image as ImageIcon, Loader2, PencilLine, Settings2, Sparkles, Wand2, Upload, Trash2 } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, Loader2, PencilLine, Sparkles, Wand2, Upload, Trash2 } from 'lucide-react';
 import { type InlineImageData } from '../../lib/canvasState';
 import { optimizePrompt } from '../../services/gemini';
 import { PromptTextarea } from './PromptTextarea';
@@ -84,7 +85,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   });
 
   const [prompt, setPrompt] = useState(data.prompt || '');
-  const [showSettings, setShowSettings] = useState(false);
   const [showComparisonSetup, setShowComparisonSetup] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [previewSource, setPreviewSource] = useState<{ image: InlineImageData; index: number } | null>(null);
@@ -126,6 +126,10 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
   const bananaOptions = data.bananaOptions;
   const image2Options = data.image2Options;
   const officialImageOptions = data.officialImageOptions;
+  const imageCount = getPromptImageCount(imageModel, batchCount, officialImageOptions);
+  const countChoices = [...new Set([1, 2, 4, imageCount])].sort((a, b) => a - b);
+  const customSize = isOfficialImageModel(imageModel) && Boolean(officialImageOptions?.size);
+  const modelDescription = IMAGE_MODELS.find(model => model.id === imageModel)?.descriptionKey;
   const referenceLimit = getImageInputLimits(imageModel).count;
   const sketchReferenceIsAttached = Boolean(
     data.sketch?.referenceImageAssetId &&
@@ -168,7 +172,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
     if (!maskEditorSource) return;
     const editOptions = officialOptionsForEdit(officialImageOptions);
 
-    const baseX = nodePosition ? nodePosition.x + 400 : 0;
+    const baseX = nodePosition ? nodePosition.x + 480 : 0;
     const baseY = nodePosition ? nodePosition.y : 0;
     const createdAt = new Date().toISOString();
     const maskEditAspectRatio = getImage2MaskEditAspectRatio(data.aspectRatio, isOfficialImageModel(imageModel) ? imageModel : 'image2');
@@ -287,7 +291,8 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
 
   return (
     <div
-      className="w-80 rounded-2xl overflow-hidden transition-all"
+      data-prompt-node-id={id}
+      className="w-[400px] rounded-2xl overflow-hidden transition-all"
       style={{
         background: '#1D1A14',
         border: `1px solid ${data.color || 'rgba(242,193,78,0.2)'}`,
@@ -312,16 +317,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             <span style={{color: '#EEE4CE'}}>{t('app.name')}</span>
           </div>
           <div className="nodrag nopan nowheel flex items-center gap-1 p-1 rounded-xl shadow-sm" style={{background: 'rgba(22,19,15,0.8)', border: '1px solid rgba(242,193,78,0.15)'}} onPointerDown={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              data-prompt-node-action="settings"
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-1.5 rounded-lg transition-colors hover:bg-[rgba(242,193,78,0.1)]"
-              style={{color: '#96836F'}}
-              title={t('promptNode.settings')}
-            >
-              <Settings2 size={16} />
-            </button>
+            <NodeCategory nodeId={id} />
             <button
               type="button"
               onClick={handleDelete}
@@ -334,7 +330,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
           </div>
         </div>
 
-        <NodeCategory nodeId={id} />
         <div className="space-y-4">
           <div className="relative">
             <PromptTextarea
@@ -369,106 +364,36 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </button>
           </div>
 
-          {/* Reference Images Section */}
-          <div className="nodrag nopan nowheel" onPointerDown={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              data-sketch-action="open"
-              onClick={() => setIsSketchEditorOpen(true)}
-              disabled={!data.sketch && referenceImages.length >= referenceLimit}
-              className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ border: '1px solid rgba(91,155,213,0.28)', background: 'rgba(91,155,213,0.09)', color: '#8FC1EA' }}
-              title={data.sketch
-                ? sketchReferenceIsAttached
-                  ? t('promptNode.editAttachedSketch')
-                  : t('promptNode.editDetachedSketch')
-                : referenceImages.length >= referenceLimit
-                  ? t('promptNode.referenceLimitReached')
-                  : t('promptNode.sketchHint')}
-            >
-              <PencilLine size={14} />
-              {data.sketch ? t('promptNode.editSketch') : t('promptNode.drawSketch')}
-              {data.sketch && (
-                <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ background: 'rgba(91,155,213,0.16)' }}>
-                  {data.sketch.aspectRatio}
-                </span>
-              )}
-            </button>
-            {referenceImages.length > 0 ? (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  {referenceImages.map((img, index) => (
-                    <ReferenceImageThumbnail
-                      key={referenceImageIds[index] ?? index}
-                      image={img}
-                      index={index}
-                      isSketch={referenceImageIds[index] === data.sketch?.referenceImageAssetId}
-                      badge={referenceImageIds[index] === data.sketch?.referenceImageAssetId
-                        ? t('promptNode.sketchBadge', { index: index + 1, total: referenceImages.length })
-                        : `${index + 1}/${referenceImages.length}`}
-                      onOpen={() => setPreviewSource({ image: img, index })}
-                      onRemove={() => handleRemoveImage(index)}
-                    />
-                  ))}
-                </div>
-                {referenceImages.length < referenceLimit && (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isReadingFile}
-                    className="w-full py-1.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-                    style={{border: '1px dashed rgba(242,193,78,0.2)', color: '#5C4E3E'}}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.4)'; (e.currentTarget as HTMLElement).style.color = '#96836F'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.2)'; (e.currentTarget as HTMLElement).style.color = '#5C4E3E'; }}
-                  >
-                    {isReadingFile ? (
-                      <>
-                        <Loader2 size={12} className="animate-spin" />
-                        {t('promptNode.reading')}
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={12} />
-                        {isOfficialImageModel(imageModel) ? t('officialImages.referenceLimit', { count: referenceImages.length, max: 16 }) : t('promptNode.addMore', { count: referenceImages.length })}
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isReadingFile}
-                className="w-full py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-                style={{border: '1px dashed rgba(242,193,78,0.2)', color: '#5C4E3E'}}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.4)'; (e.currentTarget as HTMLElement).style.color = '#96836F'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.2)'; (e.currentTarget as HTMLElement).style.color = '#5C4E3E'; }}
-              >
-                {isReadingFile ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    {t('promptNode.readingImage')}
-                  </>
-                ) : (
-                  <>
-                    <Upload size={14} />
-                    {t('promptNode.uploadReference')}
-                  </>
-                )}
+          <div className="nodrag nopan nowheel space-y-2" onPointerDown={event => event.stopPropagation()}>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                disabled={isReadingFile || referenceImages.length >= referenceLimit}
+                title={`${referenceImageLimitHint} · ${t('promptNode.referenceCompatibilityHint')}`}
+                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-dashed border-[#F2C14E]/30 px-2 text-xs text-[#D6C3A0] transition-colors hover:bg-[#F2C14E]/10 disabled:cursor-not-allowed disabled:opacity-40">
+                {isReadingFile ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {isReadingFile ? t('promptNode.reading') : t('promptNode.addReference')}
+                {referenceImages.length > 0 && <span>{referenceImages.length}/{referenceLimit}</span>}
               </button>
-            )}
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/heic,image/heif,.mpo"
-              onChange={handleImageUpload}
-            />
-            <p className="mt-1 text-center text-[10px]" style={{ color: '#5C4E3E' }}>
-              {isOfficialImageModel(imageModel) ? `${t('officialImages.referenceLimit', { count: referenceImages.length, max: 16 })} · ${formatMebibytes(getImageInputLimits(imageModel).single)}` : referenceImageLimitHint}
-              <br />{t('promptNode.referenceCompatibilityHint')}
-            </p>
+              <button type="button" data-sketch-action="open" onClick={() => setIsSketchEditorOpen(true)}
+                disabled={!data.sketch && referenceImages.length >= referenceLimit}
+                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#5B9BD5]/30 bg-[#5B9BD5]/10 px-2 text-xs text-[#8FC1EA] disabled:cursor-not-allowed disabled:opacity-40"
+                title={data.sketch ? t(sketchReferenceIsAttached ? 'promptNode.editAttachedSketch' : 'promptNode.editDetachedSketch') : t('promptNode.sketchHint')}>
+                <PencilLine size={14} />
+                {data.sketch ? t('promptNode.editSketch') : t('promptNode.drawSketch')}
+              </button>
+            </div>
+            {referenceImages.length > 0 && <div className="grid max-h-48 grid-cols-3 gap-2 overflow-y-auto overscroll-contain">
+              {referenceImages.map((img, index) => (
+                <ReferenceImageThumbnail key={referenceImageIds[index] ?? index} image={img} index={index}
+                  isSketch={referenceImageIds[index] === data.sketch?.referenceImageAssetId}
+                  badge={referenceImageIds[index] === data.sketch?.referenceImageAssetId
+                    ? t('promptNode.sketchBadge', { index: index + 1, total: referenceImages.length })
+                    : `${index + 1}/${referenceImages.length}`}
+                  onOpen={() => setPreviewSource({ image: img, index })} onRemove={() => handleRemoveImage(index)} />
+              ))}
+            </div>}
+            <input type="file" ref={fileInputRef} className="hidden"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/heic,image/heif,.mpo" onChange={handleImageUpload} />
           </div>
 
           {data.error && (
@@ -477,8 +402,155 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </div>
           )}
 
-          <button type="button" data-compare-models="true" disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration} onClick={() => setShowComparisonSetup(true)} className="nodrag nopan nowheel w-full rounded-xl border border-[#F2C14E]/30 py-2 text-sm text-[#F2C14E] disabled:opacity-40">{t('comparison.title')}</button>
-          {showComparisonSetup && <ModelComparisonSetup defaults={{ aspectRatio, imageSize }} onClose={() => setShowComparisonSetup(false)} onStart={handleCompare} />}
+          <div data-prompt-settings="true" className="nodrag nopan nowheel space-y-4" onPointerDown={(event) => event.stopPropagation()}>
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#B8A58D'}}>{t('promptNode.imageModel')}</label>
+              <select
+                aria-label={t('promptNode.imageModel')}
+                title={modelDescription ? t(modelDescription) : imageModelLabel}
+                name="imageModel"
+                value={imageModel}
+                onChange={(e) => {
+                  const nextModel = e.target.value as ImageModelId;
+                  if (referenceImages.length > getImageInputLimits(nextModel).count) { updateNodeData(id, { error: t('officialImages.removeReferences', { max: getImageInputLimits(nextModel).count }) }); return; }
+                  updateNodeData(id, {
+                    imageModel: nextModel,
+                    aspectRatio: getEffectivePromptAspectRatio(nextModel, data.aspectRatio),
+                    imageSize: isBananaImageModel(nextModel)
+                      ? normalizeBananaImageSizeForModel(nextModel, data.imageSize) ?? '1K'
+                      : isOfficialImageModel(nextModel) && data.imageSize === '512' ? '1K' : normalizeBananaImageSize(data.imageSize) ?? '1K',
+                  });
+                }}
+                className="nowheel w-full min-w-0 p-2 rounded-lg text-sm outline-none disabled:opacity-40"
+                style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
+                onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
+                onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
+              >
+                {IMAGE_MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#B8A58D'}}>{t('promptNode.aspectRatio')}</label>
+                <select
+                  aria-label={t('promptNode.aspectRatio')}
+                  name="aspectRatio"
+                  value={customSize ? 'custom' : aspectRatio}
+                  onChange={(e) => {
+                    if (isOfficialImageModel(imageModel)) {
+                      const next = { ...officialImageOptions };
+                      if (e.target.value === 'custom') {
+                        next.size = next.size || 'auto';
+                        updateNodeData(id, { officialImageOptions: next });
+                        return;
+                      }
+                      delete next.size;
+                      updateNodeData(id, { aspectRatio: e.target.value as typeof aspectRatio, officialImageOptions: next });
+                    } else updateNodeData(id, { aspectRatio: e.target.value as typeof aspectRatio });
+                  }}
+                  className="nowheel w-full min-w-0 p-2 rounded-lg text-sm outline-none disabled:opacity-40"
+                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
+                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
+                >
+                  {isOfficialImageModel(imageModel) && <option value="custom">{t('promptNode.customSize')}</option>}
+                  {aspectRatioOptions.map((ratio) => (
+                    <option key={ratio} value={ratio}>{t(aspectRatioLabelKeys[ratio])}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#B8A58D'}}>{t('promptNode.resolution')}</label>
+                <select
+                  aria-label={t('promptNode.resolution')}
+                  disabled={customSize}
+                  name="imageSize"
+                  value={imageSize}
+                  onChange={(e) => {
+                    updateNodeData(id, { imageSize: e.target.value as typeof imageSize });
+                  }}
+                  className="nowheel w-full min-w-0 p-2 rounded-lg text-sm outline-none disabled:opacity-40"
+                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
+                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
+                >
+                  {imageSizeOptions.map((size) => (
+                    <option key={size} value={size}>{t(imageSizeLabelKeys[size])}</option>
+                  ))}
+                </select>
+              </div>
+
+            </div>
+            {customSize && <label className="block space-y-2 text-xs text-[#B8A58D]">
+              <span>{t('officialImages.size')}</span>
+              <input name="officialImage.size" key={officialImageOptions?.size} defaultValue={officialImageOptions?.size ?? ''} placeholder="auto / 1536x864"
+                className="w-full rounded-lg border border-[#F2C14E]/20 bg-[#141210] p-2 text-sm text-[#EEE4CE]"
+                onBlur={event => {
+                  const next = { ...officialImageOptions };
+                  if (event.target.value) next.size = event.target.value;
+                  else delete next.size;
+                  updateNodeData(id, { officialImageOptions: next });
+                }} />
+            </label>}
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-xs font-medium text-[#B8A58D]">{t('promptNode.batchCount')}</label>
+              <div className="flex gap-1 rounded-lg border border-[#F2C14E]/15 bg-[#141210] p-1" role="group" aria-label={t('promptNode.batchCount')}>
+                {countChoices.map(count => (
+                  <button
+                    type="button"
+                    key={count}
+                    data-generation-count={count}
+                    aria-pressed={imageCount === count}
+                    onClick={() => {
+                      updateNodeData(id, promptImageCountPatch(imageModel, count, officialImageOptions));
+                    }}
+                    className="min-w-10 rounded-md px-2 py-1 text-sm font-medium transition-colors"
+                    style={imageCount === count
+                      ? {background: '#F2C14E', color: '#16130F'}
+                      : {background: 'transparent', border: '1px solid rgba(242,193,78,0.2)', color: '#96836F'}}
+                    onMouseEnter={e => { if (imageCount !== count) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.5)'; }}
+                    onMouseLeave={e => { if (imageCount !== count) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.2)'; }}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {isBananaImageModel(imageModel) && (
+              <BananaOptionsPanel
+                imageModel={imageModel}
+                value={bananaOptions}
+                hasReferenceImages={referenceImages.length > 0}
+                onChange={(nextOptions) => {
+                  updateNodeData(id, {
+                    bananaOptions: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
+                  });
+                }}
+              />
+            )}
+
+            {isOfficialImageModel(imageModel) && <OfficialImageOptionsPanel imageModel={imageModel} value={officialImageOptions} referenceCount={referenceImages.length} onChange={next => updateNodeData(id, { officialImageOptions: next })} />}
+            {isImage2Model(imageModel) && (
+              <Image2OptionsPanel
+                imageModel={imageModel}
+                value={image2Options}
+                hasReferenceImages={referenceImages.length > 0}
+                onChange={(nextOptions) => {
+                  updateNodeData(id, {
+                    image2Options: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
+                  });
+                }}
+              />
+            )}
+
+          </div>
 
           <button
             type="button"
@@ -490,7 +562,7 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
               background: data.isLoading || !prompt.trim()
                 ? 'rgba(242,193,78,0.15)'
                 : 'linear-gradient(135deg, #F2C14E 0%, #D97B3A 100%)',
-              color: data.isLoading || !prompt.trim() ? '#5C4E3E' : '#16130F',
+              color: data.isLoading || !prompt.trim() ? '#B8A58D' : '#16130F',
               boxShadow: data.isLoading || !prompt.trim()
                 ? 'none'
                 : '0 4px 20px rgba(242,193,78,0.3)',
@@ -506,10 +578,13 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             ) : (
               <>
                 <ImageIcon size={18} />
-                <span>{t('promptNode.generate', { model: imageModelLabel })}</span>
+                <span>{t(imageCount > 1 ? 'promptNode.generateCount' : 'promptNode.generate', { count: imageCount })}</span>
               </>
             )}
           </button>
+
+          <button type="button" data-compare-models="true" disabled={data.isLoading || !prompt.trim() || hasPendingReferenceHydration} onClick={() => setShowComparisonSetup(true)} className="nodrag nopan nowheel w-full py-1 text-xs text-[#B8A58D] hover:text-[#EEE4CE] disabled:opacity-40">{t('comparison.title')}</button>
+          {showComparisonSetup && <ModelComparisonSetup defaults={{ aspectRatio, imageSize }} onClose={() => setShowComparisonSetup(false)} onStart={handleCompare} />}
 
           {data.isLoading && (
             <button
@@ -525,127 +600,6 @@ export function PromptNode({ id, data }: NodeProps<AppNode>) {
             </button>
           )}
 
-          {showSettings && (
-            <div className="nodrag nopan nowheel p-4 rounded-xl space-y-4" style={{background: '#141210', border: '1px solid rgba(242,193,78,0.1)'}} onPointerDown={(event) => event.stopPropagation()}>
-              <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.imageModel')}</label>
-                <select
-                  name="imageModel"
-                  value={imageModel}
-                  onChange={(e) => {
-                    const nextModel = e.target.value as ImageModelId;
-                    if (referenceImages.length > getImageInputLimits(nextModel).count) { updateNodeData(id, { error: t('officialImages.removeReferences', { max: getImageInputLimits(nextModel).count }) }); return; }
-                    updateNodeData(id, {
-                      imageModel: nextModel,
-                      aspectRatio: getEffectivePromptAspectRatio(nextModel, data.aspectRatio),
-                      imageSize: isBananaImageModel(nextModel)
-                        ? normalizeBananaImageSizeForModel(nextModel, data.imageSize) ?? '1K'
-                        : isOfficialImageModel(nextModel) && data.imageSize === '512' ? '1K' : normalizeBananaImageSize(data.imageSize) ?? '1K',
-                    });
-                  }}
-                  className="nowheel w-full p-2 rounded-lg text-sm outline-none"
-                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
-                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
-                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
-                >
-                  {IMAGE_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label} - {t(model.descriptionKey)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.aspectRatio')}</label>
-                <select
-                  name="aspectRatio"
-                  value={aspectRatio}
-                  onChange={(e) => {
-                    updateNodeData(id, { aspectRatio: e.target.value as typeof aspectRatio });
-                  }}
-                  className="nowheel w-full p-2 rounded-lg text-sm outline-none"
-                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
-                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
-                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
-                >
-                  {aspectRatioOptions.map((ratio) => (
-                    <option key={ratio} value={ratio}>{t(aspectRatioLabelKeys[ratio])}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.resolution')}</label>
-                <select
-                  name="imageSize"
-                  value={imageSize}
-                  onChange={(e) => {
-                    updateNodeData(id, { imageSize: e.target.value as typeof imageSize });
-                  }}
-                  className="nowheel w-full p-2 rounded-lg text-sm outline-none"
-                  style={{background: '#1D1A14', border: '1px solid rgba(242,193,78,0.2)', color: '#EEE4CE'}}
-                  onFocus={e => e.target.style.borderColor = 'rgba(242,193,78,0.45)'}
-                  onBlur={e => e.target.style.borderColor = 'rgba(242,193,78,0.2)'}
-                >
-                  {imageSizeOptions.map((size) => (
-                    <option key={size} value={size}>{t(imageSizeLabelKeys[size])}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{color: '#96836F'}}>{t('promptNode.batchCount')}</label>
-                <div className="flex gap-2">
-                  {[1, 2, 4].map(count => (
-                    <button
-                      type="button"
-                      key={count}
-                      onClick={() => {
-                        updateNodeData(id, { batchCount: count });
-                      }}
-                      className="flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                      style={batchCount === count
-                        ? {background: '#F2C14E', color: '#16130F'}
-                        : {background: 'transparent', border: '1px solid rgba(242,193,78,0.2)', color: '#96836F'}}
-                      onMouseEnter={e => { if (batchCount !== count) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.5)'; }}
-                      onMouseLeave={e => { if (batchCount !== count) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(242,193,78,0.2)'; }}
-                    >
-                      {count}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {isBananaImageModel(imageModel) && (
-                <BananaOptionsPanel
-                  imageModel={imageModel}
-                  value={bananaOptions}
-                  hasReferenceImages={referenceImages.length > 0}
-                  onChange={(nextOptions) => {
-                    updateNodeData(id, {
-                      bananaOptions: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
-                    });
-                  }}
-                />
-              )}
-
-              {isOfficialImageModel(imageModel) && <OfficialImageOptionsPanel imageModel={imageModel} value={officialImageOptions} referenceCount={referenceImages.length} onChange={next => updateNodeData(id, { officialImageOptions: next })} />}
-              {isImage2Model(imageModel) && (
-                <Image2OptionsPanel
-                  imageModel={imageModel}
-                  value={image2Options}
-                  hasReferenceImages={referenceImages.length > 0}
-                  onChange={(nextOptions) => {
-                    updateNodeData(id, {
-                      image2Options: Object.keys(nextOptions).length > 0 ? nextOptions : undefined,
-                    });
-                  }}
-                />
-              )}
-
-            </div>
-          )}
 
         </div>
       </div>

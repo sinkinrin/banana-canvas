@@ -7,12 +7,12 @@ export async function runLayoutSmoke({ window, localUrl, imageUrl, flush, waitFo
   waitForPredicate: (window: BrowserWindow, predicate: string, message: string) => Promise<void>;
 }) {
   const response = await fetch(`${localUrl}/api/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Layout and categories smoke', snapshot: {
-    nodes: [{ id: 'layout-prompt', type: 'promptNode', position: { x: 100, y: 100 }, data: { prompt: 'layout fixture', imageModel: 'image2', aspectRatio: '16:9', imageSize: '2K' } },
+    nodes: [{ id: 'layout-prompt', type: 'promptNode', position: { x: 100, y: 100 }, data: { prompt: 'layout fixture', imageModel: 'image2', aspectRatio: '16:9', imageSize: '2K', batchCount: 2, officialImageOptions: { n: 3, safetyIdentifier: 'layout-saved-setting' } } },
       { id: 'layout-image', type: 'imageNode', position: { x: 700, y: 100 }, data: { imageUrl, generationMode: 'mask-edit', sourceImage: { url: imageUrl, data: imageUrl.split(',')[1], mimeType: 'image/jpeg' }, prompt: 'Layout comparison '.repeat(20) } }], edges: [], assets: {},
   } }) });
   const created = await response.json() as { project?: { id?: string } };
   if (!response.ok || !created.project?.id) throw new Error('Layout smoke fixture failed');
-  const projectUrl = `${localUrl}/projects/${created.project.id}`;
+  const projectUrl = `${localUrl}/projects/${created.project.id}?lng=zh-CN`;
   await window.loadURL(projectUrl);
   const wait = (predicate: string, message: string) => waitForPredicate(window, predicate, message);
   const screenshot = async (name: string) => {
@@ -24,18 +24,57 @@ export async function runLayoutSmoke({ window, localUrl, imageUrl, flush, waitFo
   };
   await wait(`!!document.querySelector('[data-compare-models]')`, 'Layout fixture did not render');
   await window.webContents.executeJavaScript(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
-  await window.webContents.executeJavaScript(`(() => {
-    globalThis.__actionTop = document.querySelector('[data-compare-models]').getBoundingClientRect().top;
-    document.querySelector('[data-prompt-node-action="settings"]').click();
-  })()`);
   await wait(`(() => {
-    const action = document.querySelector('[data-compare-models]').getBoundingClientRect();
-    const settings = document.querySelector('[name="imageModel"]')?.getBoundingClientRect();
-    const advanced = document.querySelector('[data-advanced-options]');
-    return settings && action.bottom < settings.top && Math.abs(action.top - globalThis.__actionTop) < 2 && advanced && !advanced.open;
-  })()`, 'Opening settings moved generation actions or expanded advanced controls');
-  await window.webContents.executeJavaScript(`document.querySelector('[data-advanced-options] summary').click()`);
-  await wait(`Math.abs(document.querySelector('[data-compare-models]').getBoundingClientRect().top - globalThis.__actionTop) < 2 && document.querySelector('[data-advanced-options]').open`, 'Advanced parameters moved generation actions');
+    const node = document.querySelector('[data-prompt-node-id="layout-prompt"]');
+    const model = node.querySelector('[name="imageModel"]').getBoundingClientRect();
+    const generate = node.querySelector('[data-generate-image]').getBoundingClientRect();
+    const compare = node.querySelector('[data-compare-models]').getBoundingClientRect();
+    const advanced = node.querySelector('[data-advanced-options]');
+    return node.offsetWidth === 400 && node.offsetHeight < 760 && node.scrollWidth <= node.clientWidth
+      && model.height > 0 && model.bottom < generate.top && generate.bottom < compare.top && !advanced.open
+      && !node.querySelector('[data-generate-image]').textContent.includes('Image2');
+  })()`, 'Common settings, compact width, collapsed options or action hierarchy is incorrect');
+  await screenshot('prompt-default');
+  const select = async (name: string, value: string) => {
+    await window.webContents.executeJavaScript(`(() => {
+      const input = document.querySelector('select[name="' + ${JSON.stringify(name)} + '"]');
+      input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+  };
+  await select('imageModel', 'banana-2.1');
+  await wait(`!!document.querySelector('[data-advanced-options="banana"]')`, 'Banana options missing');
+  await window.webContents.executeJavaScript(`document.querySelector('[data-advanced-options="banana"] summary').click()`);
+  await select('bananaThinkingLevel', 'HIGH');
+  await wait(`document.querySelector('[data-advanced-options="banana"] summary').textContent.includes('high')
+    && document.querySelector('[name="bananaThinkingLevel"]').getBoundingClientRect().height > 0`, 'Banana thinking choice or collapsed summary is missing');
+  await screenshot('prompt-banana-thinking');
+  await window.webContents.executeJavaScript(`document.querySelector('[data-options-body="banana"] button[popovertarget]').click()`);
+  await wait(`!!document.querySelector('[popover]:popover-open')`, 'Parameter help did not open above the scrolling options');
+  await window.webContents.executeJavaScript(`document.querySelector('[popover]:popover-open button').click()`);
+  await wait(`!document.querySelector('[popover]:popover-open')`, 'Parameter help did not close');
+
+  await select('imageModel', 'openai-image2.6-sunburst');
+  await wait(`!!document.querySelector('[data-generation-count="6"][aria-pressed="true"]')
+    && document.querySelector('[data-advanced-options="official-images"] summary').textContent.includes('已启用高级配置')`, 'Legacy total count or saved advanced settings are hidden');
+  await window.webContents.executeJavaScript(`document.querySelector('[data-generation-count="4"]').click(); document.querySelector('[data-advanced-options="official-images"] summary').click()`);
+  await wait(`document.querySelector('[data-generation-count="4"]')?.getAttribute('aria-pressed') === 'true'`, 'Total image count was multiplied again');
+  await select('officialImage.quality', 'max');
+  await select('officialImage.outputFormat', 'jpeg');
+  await select('officialImage.background', 'transparent');
+  await wait(`document.querySelector('[name="officialImage.outputFormat"]').value === 'png'`, 'Transparent background did not choose a compatible output format');
+  await select('aspectRatio', 'custom');
+  await wait(`!!document.querySelector('[name="officialImage.size"]') && document.querySelector('[name="imageSize"]').disabled`, 'Custom size conflicts with canvas presets');
+  await select('aspectRatio', '16:9');
+  await wait(`!document.querySelector('[name="officialImage.size"]') && !document.querySelector('[name="imageSize"]').disabled`, 'Returning to presets did not clear custom size');
+  await window.webContents.executeJavaScript(`document.querySelector('[data-official-technical] summary').click()`);
+  await wait(`(() => {
+    const body = document.querySelector('[data-options-body="official-images"]');
+    const node = document.querySelector('[data-prompt-node-id="layout-prompt"]');
+    return body.clientHeight <= 320 && body.scrollHeight > body.clientHeight && body.scrollWidth <= body.clientWidth
+      && node.scrollWidth <= node.clientWidth && !document.querySelector('[name="officialImage.n"]');
+  })()`, 'Expanded technical settings overflow the node or expose duplicate count controls');
+  await screenshot('prompt-official-advanced');
+  await window.webContents.executeJavaScript(`document.querySelector('[data-advanced-options="official-images"] summary').click()`);
 
   await window.webContents.executeJavaScript(`document.querySelector('[data-node-category="layout-prompt"]').click()`);
   await wait(`!!document.querySelector('[data-assign-category]')`, 'Category picker missing');
@@ -52,6 +91,12 @@ export async function runLayoutSmoke({ window, localUrl, imageUrl, flush, waitFo
   await flush();
   await window.loadURL(projectUrl);
   await wait(`document.querySelector('[data-node-category="layout-prompt"]')?.textContent.includes('产品 A')`, 'Category did not survive project reload');
+  await wait(`document.querySelector('[data-generation-count="4"]')?.getAttribute('aria-pressed') === 'true'
+    && document.querySelector('[name="officialImage.quality"]').value === 'max'
+    && document.querySelector('[name="officialImage.background"]').value === 'transparent'
+    && document.querySelector('input[value="layout-saved-setting"]')
+    && !document.querySelector('[data-advanced-options]').open`, 'Prompt settings did not survive project reload');
+
 
   const contentSize = window.getContentSize();
   const minimumSize = window.getMinimumSize();

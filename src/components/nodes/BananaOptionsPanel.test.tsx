@@ -52,7 +52,7 @@ test('BananaOptionsPanel disables mediaResolution without reference images', () 
   assert.match(html, /纯文生图发送会被 Gemini 拒绝/);
 });
 
-test('BananaOptionsPanel exposes Lite thinking controls and disables Search', () => {
+test('BananaOptionsPanel exposes Lite thinking controls and hides unsupported Search', () => {
   const html = renderToStaticMarkup(
     <BananaOptionsPanel
       imageModel="banana-lite"
@@ -66,7 +66,7 @@ test('BananaOptionsPanel exposes Lite thinking controls and disables Search', ()
   assert.match(html, /极速低成本/);
   assert.match(html, /minimal 最低延迟/);
   assert.match(html, /value="HIGH" selected="">high 高推理/);
-  assert.match(html, /Lite 不支持/);
+  assert.doesNotMatch(html, /name="bananaSearchGrounding"/);
   assert.doesNotMatch(html, /开启 Google Search/);
 });
 
@@ -83,7 +83,7 @@ test('BananaOptionsPanel keeps Search available for Pro while thinking is model-
   assert.match(html, /Banana Pro 高级参数/);
   assert.match(html, /专业复杂任务/);
   assert.match(html, /模型自动管理/);
-  assert.match(html, /模型不支持/);
+  assert.doesNotMatch(html, /name="bananaMediaResolution"/);
   assert.match(html, /不会发送 mediaResolution/);
   assert.doesNotMatch(html, /value="MEDIA_RESOLUTION_HIGH" selected/);
   assert.match(html, /开启 Google Search/);
@@ -103,4 +103,12 @@ test('Banana 2.1 offers medium thinking and old models discard an inherited medi
     assert.doesNotMatch(render(model), /value="MEDIUM"/);
     assert.match(render(model), /value="default" selected="">默认 \/ minimal/);
   }
+});
+
+
+test('collapsed Banana options retain the selected thinking level in their summary', () => {
+  const html = renderToStaticMarkup(<BananaOptionsPanel imageModel="banana-2.1" value={{ thinkingLevel: 'HIGH' }} hasReferenceImages={false} onChange={() => {}} />);
+  assert.match(html, /<summary[^>]*>[\s\S]*思考等级 · high[\s\S]*?<\/summary>/);
+  assert.doesNotMatch(html, /<details[^>]*open/);
+  assert.doesNotMatch(html, /name="bananaMediaResolution"/);
 });

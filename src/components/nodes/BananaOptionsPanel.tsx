@@ -1,3 +1,4 @@
+import { AdvancedOptionsSection } from './AdvancedOptionsSection';
 import { Info } from 'lucide-react';
 import { useAppTranslation } from '../../i18n';
 import {
@@ -25,7 +26,7 @@ const selectStyle = {
   border: '1px solid rgba(242,193,78,0.2)',
   color: '#EEE4CE',
 };
-const labelStyle = { color: '#96836F' };
+const labelStyle = { color: '#B8A58D' };
 
 export function BananaOptionsPanel({
   imageModel,
@@ -44,6 +45,10 @@ export function BananaOptionsPanel({
       : t('bananaOptions.mediaUnsupported', { model: modelConfig.label }),
     ...getBananaParameterTipKeys(imageModel).map((key) => t(key)),
   ];
+
+  const thinkingSummary = capabilities.supportsThinkingLevelControl
+    ? `${t('bananaOptions.thinkingLevel')} · ${options.thinkingLevel?.toLowerCase() ?? t(capabilities.defaultThinkingLevel === 'MEDIUM' ? 'bananaOptions.defaultMedium' : 'bananaOptions.defaultMinimal')}`
+    : t('bananaOptions.modelManaged');
 
   const commit = (nextOptions: BananaOptions) => {
     onChange(normalizeBananaOptionsForModel(imageModel, nextOptions));
@@ -80,11 +85,7 @@ export function BananaOptionsPanel({
   };
 
   return (
-    <details data-advanced-options="banana" className="rounded-xl p-3" style={{ background: 'rgba(242,193,78,0.04)', border: '1px solid rgba(242,193,78,0.12)' }}>
-      <summary className="cursor-pointer text-xs text-[#F2C14E]">{t('bananaOptions.advanced', { model: modelConfig.label })}
-        {(options.thinkingLevel || options.mediaResolution || options.searchGrounding) && <span className="ml-2 text-[10px] text-[#B8A58D]">{t('categories.custom')}</span>}
-      </summary>
-      <div className="mt-4 space-y-4">
+    <AdvancedOptionsSection kind="banana" summary={<>{thinkingSummary}{options.searchGrounding && ' · Search'}</>}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
           <Info size={13} />
@@ -97,7 +98,7 @@ export function BananaOptionsPanel({
         {t(modelConfig.descriptionKey)}
       </p>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-3">
         <div className="space-y-1.5">
           <label className="text-[11px] font-medium" style={labelStyle}>{t('bananaOptions.thinkingLevel')}</label>
           <select
@@ -122,50 +123,52 @@ export function BananaOptionsPanel({
             ))}
           </select>
         </div>
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium" style={labelStyle}>{t('bananaOptions.mediaResolution')}</label>
-          <select
-            name="bananaMediaResolution"
-            value={capabilities.supportsMediaResolutionControl
-              ? options.mediaResolution ?? 'default'
-              : 'default'}
-            disabled={!hasReferenceImages || !capabilities.supportsMediaResolutionControl}
-            onChange={(event) => setMediaResolution(event.target.value as BananaMediaResolution | 'default')}
-            className="nowheel w-full rounded-lg p-2 text-xs outline-none disabled:opacity-40"
-            style={selectStyle}
-          >
-            <option value="default">
-              {capabilities.supportsMediaResolutionControl ? t('common.default') : t('bananaOptions.unsupported')}
-            </option>
-            {capabilities.supportsMediaResolutionControl && BANANA_MEDIA_RESOLUTION_VALUES.map((mediaResolution) => (
-              <option key={mediaResolution} value={mediaResolution}>
-                {mediaResolution.replace('MEDIA_RESOLUTION_', '').toLowerCase()}
+        {capabilities.supportsMediaResolutionControl && (hasReferenceImages || options.mediaResolution) && (
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium" style={labelStyle}>{t('bananaOptions.mediaResolution')}</label>
+            <select
+              name="bananaMediaResolution"
+              value={capabilities.supportsMediaResolutionControl
+                ? options.mediaResolution ?? 'default'
+                : 'default'}
+              disabled={!hasReferenceImages || !capabilities.supportsMediaResolutionControl}
+              onChange={(event) => setMediaResolution(event.target.value as BananaMediaResolution | 'default')}
+              className="nowheel w-full rounded-lg p-2 text-xs outline-none disabled:opacity-40"
+              style={selectStyle}
+            >
+              <option value="default">
+                {capabilities.supportsMediaResolutionControl ? t('common.default') : t('bananaOptions.unsupported')}
               </option>
-            ))}
-          </select>
-        </div>
+              {capabilities.supportsMediaResolutionControl && BANANA_MEDIA_RESOLUTION_VALUES.map((mediaResolution) => (
+                <option key={mediaResolution} value={mediaResolution}>
+                  {mediaResolution.replace('MEDIA_RESOLUTION_', '').toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium" style={labelStyle}>Search grounding</label>
-          <select
-            name="bananaSearchGrounding"
-            value={capabilities.supportsSearchGrounding && options.searchGrounding ? 'on' : 'off'}
-            disabled={!capabilities.supportsSearchGrounding}
-            onChange={(event) => setSearchGrounding(event.target.value as 'off' | 'on')}
-            className="nowheel w-full rounded-lg p-2 text-xs outline-none disabled:opacity-40"
-            style={selectStyle}
-          >
-            <option value="off">
-              {capabilities.supportsSearchGrounding ? t('bananaOptions.searchOff') : t('bananaOptions.liteUnsupported')}
-            </option>
-            {capabilities.supportsSearchGrounding && (
-              <option value="on">{t('bananaOptions.searchOn')}</option>
-            )}
-          </select>
-        </div>
+        {capabilities.supportsSearchGrounding && (
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium" style={labelStyle}>Search grounding</label>
+            <select
+              name="bananaSearchGrounding"
+              value={capabilities.supportsSearchGrounding && options.searchGrounding ? 'on' : 'off'}
+              disabled={!capabilities.supportsSearchGrounding}
+              onChange={(event) => setSearchGrounding(event.target.value as 'off' | 'on')}
+              className="nowheel w-full rounded-lg p-2 text-xs outline-none disabled:opacity-40"
+              style={selectStyle}
+            >
+              <option value="off">
+                {capabilities.supportsSearchGrounding ? t('bananaOptions.searchOff') : t('bananaOptions.liteUnsupported')}
+              </option>
+              {capabilities.supportsSearchGrounding && (
+                <option value="on">{t('bananaOptions.searchOn')}</option>
+              )}
+            </select>
+          </div>
+        )}
       </div>
-
-      </div>
-    </details>
+    </AdvancedOptionsSection>
   );
 }

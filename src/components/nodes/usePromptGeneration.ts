@@ -158,7 +158,7 @@ export function createPromptGenerationRunner(deps: PromptGenerationRunnerDeps) {
           referenceImageIds: input.referenceImageIds,
           referenceImages: input.referenceImages,
         });
-        const baseX = input.nodePosition ? input.nodePosition.x + 400 : 0;
+        const baseX = input.nodePosition ? input.nodePosition.x + 480 : 0;
         const baseY = input.nodePosition ? input.nodePosition.y : 0;
         const batchCount = Math.max(1, Math.floor(input.batchCount || 1));
         const comparisonModels = normalizeComparisonModels(input.comparisonModels);

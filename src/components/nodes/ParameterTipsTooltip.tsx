@@ -1,47 +1,26 @@
-type ParameterTipsTooltipProps = {
-  tips: string[];
-};
-
+import { useId } from 'react';
 import { useAppTranslation } from '../../i18n';
 
-const tooltipStyle = {
-  background: 'rgba(20,18,16,0.98)',
-  border: '1px solid rgba(242,193,78,0.18)',
-  boxShadow: '0 18px 50px rgba(0,0,0,0.45)',
-};
-
-const tipStyle = { color: '#B8A07E' };
+type ParameterTipsTooltipProps = { tips: string[] };
 
 export function ParameterTipsTooltip({ tips }: ParameterTipsTooltipProps) {
   const { t } = useAppTranslation();
-  return (
-    <div className="group relative inline-flex">
-      <button
-        type="button"
-        aria-label={t('common.parameterHelp')}
-        title={t('common.parameterHelp')}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold transition-colors hover:bg-[#F2C14E]/15 focus:outline-none focus:ring-1 focus:ring-[#F2C14E]/60"
-        style={{
-          background: 'rgba(242,193,78,0.08)',
-          border: '1px solid rgba(242,193,78,0.24)',
-          color: '#F2C14E',
-        }}
-      >
-        ?
-      </button>
-      <div
-        role="tooltip"
-        className="invisible pointer-events-none absolute right-0 top-7 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl p-3 opacity-0 backdrop-blur-md transition-opacity duration-150 group-hover:visible group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-        style={tooltipStyle}
-      >
-        <div className="space-y-1.5">
-          {tips.map((tip) => (
-            <p key={tip} className="text-[10px] leading-relaxed" style={tipStyle}>
-              {tip}
-            </p>
-          ))}
-        </div>
+  const id = useId();
+  return <>
+    <button type="button" aria-label={t('common.parameterHelp')} title={t('common.parameterHelp')}
+      popoverTarget={id}
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#F2C14E]/25 bg-[#F2C14E]/10 text-xs text-[#F2C14E] hover:bg-[#F2C14E]/20">?</button>
+    <div id={id} popover="auto" role="dialog" aria-label={t('common.parameterHelp')}
+      className="nodrag nopan nowheel fixed inset-0 m-auto max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-[#F2C14E]/20 bg-[#141210] p-4 text-[#EEE4CE] shadow-2xl"
+      onPointerDown={event => event.stopPropagation()}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">{t('common.parameterHelp')}</span>
+        <button type="button" popoverTarget={id} popoverTargetAction="hide" aria-label={t('common.close')}
+          className="rounded px-2 py-1 text-sm hover:bg-[#F2C14E]/10">×</button>
+      </div>
+      <div className="space-y-2 text-xs leading-relaxed text-[#B8A58D]">
+        {tips.map(tip => <p key={tip}>{tip}</p>)}
       </div>
     </div>
-  );
+  </>;
 }

@@ -41,7 +41,7 @@ export function PromptTextarea({
         }
       }}
       placeholder={placeholder}
-      className="nodrag nowheel w-full h-32 p-3 pb-10 rounded-xl resize-none outline-none text-sm transition-all placeholder-[#5C4E3E]"
+      className="nodrag nowheel w-full h-32 p-3 pb-10 rounded-xl resize-none outline-none text-sm transition-all placeholder-[#96836F]"
       style={{background: '#141210', border: '1px solid rgba(242,193,78,0.15)', color: '#EEE4CE', caretColor: '#F2C14E'}}
       onFocus={event => event.target.style.borderColor = 'rgba(242,193,78,0.45)'}
     />

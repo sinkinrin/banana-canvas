@@ -1,5 +1,6 @@
 export const en = {
   officialImages: {
+    optionValues: { auto: 'Auto', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Maximum', opaque: 'Opaque', transparent: 'Transparent', none: 'None', minimal: 'Minimal' },
     "catalogHint": "Uses the saved official provider connection for GET /models. Save connection changes before loading. Model listing does not guarantee access to every preview feature.",
     "organization": "OpenAI Organization (optional)",
     "project": "OpenAI Project (optional)",
@@ -333,7 +334,13 @@ export const en = {
     nodeColor: 'Node color',
     generatingProgress: 'Generating {{generated}}/{{total}}',
     generating: 'Generating...',
-    generate: 'Generate · {{model}}',
+    generate: 'Generate image',
+    generateCount: 'Generate {{count}} images',
+    moreSettings: 'More settings',
+    technicalSettings: 'Advanced options',
+    advancedConfigured: 'Advanced settings active',
+    addReference: 'Add reference',
+    customSize: 'Custom size',
     resetLoading: 'Stop all unfinished tasks',
     maskEditTitle: 'Edit reference image',
     generationTask: 'Generation task',

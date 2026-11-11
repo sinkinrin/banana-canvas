@@ -31,3 +31,15 @@ test('official settings provide independent credentials, strict proxy controls a
   assert.match(html, /<input(?=[^>]*name="officialImages.apiKey")(?=[^>]*type="password")/); assert.match(html, /name="officialImages.proxyEnabled"/);
   assert.match(html, /127.0.0.1:7890/);
 });
+
+
+test('official options collapse technical fields while exposing saved overrides and validation errors', () => {
+  const html = renderToStaticMarkup(<OfficialImageOptionsPanel imageModel="openai-image2.6-sunburst" referenceCount={0}
+    value={{ imageInputs: [{ file_id: 'file-saved' }], safetyIdentifier: 'saved-identifier', background: 'transparent', outputFormat: 'jpeg', n: 3 }} onChange={() => {}} />);
+  assert.doesNotMatch(html, /<details[^>]*open/);
+  assert.doesNotMatch(html, /name="officialImage.n"/);
+  assert.match(html, /file-saved/);
+  assert.match(html, /saved-identifier/);
+  assert.match(html, /已启用高级配置/);
+  assert.match(html, /<\/details><p role="alert"/);
+});

@@ -879,9 +879,6 @@ async function runReferencePreviewSmokeTest(localUrl: string, window: BrowserWin
 }
 
 async function runBananaModelSelectionSmokeTest(window: BrowserWindow) {
-  await window.webContents.executeJavaScript(`
-    document.querySelector('button[title="设置"]')?.click()
-  `);
   await waitForSmokePredicate(
     window,
     `(() => {
@@ -921,11 +918,8 @@ async function runBananaModelSelectionSmokeTest(window: BrowserWindow) {
         && thinking instanceof HTMLSelectElement
         && !thinking.disabled
         && [...thinking.options].some((option) => option.value === 'HIGH')
-        && mediaResolution instanceof HTMLSelectElement
-        && [...mediaResolution.options].some((option) => option.value === 'MEDIA_RESOLUTION_HIGH')
-        && search instanceof HTMLSelectElement
-        && search.disabled
-        && ![...search.options].some((option) => option.value === 'on');
+        && !mediaResolution
+        && !search;
     })()`,
     'Banana model smoke Lite capabilities did not render correctly'
   );
@@ -955,9 +949,7 @@ async function runBananaModelSelectionSmokeTest(window: BrowserWindow) {
         && ['1K', '2K', '4K'].every((value) => sizeValues.includes(value))
         && thinking instanceof HTMLSelectElement
         && thinking.disabled
-        && mediaResolution instanceof HTMLSelectElement
-        && mediaResolution.disabled
-        && ![...mediaResolution.options].some((option) => option.value === 'MEDIA_RESOLUTION_HIGH')
+        && !mediaResolution
         && search instanceof HTMLSelectElement
         && !search.disabled
         && [...search.options].some((option) => option.value === 'on');

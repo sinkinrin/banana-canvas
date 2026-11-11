@@ -294,8 +294,8 @@ test('prompt generation runner creates batch placeholders, edges, and final imag
   assert.deepEqual(calls.slice(0, 4), [
     'commit',
     'update:prompt-1:{"isLoading":true}',
-    'add:image-1:410,20:Banana | draw',
-    'add:image-2:410,450:Banana | draw',
+    'add:image-1:490,20:Banana | draw',
+    'add:image-2:490,450:Banana | draw',
   ]);
   assert.ok(calls.includes('edges:image-1,image-2'));
   assert.ok(calls.some((call) => call.includes('"imageUrl":"data:image/png;base64,draw"')));

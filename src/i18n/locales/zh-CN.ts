@@ -2,6 +2,7 @@ import { en, type LocaleResource } from './en';
 
 export const zhCN: LocaleResource<typeof en> = {
   officialImages: {
+    optionValues: { auto: '自动', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高', opaque: '不透明', transparent: '透明背景', none: '无', minimal: '最低' },
     "catalogHint": "使用已保存的官方格式连接查询 GET /models；修改连接后请先保存。模型列表不代表已开放所有预览功能。",
     "organization": "OpenAI Organization（可选）",
     "project": "OpenAI Project（可选）",
@@ -335,7 +336,13 @@ export const zhCN: LocaleResource<typeof en> = {
     nodeColor: '节点颜色',
     generatingProgress: '生成中 {{generated}}/{{total}}',
     generating: '生成中...',
-    generate: '生成图像 · {{model}}',
+    generate: '生成图像',
+    generateCount: '生成 {{count}} 张图像',
+    moreSettings: '更多设置',
+    technicalSettings: '高级选项',
+    advancedConfigured: '已启用高级配置',
+    addReference: '添加参考图',
+    customSize: '自定义尺寸',
     resetLoading: '停止全部未完成任务',
     maskEditTitle: '局部编辑参考图',
     generationTask: '生成任务',

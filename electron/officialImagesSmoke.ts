@@ -30,7 +30,7 @@ export async function runOfficialImagesSmoke({ window, localUrl, imageUrl, userD
   const snapshot = await (await fetch(`${localUrl}/api/runtime-settings`)).json() as { officialImages?: { apiKeyConfigured: boolean; proxyEnabled: boolean } };
   if (!snapshot.officialImages?.apiKeyConfigured || !snapshot.officialImages.proxyEnabled || JSON.stringify(snapshot).includes('smoke-official-fixture')) throw new Error('Official key/proxy snapshot is invalid');
   if (safeStorage.isEncryptionAvailable() && fs.readFileSync(path.join(userDataDir, '.env'), 'utf8').includes('smoke-official-fixture')) throw new Error('Official key leaked into the env file');
-  await window.webContents.executeJavaScript(`document.querySelector('[data-settings-close]').click(); document.querySelector('[data-prompt-node-action="settings"]').click();`);
+  await window.webContents.executeJavaScript(`document.querySelector('[data-settings-close]').click(); document.querySelector('[data-advanced-options="official-images"] summary').click();`);
   await wait(window, `!!document.querySelector('select[name="officialImage.quality"]')`, 'Official parameters missing');
   const controls = await window.webContents.executeJavaScript(`(() => {
     const quality = document.querySelector('select[name="officialImage.quality"]');

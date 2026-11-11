@@ -1,3 +1,4 @@
+import { AdvancedOptionsSection } from './AdvancedOptionsSection';
 import { Info } from 'lucide-react';
 import { useId } from 'react';
 import { useAppTranslation } from '../../i18n';
@@ -28,7 +29,7 @@ const selectStyle = {
   color: '#EEE4CE',
 };
 
-const labelStyle = { color: '#96836F' };
+const labelStyle = { color: '#B8A58D' };
 
 export function Image2OptionsPanel({ imageModel = 'image2', value, hasReferenceImages, onChange }: Image2OptionsPanelProps) {
   const { t } = useAppTranslation();
@@ -66,14 +67,12 @@ export function Image2OptionsPanel({ imageModel = 'image2', value, hasReferenceI
   };
 
   return (
-    <details data-advanced-options="image2" className="rounded-xl p-3" style={{ background: 'rgba(242,193,78,0.04)', border: '1px solid rgba(242,193,78,0.12)' }}>
-      <summary className="cursor-pointer text-xs text-[#F2C14E]">
-        <span className="inline-flex items-center gap-2">
-          {isImage25 ? t('image2Options.advanced25') : t('image2Options.advanced')}
-          {((options.quality && options.quality !== 'auto') || outputFormat !== 'png' || (options.responseFormat && options.responseFormat !== 'b64_json') || partialImages !== 1 || (supportsCompression && compression !== 100) || (options.background && options.background !== 'opaque')) && <span className="text-[10px] text-[#B8A58D]">{t('categories.custom')}</span>}
-        </span>
-      </summary>
-      <div className="mt-4 space-y-4">
+    <AdvancedOptionsSection kind="image2" summary={[
+      options.quality && options.quality !== 'auto' ? options.quality : '',
+      outputFormat !== 'png' ? outputFormat.toUpperCase() : '',
+      options.background === 'transparent' ? t('image2Options.backgroundTransparent') : '',
+      (options.responseFormat && options.responseFormat !== 'b64_json') || partialImages !== 1 ? t('promptNode.advancedConfigured') : '',
+    ].filter(Boolean).join(' · ') || t('common.default')}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: '#F2C14E' }}>
           <Info size={13} />
@@ -146,36 +145,7 @@ export function Image2OptionsPanel({ imageModel = 'image2', value, hasReferenceI
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium" style={labelStyle}>{t('image2Options.responseFormat')}</label>
-          <select
-            value={options.responseFormat ?? 'b64_json'}
-            onChange={(event) => setOption({ responseFormat: event.target.value as Image2ResponseFormat })}
-            className="nowheel w-full rounded-lg p-2 text-xs outline-none"
-            style={selectStyle}
-          >
-            <option value="b64_json">b64_json</option>
-            <option value="url">url / data URL</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium" style={labelStyle}>{t('image2Options.partialImages')}</label>
-          <select
-            value={partialImages}
-            onChange={(event) => setOption({ partialImages: Number(event.target.value) })}
-            className="nowheel w-full rounded-lg p-2 text-xs outline-none"
-            style={selectStyle}
-          >
-            {[0, 1, 2, 3].map((count) => (
-              <option key={count} value={count}>{t('image2Options.imageCount', { count })}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
+      {supportsCompression && <div className="space-y-1.5">
         <div className="flex items-center justify-between text-[11px] font-medium" style={labelStyle}>
           <span>{t('image2Options.compression')}</span>
           <span style={{ color: supportsCompression ? '#F2C14E' : '#5C4E3E' }}>
@@ -191,8 +161,40 @@ export function Image2OptionsPanel({ imageModel = 'image2', value, hasReferenceI
           onChange={(event) => setOption({ outputCompression: Number(event.target.value) })}
           className="nodrag nowheel w-full accent-[#F2C14E] disabled:opacity-30"
         />
-      </div>
-      </div>
-    </details>
+      </div>}
+      <details className="border-t border-[#F2C14E]/10 pt-3 text-xs text-[#B8A58D]">
+        <summary className="cursor-pointer">{t('promptNode.technicalSettings')}
+          {((options.responseFormat && options.responseFormat !== 'b64_json') || partialImages !== 1) && ` · ${t('promptNode.advancedConfigured')}`}
+        </summary>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium" style={labelStyle}>{t('image2Options.responseFormat')}</label>
+            <select
+              value={options.responseFormat ?? 'b64_json'}
+              onChange={(event) => setOption({ responseFormat: event.target.value as Image2ResponseFormat })}
+              className="nowheel w-full rounded-lg p-2 text-xs outline-none"
+              style={selectStyle}
+            >
+              <option value="b64_json">b64_json</option>
+              <option value="url">url / data URL</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium" style={labelStyle}>{t('image2Options.partialImages')}</label>
+            <select
+              value={partialImages}
+              onChange={(event) => setOption({ partialImages: Number(event.target.value) })}
+              className="nowheel w-full rounded-lg p-2 text-xs outline-none"
+              style={selectStyle}
+            >
+              {[0, 1, 2, 3].map((count) => (
+                <option key={count} value={count}>{t('image2Options.imageCount', { count })}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </details>
+    </AdvancedOptionsSection>
   );
 }
